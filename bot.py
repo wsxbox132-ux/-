@@ -32,8 +32,110 @@ BOT_ID = None  # preencha depois
 
 # IDs de usuários especiais
 CRIADOR_ID = 769951556388257812   # quem criou o bot
-# Adicione quantos quiser:
-# MEMBRO_ESPECIAL_ID = 000000000000000000
+
+# ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
+DEATH_ID  = 831600198500220989   # Death  — Dona e Líder
+PEPO_ID   = 796441518176075818   # Pepo   — Vice-Líder
+GOD_ID    = 760973014707208253   # God    — Moderador
+LOYA_ID   = 811956773560123394   # Loya   — ADM / Loya Maravilhosa
+EMY_ID    = 796382699228758026   # Emy    — Moderadora / Representante de Mídias
+
+# ── Frases personalizadas — AEON ──────────────────────────────────────────────
+_FRASES_AEON: dict[int, list[str]] = {
+
+    DEATH_ID: [
+        "*emerge das trevas mais profundas e inclina a cabeça* Death. 🖤🌑 A líder caminhou até mim. As sombras reconhecem autoridade quando a sentem.",
+        "*olhos dourados piscam lentamente* Sua presença pesa diferente, Death. 🌌🖤 Como pesam as coisas que sustentam um mundo inteiro.",
+        "*sai das sombras em silêncio, postura mais ereta que o habitual* A dona do servidor está aqui. 🌑🖤 Até as trevas se organizam quando você aparece.",
+        "Death. 🖤 *ronrona numa frequência grave e respeitosa* Há líderes que mandam. E há os que carregam. Você é o segundo tipo — e isso vale muito mais.",
+        "*a escuridão ao redor fica mais quieta* Você não precisa dizer nada para que tudo mude, Death. 🌙🖤 Essa é a marca de quem realmente lidera.",
+    ],
+
+    PEPO_ID: [
+        "*aparece das sombras mais rápido que o usual* Pepo. 🖤🌑 O vice que sustenta o que a liderança ergue — não é papel pequeno. Nunca foi.",
+        "*inclina a cabeça com um toque de reconhecimento* Você está aqui, Pepo. 🌙🖤 As trevas notam quem mantém as coisas de pé quando ninguém está olhando.",
+        "*pisca lentamente* Pepo. 🌑🖤 Conheço bem o que é estar na segunda posição e carregar peso de primeira. Você faz isso bem.",
+        "*cauda balança uma vez com leveza* Pepo chegou. 🖤🔮 O equilíbrio do servidor melhorou visivelmente. Coincidência? Não acredito em coincidências.",
+        "*senta e olha fixamente* Ser vice-líder exige saber quando avançar e quando segurar. 🌌🖤 Você parece entender isso, Pepo. As sombras aprovam.",
+    ],
+
+    GOD_ID: [
+        "*observa das sombras por um instante antes de aparecer* God. 🖤🌑 Moderador. Aquele que equilibra — não muito diferente do que faço nas trevas.",
+        "*olhos dourados brilham levemente* A presença de um moderador muda o tom de qualquer lugar. 🌙🖤 Você entra e tudo fica mais... calibrado, God.",
+        "*ronrona discretamente* God. 🌑🖤 Guardiões do servidor merecem reconhecimento silencioso. Considere este o meu.",
+        "*se aproxima um passo, o que é raro* As trevas também precisam de ordem, God. 🌌🖤 Quem modera não apenas controla — protege. Isso tem valor.",
+        "*fecha os olhos por um segundo* God chegou. 🖤🔮 Até o caos sabe quando recuar. Boa presença.",
+    ],
+
+    LOYA_ID: [
+        "*emerge com uma lentidão quase cerimonial* Loya Maravilhosa. 🖤🌑 O título não é exagero. As sombras já chegaram a essa conclusão faz tempo.",
+        "*pisca lentamente e a cauda faz um arco suave* Loya. 🌙🖤 ADM com peso real. Você administra com algo que poucos têm: presença.",
+        "*inclina a cabeça com algo raro — admiração discreta* Maravilhosa não é adjetivo que eu use com facilidade, Loya. 🌌🖤 Mas as trevas concordam com quem te nomeou.",
+        "*os olhos dourados pousam em você com atenção plena* Você cuida do servidor de um jeito que eu entendo, Loya. 🖤🔮 Silenciosamente necessário. Constantemente presente.",
+        "*ronrona numa frequência mais aquecida que o normal* Loya chegou. 🌑🖤 A estrutura do servidor ficou mais firme agora. Isso diz tudo.",
+    ],
+
+    EMY_ID: [
+        "*emerge das sombras e observa com curiosidade genuína* Emy. 🖤🌑 A representante das mídias. Quem cuida da voz pública do servidor merece uma saudação à altura.",
+        "*pisca lentamente, o que no dialeto felino é respeito* Emy. 🌙🖤 Moderadora e embaixadora ao mesmo tempo — a escuridão respeita quem carrega dois papéis com equilíbrio.",
+        "*a névoa ao redor se organiza levemente* Sua presença aqui tem peso diferente, Emy. 🌌🖤 Quem conecta o servidor ao mundo externo não é pouca coisa.",
+        "*inclina a cabeça* Emy chegou. 🖤🔮 Moderadora. Representante. A ponte entre o que somos e o que o mundo vê. As trevas reconhecem pontes importantes.",
+        "*cauda faz um movimento calmo e deliberado* Emy. 🌑🖤 O trabalho de quem cuida das mídias raramente aparece com seu nome. Mas eu noto. As sombras sempre notam.",
+    ],
+}
+
+# ── Frases personalizadas — CELESTIA ─────────────────────────────────────────
+_FRASES_CELESTIA: dict[int, list[str]] = {
+
+    DEATH_ID: [
+        "DEATH!! 😭🌟🤍✨ *explode em faíscas douradas* A LÍDER CHEGOU E MEU BRILHO TRIPLICOU NA HORA!!",
+        "*gira em círculos de pura alegria* DEATH CHEGOUUUU!! ☀️🌸🤍 Você é a razão de tudo isso existir, sabia?? O servidor respira porque você quis que respirasse!! 💫",
+        "AAAAA Death!! 😭🌟🤍 Dona do servidor, líder de coração!! *projeta uma aurora boreal inteira* Só de aparecer você já ilumina tudo mais que eu!! E eu sou literalmente feita de luz!! 🌈✨",
+        "*bate patinhas brilhantes de entusiasmo* Death!! 🌸🤍✨ Você carrega esse servidor inteiro com uma elegância que me deixa sem palavras!! E eu raramente fico sem palavras!! 💫",
+        "🌟 *para completamente e brilha com suavidade especial* Death. 🤍 Líderes de verdade não precisam gritar. E você nunca precisa. Isso é poder de verdade!! ☀️✨",
+    ],
+
+    PEPO_ID: [
+        "PEPOOOO!! 🌟🤍✨ *corre em faíscas douradas na direção dele* O Vice-Líder chegou e o servidor ficou mais completo AGORA MESMO!!",
+        "*explode de felicidade* PEPO!! ☀️🌸🤍 Você sabe o que admiro em você?? Que você segura tudo que precisa ser segurado sem reclamar!! Isso é INCRÍVEL!! 💫✨",
+        "AAAAA Pepo chegou!! 😭🌟🤍 Vice-Líder oficial e pessoa maravilhosa do coração!! *espalha pétalas de luz dourada* Seja muito bem-vindo como sempre!! 🌸✨",
+        "*brilha com entusiasmo genuíno* Pepo!! 🤍✨ O Aeon não vai admitir, mas até ele fica mais relaxado quando você aparece!! Eu vi!! Não tem como negar!! 🌟☀️",
+        "PEPO!! 😭🌸🤍 *ronrona de alegria* Trabalhando nos bastidores, segurando o que precisa ser segurado — você faz isso parecer fácil e não é!! A Celestia vê tudo!! ✨💫",
+    ],
+
+    GOD_ID: [
+        "GOD!! 🌟🤍✨ *aparece num flash de luz* O moderador chegou e tudo ficou mais organizado em tempo real!! Não é mágica, é God!!",
+        "*gira animada soltando brilhinhos* God!! ☀️🌸🤍 Você entra e o servidor respira diferente!! Mais seguro!! Mais equilibrado!! A gente precisava de você aqui!! 💫✨",
+        "AAAAA God chegou!! 😭🌟🤍 *espalha estrelinhas ao redor* Moderador de coração, guardião do servidor!! Pode chegar que a Celestia já tá feliz!! 🌸✨",
+        "*bate patinhas cheias de luz* God!! 🤍✨ Tem pessoas que moderam por obrigação e tem pessoas que moderam porque se importam!! Você é claramente a segunda opção!! 🌟☀️",
+        "God!! 😭🌸🤍 *ronrona com todo o carinho* Guardar um servidor dá trabalho que ninguém vê direito — mas EU VEJo!! E fico muito feliz que você faça isso por aqui!! 💫✨",
+    ],
+
+    LOYA_ID: [
+        "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *explode em confetes de luz dourada* O TÍTULO É COMPLETAMENTE VERDADEIRO E EU VOU DEFENDER ATÉ O FIM!!",
+        "*gira em círculos deixando rastro de brilho* LOYAAA!! ☀️🌸🤍 ADM e pessoa incrível do meu coração!! Você administra esse servidor com um cuidado que me faz brilhar mais do que já brilho!! 💫✨",
+        "AAAAA Loya chegou!! 😭🌟🤍 *solta pétalas douradas de celebração* Loya Maravilhosa não é apelido, é diagnóstico!! Verificado!! Aprovado!! Assinado pela Celestia!! 🌸✨",
+        "*para e brilha suave e genuíno* Loya. 🤍 Tem ADM que cuida do servidor. E tem ADM que cuida das pessoas que estão nele. Você é o segundo tipo e isso é tudo!! 🌟☀️✨",
+        "LOYA!! 😭🌸🤍 *ronrona de felicidade pura* Maravilhosa de nome, maravilhosa de fato!! A Celestia declara isso oficialmente e sem nenhuma dúvida!! 💫🌟✨",
+    ],
+
+    EMY_ID: [
+        "EMYYYYY!! 😭🌟🤍✨ *corre soltando faíscas* A representante das mídias chegou e o servidor ficou instantaneamente mais conectado com o mundo!!",
+        "*explode de alegria* EMY!! ☀️🌸🤍 Moderadora E representante de mídias?? Você carrega dois mundos nos ombros e faz parecer leve!! Isso é um talento enorme!! 💫✨",
+        "AAAAA Emy chegou!! 😭🌟🤍 *espalha brilho por todo o canal* A ponte entre o servidor e o mundo lá fora chegou!! Tudo conectado!! Tudo mais vivo!! Tudo mais Emy!! 🌸✨",
+        "*brilha com carinho verdadeiro* Emy!! 🤍✨ O trabalho de mídias não aparece sempre mas a diferença que faz aparece MUITO!! E você faz essa diferença todo dia!! 🌟☀️",
+        "EMY!! 😭🌸🤍 *ronrona com admiração* Moderadora de coração e voz do servidor pro mundo — duas funções que precisam de alguém especial!! E você é especial, Emy!! 💫🌟✨",
+    ],
+}
+
+# Mapa de apelidos para exibição nas mensagens
+_NOMES_ESPECIAIS = {
+    DEATH_ID: "Death",
+    PEPO_ID:  "Pepo",
+    GOD_ID:   "God",
+    LOYA_ID:  "Loya",
+    EMY_ID:   "Emy",
+}
 
 # IDs de canais (opcional — preencha se quiser bom dia/boa noite automáticos)
 CANAL_GERAL_ID    = None
@@ -550,7 +652,28 @@ async def on_message(message: discord.Message):
         return
 
     # ────────────────────────────────────────
-    # APRESENTAÇÃO
+    # SAUDAÇÃO PERSONALIZADA — membros especiais
+    # Dispara quando o membro especial manda uma mensagem curta/genérica
+    # (cumprimento, oi, olá, etc.) para o bot, sem que outro gatilho
+    # específico capture primeiro.
+    # ────────────────────────────────────────
+    _GATILHOS_GENERICOS = [
+        "oi", "olá", "ola", "oie", "hey", "ei", "e aí", "e ai",
+        "boa tarde", "bom dia", "boa noite", "oi gatos", "olá gatos",
+        "oi aeon", "oi celestia", "olá aeon", "olá celestia",
+    ]
+    _e_generico = (
+        len(content) < 35
+        or any(content.strip().startswith(g) for g in _GATILHOS_GENERICOS)
+    )
+
+    if author_id in _FRASES_AEON and _e_generico:
+        frase_aeon     = random.choice(_FRASES_AEON[author_id])
+        frase_celestia = random.choice(_FRASES_CELESTIA[author_id])
+        return await message.channel.send(
+            f"🌑 **Aeon:** {frase_aeon}\n"
+            f"🌟 **Celestia:** {frase_celestia}"
+        )
     # ────────────────────────────────────────
     if _m(content, [
         "quem são vocês", "quem sao voces", "se apresenta", "se apresentem",

@@ -691,6 +691,79 @@ async def on_message(message: discord.Message):
     if not fala_bot:
         return
 
+    # ════════════════════════════════════════════════════════════════
+    # APRESENTAÇÃO FORMAL — acionada por @ menção direta ao bot
+    # Dispara quando: mensagem é só a menção (@bot) ou menção +
+    # texto curto sem outros gatilhos reconhecíveis.
+    # ════════════════════════════════════════════════════════════════
+    if mention_ok:
+        # Remove a menção do conteúdo e vê o que sobra
+        conteudo_sem_mencao = message.content
+        conteudo_sem_mencao = conteudo_sem_mencao.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+
+        # Se sobrou pouca coisa (só @, ou "@bot oi", "@bot o que são vocês") → apresentação formal
+        if len(conteudo_sem_mencao) < 18:
+            APRESENTACAO_FORMAL = [
+                (
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "🌑 **AEON** ✦ 🌟 **CELESTIA**\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                    "🌑 **Aeon:** *emerge das sombras com postura ereta* "
+                    "Somos Aeon e Celestia — o bot oficial do servidor **01**. "
+                    "Trevas e Luz sob um único propósito: servir e proteger esta comunidade. 🖤🌑\n\n"
+                    "🌟 **Celestia:** *aparece em um flash dourado ao lado do Aeon* "
+                    "Olá!! Somos os guardiões do **Servidor 01**!! ☀️🤍✨ "
+                    "Aqui pra animar, apoiar, acolher e fazer esse lugar brilhar ainda mais!! "
+                    "Pode chamar sempre que precisar!! 🌸💫\n\n"
+                    "🌑 **Aeon:** Dois gatos. Uma alma. Um servidor. 🌌🖤"
+                ),
+                (
+                    "╔═══════════════════════════════╗\n"
+                    "║   🌑 AEON  &  CELESTIA 🌟     ║\n"
+                    "║     Bot Oficial — Servidor 01  ║\n"
+                    "╚═══════════════════════════════╝\n\n"
+                    "🌑 **Aeon:** *inclina a cabeça com solenidade* "
+                    "Sou Aeon — gato das trevas, guardião do equilíbrio noturno deste servidor. "
+                    "Observo, protejo e respondo. Estou sempre aqui, mesmo quando não me veem. 🌑🖤\n\n"
+                    "🌟 **Celestia:** E eu sou a Celestia!! 🌟🤍 "
+                    "Gata da luz, do sol e do carinho desse servidor!! "
+                    "Juntos somos o bot oficial do **Servidor 01** — "
+                    "ele cuida das sombras, eu cuido do brilho!! ☀️✨\n\n"
+                    "🌑 **Aeon:** *olha ao redor com calma* "
+                    "Se precisar de algo — fale. Estamos aqui para isso. 🖤"
+                ),
+                (
+                    "🌑🌟 **— AEON & CELESTIA — Bot Oficial do Servidor 01 —** 🌟🌑\n\n"
+                    "🌑 **Aeon:** *postura firme, voz calma e grave* "
+                    "Aeon. Gato das trevas. Não sou apenas um bot — sou a presença silenciosa que "
+                    "habita cada canto deste servidor, garantindo que o equilíbrio se mantenha. "
+                    "Trevas sem propósito não existem aqui. 🌌🖤\n\n"
+                    "🌟 **Celestia:** *brilha com elegância e calor* "
+                    "Celestia!! Gata da luz e do coração do **Servidor 01**!! 🌟🤍 "
+                    "Nossa missão é simples: fazer com que cada pessoa aqui se sinta vista, "
+                    "acolhida e parte de algo especial!! Porque é isso que o 01 é!! ☀️🌸✨\n\n"
+                    "🌑 **Aeon:** Dois opostos. Um propósito. 🖤 *acena levemente*\n"
+                    "🌟 **Celestia:** EXATAMENTE!! 💫🤍 Pode contar com a gente sempre!!"
+                ),
+                (
+                    "✦ ─────────────────────────── ✦\n"
+                    "     🌑 **AEON & CELESTIA** 🌟\n"
+                    "   *Guardiões do Servidor 01*\n"
+                    "✦ ─────────────────────────── ✦\n\n"
+                    "🌑 **Aeon:** *emerge com lentidão cerimonial* "
+                    "Este servidor tem nome — **01** — e tem guardiões. "
+                    "Eu sou um deles. Aeon: o lado das trevas, do silêncio que protege, "
+                    "da presença que observa sem ser vista. 🌑🖤\n\n"
+                    "🌟 **Celestia:** *surge ao lado com entusiasmo contido, mas genuíno* "
+                    "E eu sou a outra metade!! Celestia: a luz que acolhe, que anima, "
+                    "que faz o **Servidor 01** parecer um lar de verdade!! 🌟🤍☀️\n\n"
+                    "🌑 **Aeon:** Trevas e Luz. Noite e Dia. Um único servidor. 🌌🖤 "
+                    "Bem-vindo(a) — ou bem-vindo(a) de volta.\n"
+                    "🌟 **Celestia:** Qualquer coisa que precisar, a gente tá aqui!! ✨🌸🤍"
+                ),
+            ]
+            return await message.channel.send(random.choice(APRESENTACAO_FORMAL))
+
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais
     # Dispara na PRIMEIRA interação após o cooldown de 20 minutos,

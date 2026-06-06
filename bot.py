@@ -693,21 +693,10 @@ async def on_message(message: discord.Message):
 
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais
-    # Dispara quando o membro especial manda uma mensagem curta/genérica
-    # (cumprimento, oi, olá, etc.) para o bot, sem que outro gatilho
-    # específico capture primeiro.
+    # Dispara na PRIMEIRA interação após o cooldown de 20 minutos,
+    # independente do tamanho ou conteúdo da mensagem.
     # ────────────────────────────────────────
-    _GATILHOS_GENERICOS = [
-        "oi", "olá", "ola", "oie", "hey", "ei", "e aí", "e ai",
-        "boa tarde", "bom dia", "boa noite", "oi gatos", "olá gatos",
-        "oi aeon", "oi celestia", "olá aeon", "olá celestia",
-    ]
-    _e_generico = (
-        len(content) < 35
-        or any(content.strip().startswith(g) for g in _GATILHOS_GENERICOS)
-    )
-
-    if author_id in _FRASES_AEON and _e_generico:
+    if author_id in _FRASES_AEON:
         agora = time.time()
         ultimo_especial = _cooldown_especial.get(author_id, 0)
         if agora - ultimo_especial >= _COOLDOWN_ESPECIAL_SEGUNDOS:

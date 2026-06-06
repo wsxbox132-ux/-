@@ -1158,6 +1158,40 @@ async def on_message(message: discord.Message):
         )
 
     # ────────────────────────────────────────
+    # IDADE / QUANTOS ANOS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "quantos anos vocês têm", "quantos anos voces tem", "quantos anos têm",
+        "quantos anos tem", "qual a idade de vocês", "qual a idade de voces",
+        "vocês têm quantos anos", "voces tem quantos anos",
+        "quantos anos aeon", "quantos anos celestia",
+        "qual sua idade aeon", "qual sua idade celestia",
+        "aeon quantos anos", "celestia quantos anos",
+        "idade aeon", "idade celestia", "idade de vocês",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha para o infinito* Aeon significa eternidade. 🌌🖤 "
+                "Perguntar minha idade é como perguntar quantos anos tem a escuridão.\n"
+                "🌟 **Celestia:** *gira pensativa* Hmmm!! ☀️🤍✨ "
+                "Eu diria que tenho a idade das estrelas — que é basicamente... muito antiga!! "
+                "Mas brilhante como recém-nascida!! 💫🌟"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA que pergunta difícil!! 😭🌸🤍 "
+                "Somos gatos celestiais!! A gente não conta em anos, conta em fases da lua e nascer do sol!! ☀️✨\n"
+                "🌑 **Aeon:** *pausa longa* ...velho o suficiente para saber que o tempo é relativo. 🖤🌙 "
+                "Novo o suficiente para ainda me surpreender."
+            ),
+            (
+                "🌑 **Aeon:** A escuridão não envelhece. 🌑🖤 Ela apenas... aprofunda.\n"
+                "🌟 **Celestia:** *ri de um jeito fofo* E a luz não tem data de validade!! ☀️🌟🤍✨ "
+                "Somos eternos do nosso jeito!! Cada um do seu!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
     # SOLTEIRO(A)
     # ────────────────────────────────────────
     if _m(content, [
@@ -1322,7 +1356,11 @@ async def on_message(message: discord.Message):
         )
 
     # — Como você está — individual —
-    if _m(content, ["como você está aeon", "como vc está aeon", "tudo bem aeon", "tudo bom aeon", "como tá aeon"]):
+    if _m(content, [
+        "como você está aeon", "como vc está aeon", "tudo bem aeon", "tudo bom aeon", "como tá aeon",
+        "aeon como você está", "aeon como vc está", "aeon tudo bem", "aeon tudo bom", "aeon como tá",
+        "aeon, como você está", "aeon, tudo bem", "aeon, como tá",
+    ]):
         ops = [
             "🌑 **Aeon:** ...funcional. 🖤 O que, para os padrões das trevas, é excelente.",
             "🌑 **Aeon:** A escuridão está estável. 🌑🖤 Eu também.",
@@ -1331,7 +1369,11 @@ async def on_message(message: discord.Message):
         ]
         return await message.channel.send(random.choice(ops))
 
-    if _m(content, ["como você está celestia", "como vc está celestia", "tudo bem celestia", "tudo bom celestia", "como tá celestia"]):
+    if _m(content, [
+        "como você está celestia", "como vc está celestia", "tudo bem celestia", "tudo bom celestia", "como tá celestia",
+        "celestia como você está", "celestia como vc está", "celestia tudo bem", "celestia tudo bom", "celestia como tá",
+        "celestia, como você está", "celestia, tudo bem", "celestia, como tá",
+    ]):
         ops = [
             "🌟 **Celestia:** ÓTIMAAAA!! ☀️🤍✨ Brilhando como sempre!! Perguntou e já fez meu dia melhor!! 🌸💫",
             "🌟 **Celestia:** *gira feliz* Tô MARAVILHOSA!! 🌟🤍 E fico ainda melhor quando você pergunta!! ✨",

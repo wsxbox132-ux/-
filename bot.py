@@ -681,12 +681,14 @@ async def on_message(message: discord.Message):
     author_id  = message.author.id
     mention_ok = bot.user in message.mentions
 
-    # Gatilho: mensagem menciona o bot OU contém "aeon" ou "celestia"
-    fala_bot = (
-        mention_ok
-        or "aeon" in content
-        or "celestia" in content
-    )
+    # Remove a menção para ver o que sobrou de texto real
+    _sem_mencao = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    mencao_pura = mention_ok and len(_sem_mencao) == 0
+    tem_nome    = "aeon" in content or "celestia" in content
+
+    # Só responde se: @ puro (apresentação formal) OU texto tem "aeon"/"celestia"
+    # @ com texto mas sem os nomes → ignora completamente
+    fala_bot = mencao_pura or tem_nome
 
     if not fala_bot:
         return
@@ -695,13 +697,7 @@ async def on_message(message: discord.Message):
     # APRESENTAÇÃO FORMAL — acionada SOMENTE quando a mensagem é
     # exclusivamente o @ (nada mais, nenhum texto junto).
     # ════════════════════════════════════════════════════════════════
-    if mention_ok:
-        # Remove a menção do conteúdo e vê o que sobra
-        conteudo_sem_mencao = message.content
-        conteudo_sem_mencao = conteudo_sem_mencao.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
-
-        # Só dispara se a mensagem for APENAS o @, sem nenhum texto
-        if len(conteudo_sem_mencao) == 0:
+    if mencao_pura:
             APRESENTACAO_FORMAL = [
                 (
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

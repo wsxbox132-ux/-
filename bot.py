@@ -146,6 +146,10 @@ _groq_historico   = {}
 _cooldown_custom  = {}
 _COOLDOWN_SEGUNDOS = 600
 
+# Cooldown das saudações personalizadas dos membros especiais (20 minutos)
+_cooldown_especial: dict[int, float] = {}
+_COOLDOWN_ESPECIAL_SEGUNDOS = 1200  # 20 minutos
+
 # Sistema de contexto
 _aguardando = {}
 _TIMEOUT_CTX = 120
@@ -668,12 +672,17 @@ async def on_message(message: discord.Message):
     )
 
     if author_id in _FRASES_AEON and _e_generico:
-        frase_aeon     = random.choice(_FRASES_AEON[author_id])
-        frase_celestia = random.choice(_FRASES_CELESTIA[author_id])
-        return await message.channel.send(
-            f"🌑 **Aeon:** {frase_aeon}\n"
-            f"🌟 **Celestia:** {frase_celestia}"
-        )
+        agora = time.time()
+        ultimo_especial = _cooldown_especial.get(author_id, 0)
+        if agora - ultimo_especial >= _COOLDOWN_ESPECIAL_SEGUNDOS:
+            _cooldown_especial[author_id] = agora
+            frase_aeon     = random.choice(_FRASES_AEON[author_id])
+            frase_celestia = random.choice(_FRASES_CELESTIA[author_id])
+            return await message.channel.send(
+                f"🌑 **Aeon:** {frase_aeon}\n"
+                f"🌟 **Celestia:** {frase_celestia}"
+            )
+        # cooldown ativo — deixa cair nos gatilhos normais abaixo
     # ────────────────────────────────────────
     if _m(content, [
         "quem são vocês", "quem sao voces", "se apresenta", "se apresentem",

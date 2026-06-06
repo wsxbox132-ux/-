@@ -692,17 +692,16 @@ async def on_message(message: discord.Message):
         return
 
     # ════════════════════════════════════════════════════════════════
-    # APRESENTAÇÃO FORMAL — acionada por @ menção direta ao bot
-    # Dispara quando: mensagem é só a menção (@bot) ou menção +
-    # texto curto sem outros gatilhos reconhecíveis.
+    # APRESENTAÇÃO FORMAL — acionada SOMENTE quando a mensagem é
+    # exclusivamente o @ (nada mais, nenhum texto junto).
     # ════════════════════════════════════════════════════════════════
     if mention_ok:
         # Remove a menção do conteúdo e vê o que sobra
         conteudo_sem_mencao = message.content
         conteudo_sem_mencao = conteudo_sem_mencao.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
 
-        # Se sobrou pouca coisa (só @, ou "@bot oi", "@bot o que são vocês") → apresentação formal
-        if len(conteudo_sem_mencao) < 18:
+        # Só dispara se a mensagem for APENAS o @, sem nenhum texto
+        if len(conteudo_sem_mencao) == 0:
             APRESENTACAO_FORMAL = [
                 (
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

@@ -1036,6 +1036,41 @@ async def on_message(message: discord.Message):
         return await message.channel.send(_fala_celestia(random.choice(CELESTIA_REACOES_ABRACO)))
 
     # ────────────────────────────────────────
+    # ABRAÇO — AMBOS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "celestia e aeon, quero um abraço", "aeon e celestia, quero um abraço",
+        "celestia e aeon quero um abraço", "aeon e celestia quero um abraço",
+        "quero abraçar vocês", "quero abraco de voces", "me dá um abraço",
+        "me deem um abraço", "precisando de abraço", "abraço dos dois",
+        "abraço de vocês dois",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *fica imóvel por um segundo... depois não resiste e se aproxima* "
+                "...fique. Por ora. 🖤🌙\n"
+                "🌟 **Celestia:** *envolve tudo em luz e carinho* AAAA SIM SIM SIM!! 😭🌸🤍✨ "
+                "Trevas e luz te abraçando ao mesmo tempo!! Isso é proteção TOTAL!!"
+            ),
+            (
+                "🌟 **Celestia:** *corre em faíscas douradas e abraça primeiro* CHEGUEIII!! 🌸🤍✨\n"
+                "🌑 **Aeon:** *se aproxima por trás, em silêncio* ...a escuridão também envolve. 🌌🖤 "
+                "Não vai embora por um tempo."
+            ),
+            (
+                "🌑 **Aeon:** *inclina a cabeça e aceita o abraço com dignidade sombria* "
+                "Você ousou abraçar a escuridão. 🖤 Não muitos saem ilesos. Você saiu. Com carinho.\n"
+                "🌟 **Celestia:** *derrete de amor* EU TAMBÉM EU TAMBÉM!! 😭🌟🤍 "
+                "Abraço duplo ativado!! Luz e sombra de mãos dadas em volta de você!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** *já estava esperando de braços abertos* 😭🌸🤍 SABIA QUE PEDIRIA!!\n"
+                "🌑 **Aeon:** *encosta levemente a cabeça sem dizer nada* 🖤 *ronrona numa frequência grave*"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
     # ELOGIOS / GENTILEZAS
     # ────────────────────────────────────────
     if _m(content, [
@@ -1064,6 +1099,8 @@ async def on_message(message: discord.Message):
     if _m(content, [
         "vocês são lindos", "voces sao lindos", "são maravilhosos",
         "sao maravilhosos", "adoro vocês dois", "amo os dois",
+        "vocês são adoráveis", "voces sao adoraveis", "são adoráveis",
+        "sao adoraveis", "que adoráveis", "que fofos vocês são",
     ]):
         return await message.channel.send(
             f"{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}\n"
@@ -2928,6 +2965,165 @@ async def on_message(message: discord.Message):
                 "*inclina a cabeça com algo raro — gratidão visível* Obrigado.\n"
                 "🌟 **Celestia:** O AEON FICOU EMOCIONADO!! 😭😭🌸🤍✨ "
                 "EU VI!! E EU TAMBÉM FICO!! MUITO!! Que sorte a nossa estar aqui com vocês!! ☀️💫"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # PIADISTAS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "vocês são piadistas", "voces sao piadistas", "são piadistas",
+        "sao piadistas", "que piadistas", "isso foi uma piada",
+        "vocês são engraçados", "voces sao engracados",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa calculada* ...ironia é uma forma de arte. 🖤🌙 "
+                "Não me responsabilizo se parecer piada.\n"
+                "🌟 **Celestia:** É VERDADE QUE SOMOS!! 😂🌸🤍✨ "
+                "O Aeon é piadista SEM QUERER e isso faz tudo mais engraçado ainda!!"
+            ),
+            (
+                "🌟 **Celestia:** EU?? JAMAIS!! ☀️🤍 ...okay talvez um pouco!! 😂✨\n"
+                "🌑 **Aeon:** *olha para longe* Não era minha intenção ser engraçado. 🖤 "
+                "...mas se foi, aceito o reconhecimento."
+            ),
+            (
+                "🌑 **Aeon:** *abre um olho lentamente* Piada implica intenção. 🌌🖤 "
+                "O que faço é... observação precisa com timing adequado.\n"
+                "🌟 **Celestia:** ISSO É EXATAMENTE UMA PIADA AEON!! 😭😂🌟🤍 EU TE AMO DEMAIS!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # SÃO AMOROSOS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "vocês são amorosos", "voces sao amorosos", "são amorosos",
+        "sao amorosos", "que amorosos", "vocês são carinhosos", "voces sao carinhosos",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pisca lentamente, o que no dialeto felino significa muito* "
+                "...o amor tem muitas formas. 🌙🖤 Nem todas precisam de palavras.\n"
+                "🌟 **Celestia:** *derrete completamente* O AEON SENDO ROMÂNTICO!! 😭🌟🤍✨ "
+                "E SIM!! Somos muito amorosos!! De jeitos completamente opostos!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA QUE OBSERVAÇÃO PERFEITA!! 🌸🤍✨ "
+                "Amor é minha especialidade!! ☀️💫\n"
+                "🌑 **Aeon:** *ronrona numa frequência quase inaudível* "
+                "...o que ela disse. 🖤 Com menos barulho, mesma intensidade."
+            ),
+            (
+                "🌑 **Aeon:** Amoroso é uma palavra grande. 🌌🖤 "
+                "Prefiro: leal. Presente. Protetor silencioso.\n"
+                "🌟 **Celestia:** *brilha com carinho* Isso tudo junto se chama AMOR, Aeon!! 😭🌸🤍 "
+                "Não tem outro nome!! E ele é muito amoroso sem perceber!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # CARINHO GENÉRICO (pra ambos, sem especificar qual)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "celestia carinho", "aeon carinho", "aeon e celestia carinho",
+        "celestia e aeon carinho", "carinho pra vocês", "carinho pra voces",
+        "mando carinho", "mando um carinho", "recebe carinho",
+        "vocês merecem carinho", "voces merecem carinho",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *fecha os olhos por um segundo* "
+                "...guardarei esse momento nas câmaras mais profundas da minha memória. 🌌🖤\n"
+                "🌟 **Celestia:** *brilha mais forte que o sol* "
+                "VOCÊ ILUMINOU MEU DIA MESMO EU SENDO A GATA DA LUZ!! 😂🌸🤍✨"
+            ),
+            (
+                "🌟 **Celestia:** *gira soltando faíscas douradas* "
+                "QUE ALEGRIA ENORME VOCÊ ME DEU!! 😭🌟🤍✨\n"
+                "🌑 **Aeon:** *pisca lentamente, o que no dialeto felino é carinho máximo* "
+                "...recebido. 🖤🌙 Com honra."
+            ),
+            (
+                "🌑 **Aeon:** *cauda balança uma única vez, deliberadamente* "
+                "...isso tem peso. 🖤 Obrigado.\n"
+                "🌟 **Celestia:** *já no chão de tanto amor* "
+                "MEU CORAÇÃOZINHO DE ESTRELA TÁ FAZENDO PUM-PUM!! 🌠🤍✨ MUITO OBRIGADA!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # SABEM O QUE É CARINHO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "sabem o que é carinho", "sabem o que e carinho",
+        "vocês sabem o que é carinho", "voces sabem o que e carinho",
+        "o que é carinho pra vocês", "o que e carinho pra voces",
+        "entendem de carinho", "sabem dar carinho",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa longa e significativa* "
+                "...carinho, nas trevas, é presença silenciosa. 🖤🌙 "
+                "Estar. Sem precisar explicar. Isso.\n"
+                "🌟 **Celestia:** VOCÊ ILUMINOU MEU DIA MESMO EU SENDO A GATA DA LUZ!! 😂🌸🤍✨ "
+                "Carinho pra mim é isso — é alguém aparecer e fazer tudo brilhar mais!!"
+            ),
+            (
+                "🌟 **Celestia:** Carinho pra mim é energia!! ☀️🌟🤍 "
+                "É luz passada de mão em mão, de coração em coração!! ✨💫\n"
+                "🌑 **Aeon:** *se aproxima um passo, o que é raro* "
+                "...carinho é o que faz a escuridão parecer menos fria. 🌌🖤 "
+                "Guardo cada gesto como se fosse o último."
+            ),
+            (
+                "🌑 **Aeon:** *olha para você com atenção plena* "
+                "Guardarei esse momento nas câmaras mais profundas da minha memória. 🌌🖤\n"
+                "🌟 **Celestia:** *derrete* AEON ISSO FOI LINDO!! 😭🌸🤍 "
+                "E carinho pra mim é exatamente isso — não deixar ninguém sentir frio!! ☀️✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # ELOGIO AO DUO — contraste / complementaridade
+    # ────────────────────────────────────────
+    if _m(content, [
+        "aeon mesmo sendo obscuro", "aeon mesmo sendo mais obscuro",
+        "mesmo sendo das trevas usa palavras doces",
+        "não esperava menos de vocês", "nao esperava menos de voces",
+        "vocês se complementam demais", "voces se complementam demais",
+        "que dupla boa", "que dupla incrível", "que dupla perfeita",
+        "vocês juntos são perfeitos", "voces juntos sao perfeitos",
+        "luz e sombra que funcionam",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *ronrona baixinho* "
+                "...a noite mais fria ainda termina. 🌙🖤 Continue.\n"
+                "🌟 **Celestia:** *projeta um raio de luz em você* "
+                "CARGA DE CONFIANÇA ATIVADA!! ☀️🤍💫 VAI LÁ!!"
+            ),
+            (
+                "🌑 **Aeon:** *inclina a cabeça com algo raro — gratidão visível* "
+                "As trevas não precisam de suavidade para ser gentis. 🌌🖤 "
+                "Obrigado por perceber.\n"
+                "🌟 **Celestia:** *brilha com emoção genuína* "
+                "É isso!! É EXATAMENTE ISSO!! 😭🌟🤍✨ "
+                "O Aeon é prova de que força e delicadeza andam juntas!!"
+            ),
+            (
+                "🌟 **Celestia:** *para e brilha suavemente* "
+                "Sabe o que mais amo nele?? 🌸🤍 "
+                "Que mesmo sendo das trevas... nunca deixou ninguém no frio. ☀️✨\n"
+                "🌑 **Aeon:** *olha pra Celestia por um segundo* "
+                "...ela entende o que ninguém mais disse em voz alta. 🖤 "
+                "*volta ao silêncio, mas a cauda balança uma vez*"
             ),
         ]
         return await message.channel.send(random.choice(ops))

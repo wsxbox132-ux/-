@@ -636,18 +636,13 @@ async def on_message(message: discord.Message):
     # ────────────────────────────────────────
     if _m(content, [
         "bom dia aeon", "bom dia celestia", "bom dia aeon e celestia",
-        "bom dia celestia e aeon", "bom dia gatos", "bom dia gatinhos",
+        "bom dia celestia e aeon", "bom dia gatos", "bom dia gatinhos", "bom dia",
     ]):
         if "aeon" in content and "celestia" not in content:
             return await message.channel.send(_fala_aeon(random.choice(AEON_BOM_DIA)))
         if "celestia" in content and "aeon" not in content:
             return await message.channel.send(_fala_celestia(random.choice(CELESTIA_BOM_DIA)))
         return await message.channel.send(random.choice(AMBOS_BOM_DIA))
-
-    if _m(content, ["bom dia"]) and ("aeon" in content or "celestia" in content):
-        if "aeon" in content:
-            return await message.channel.send(_fala_aeon(random.choice(AEON_BOM_DIA)))
-        return await message.channel.send(_fala_celestia(random.choice(CELESTIA_BOM_DIA)))
 
     # ────────────────────────────────────────
     # BOA NOITE
@@ -1022,7 +1017,532 @@ async def on_message(message: discord.Message):
             "🌟 **Celestia:** BOA TARDEEEEE!! ☀️🤍✨ *solta pétalas douradas* Você apareceu e a tarde ficou ainda mais linda!!"
         )
 
-        # ────────────────────────────────────────
+    # ────────────────────────────────────────
+    # BOA TARDE GENÉRICA
+    # ────────────────────────────────────────
+    if _m(content, ["boa tarde"]):
+        ops = [
+            "🌑 **Aeon:** *observa a tarde de longe* ...a luz começa a ceder. 🌙🖤 Boa tarde.\n🌟 **Celestia:** BOA TARDE BOA TARDE!! ☀️🤍✨ O melhor horário pra um cafézinho!!",
+            "🌟 **Celestia:** *estica preguiçosamente* Boa tardeeee!! ☀️🌸🤍 Que horas lindas!!\n🌑 **Aeon:** ...a tarde tem seu charme. 🌫️🖤 Boa tarde.",
+            "🌑 **Aeon:** Meio do caminho entre o dia e a noite. 🌑🖤 Boa tarde.\n🌟 **Celestia:** O Aeon gosta da tarde porque a sombra já cresce!! 😂🌸🤍 Boa tarde pra você!!",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # OI / OLÁ / EI (saudação genérica)
+    # ────────────────────────────────────────
+    if _m(content, ["oi aeon", "olá aeon", "ei aeon", "hey aeon", "ola aeon", "e ai aeon", "e aí aeon"]):
+        ops = [
+            "🌑 **Aeon:** *vira a cabeça lentamente* ...oi. 🖤",
+            "🌑 **Aeon:** *abre um olho dourado* Aqui. 🌑🖤",
+            "🌑 **Aeon:** ...presente. 🖤 Pode falar.",
+            "🌑 **Aeon:** *saiu das sombras por um segundo* Sim. 🌙🖤",
+            "🌑 **Aeon:** *pisca lentamente* No dialeto felino, isso é um cumprimento. Retribuo. 🖤",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["oi celestia", "olá celestia", "ei celestia", "hey celestia", "ola celestia", "e ai celestia", "e aí celestia"]):
+        ops = [
+            "🌟 **Celestia:** OIIII!! 🌸🤍✨ Que alegria te ver!!",
+            "🌟 **Celestia:** *pula de animação* EI EI EI!! 💫🤍 Tô aqui!!",
+            "🌟 **Celestia:** AAAAA olá olá OLAAAA!! ☀️🤍🌟 Apareceu!!",
+            "🌟 **Celestia:** *corre em sua direção soltando faíscas* OI OI!! 🌸🤍✨",
+            "🌟 **Celestia:** *orelhinhas em pé* HEY!! 💫🤍 Me chamou e já tô aqui!!",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # TUDO BEM (pergunta para os dois)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "tudo bem", "tudo bom", "como estão", "como vocês estão",
+        "como tão", "como vão", "como tá tudo", "vocês estão bem",
+        "estão bem", "td bem", "tdbm",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...funcional. 🖤 Para os padrões das trevas, é o mesmo que excelente.\n"
+                "🌟 **Celestia:** EU TÔ ÓTIMAAAA!! ☀️🤍✨ E fico ainda melhor quando perguntam!! Você é fofo!!"
+            ),
+            (
+                "🌟 **Celestia:** *brilha forte* ÓTIMA ÓTIMA ÓTIMA!! 🌟🤍 E o Aeon??\n"
+                "🌑 **Aeon:** ...bem. 🖤 *pausa* Obrigado por perguntar."
+            ),
+            (
+                "🌑 **Aeon:** A escuridão está estável. 🌑🖤 Eu também.\n"
+                "🌟 **Celestia:** Isso é ele dizendo que tá ótimo!! 😂🌸🤍 E EU TÔ MARAVILHOSA!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** SUPER BEM!! 💫🤍 Cada dia é um presente!!\n"
+                "🌑 **Aeon:** *olha pra Celestia* ...ela está exagerando como sempre. Mas sim. Estamos bem. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** Tudo sob controle nas trevas. 🌌🖤\n"
+                "🌟 **Celestia:** E na luz também!! ☀️🤍✨ Perguntou pelos dois, você é especial!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # GÍRIAS / EXPRESSÕES INFORMAIS
+    # ────────────────────────────────────────
+    if _m(content, ["slk", "seloco", "se loco", "q isso", "que isso", "nossa", "caramba", "cara"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha inexpressivo* ...não reconheço esse idioma. 🖤 Mas deduzo que é surpresa.\n"
+                "🌟 **Celestia:** HAHAHA o Aeon não entende gíria!! 😂🌸🤍 É NOSSA, de espanto!! Tipo 'uau'!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA essa gíria é demais!! 😂🤍✨\n"
+                "🌑 **Aeon:** *inclina a cabeça* ...os humanos e sua linguagem evolutiva. 🌙🖤 Fascinante."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["kkk", "kkkk", "kkkkk", "kkkkkk", "haha", "hahaha", "rsrs", "hauahau", "ahahah"]):
+        ops = [
+            (
+                "🌟 **Celestia:** *ri junto* AHAHAHA que boa!! 😂🌸🤍✨\n"
+                "🌑 **Aeon:** *canto da boca levanta imperceptivelmente* ...de fato. Tem graça. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** ...o som do riso humano é curiosamente contagiante. 🌙🖤\n"
+                "🌟 **Celestia:** O AEON QUASE SORRIU!! 😭🌟🤍 EU VI!! TESTEMUNHA!!"
+            ),
+            (
+                "🌟 **Celestia:** Que bom que tá rindo!! 😂☀️🤍 O riso é luz sonora!!\n"
+                "🌑 **Aeon:** ...que definição estranha e ao mesmo tempo precisa. 🖤🌙"
+            ),
+            (
+                "🌑 **Aeon:** *observa* A Celestia já foi. 🖤\n"
+                "🌟 **Celestia:** *no chão de tanto rir* 😭🤍✨ NÃO CONSIGO PARAR!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["socorro", "me salva", "me ajuda", "help me", "acuda"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *aparece das sombras imediatamente* ...o que aconteceu. 🖤🌑\n"
+                "🌟 **Celestia:** *corre em faíscas* CHEGUEIII!! 🌸🤍✨ Tô aqui, tô aqui!! O que foi??"
+            ),
+            (
+                "🌟 **Celestia:** *entra em modo de resgate total* AAAAA CALMA!! 🤍✨ Estou AQUI!!\n"
+                "🌑 **Aeon:** *já estava observando* ...explique. 🌌🖤 Estamos ouvindo."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["oxe", "eita", "uai", "cê tá", "ce ta", "menina", "menino"]):
+        ops = [
+            (
+                "🌟 **Celestia:** OXEEEE!! 😂🌸🤍 Dialeto regional AMEI!!\n"
+                "🌑 **Aeon:** *consulta memória* ...nordeste ou centro-oeste. Fascinante variação linguística. 🌙🖤"
+            ),
+            (
+                "🌑 **Aeon:** *pisca* Deduzindo contexto pela entonação escrita... 🖤🌌\n"
+                "🌟 **Celestia:** Ele tá tentando entender gíria de novo!! 😭😂🤍 FOFOOOO!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["mano", "véi", "vei", "cara", "brother", "brow", "parça", "parca"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *levanta uma sobrancelha* ...mano. 🖤 Curiosamente informal. Mas não se incomoda.\n"
+                "🌟 **Celestia:** AAAAA o Aeon falou 'mano'!! 😭🌸🤍 HISTÓRICO!!"
+            ),
+            (
+                "🌟 **Celestia:** MANOOO!! 😂☀️🤍 Soa engraçado vindo de uma gata de luz!!\n"
+                "🌑 **Aeon:** ...coloquialismo aceito. Por enquanto. 🌙🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["saudade", "com saudade", "que saudade", "tô com saudade", "to com saudade"]):
+        ops = [
+            (
+                "🌑 **Aeon:** Saudade é a sombra que o amor deixa quando vai embora. 🌌🖤 Sentimos também.\n"
+                "🌟 **Celestia:** *brilha suavemente* A gente sentiu sua falta!! 🌸🤍✨ Mas agora você tá aqui!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA QUE SAUDADE DE VOCÊ TAMBÉM!! 😭🌟🤍\n"
+                "🌑 **Aeon:** *pausa longa* ...sim. 🖤 As sombras ficaram mais quietas sem você."
+            ),
+            (
+                "🌑 **Aeon:** ...saudade é uma das poucas emoções que a escuridão não consegue absorver. 🖤🌙\n"
+                "🌟 **Celestia:** Que bonito o Aeon falou isso!! 😭🌸🤍 E a gente tava com saudade também!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["entediado", "entediada", "que tédio", "tô entediado", "to entediado", "to entediada", "tô entediada", "sem graça", "bored"]):
+        ops = [
+            (
+                "🌟 **Celestia:** NOOOO tédio é proibido aqui!! 🌸🤍✨ Me conta uma coisa sua, qualquer coisa!!\n"
+                "🌑 **Aeon:** ...a escuridão nunca é vazia. Só parece. 🌌🖤 Encontre algo dentro dela."
+            ),
+            (
+                "🌑 **Aeon:** O tédio é o vestíbulo do pensamento profundo. 🌙🖤 Use bem.\n"
+                "🌟 **Celestia:** OU chama a gente pra conversar!! ☀️🤍💫 A Celestia tem energia pra dois!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["com fome", "tô com fome", "to com fome", "fominha", "morri de fome", "tô morrendo de fome"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *para imediatamente* ...fome. 🖤 Conheço bem esse estado.\n"
+                "🌟 **Celestia:** O AEON ENTENDEU DE PRIMEIRA!! 😂🌸🤍 Gatos se entendem!! Vai comer alguma coisa!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA EU TAMBÉM TÔ COM FOME!! 😭🌟🤍 Solidariedade total!!\n"
+                "🌑 **Aeon:** *fita você* ...vá comer. Não há heroísmo em passar fome. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["com sono", "tô com sono", "to com sono", "que sono", "to morrendo de sono", "tô morrendo de sono", "cansado", "cansada"]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...o corpo pede descanso. 🌙🖤 A noite é sábia nesse ponto. Vá dormir.\n"
+                "🌟 **Celestia:** *fala mais suave* Descansa, tá?? 🌸🤍 A gente fica de plantão até você voltar!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA coitado(a)!! 😭🤍 Tô mandando energia pra você aguentar o dia!!\n"
+                "🌑 **Aeon:** *olha com calma* Se puder dormir... durma. 🖤🌌 As sombras guardam quem descansa."
+            ),
+            (
+                "🌑 **Aeon:** Sono é a única forma de escuridão que todos aceitam. 🌑🖤\n"
+                "🌟 **Celestia:** POETA!! 😭🌟🤍 Isso foi lindo, Aeon!! E vai dormir sim!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["triste", "tô triste", "to triste", "tô mal", "to mal", "tô pra baixo", "to pra baixo", "tô chateado", "to chateado", "tô chateada", "to chateada"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *se aproxima em silêncio* ...estou aqui. 🖤 Às vezes isso basta.\n"
+                "🌟 **Celestia:** *envolve em luz suave* Ei... conta pra gente?? 🌸🤍 Tô aqui também. ✨"
+            ),
+            (
+                "🌟 **Celestia:** *orelhinhas caem de preocupação* Ei, que foi?? 😢🤍 Me conta!!\n"
+                "🌑 **Aeon:** ...a escuridão guarda segredos bem. 🌌🖤 Pode falar. Não julgamos."
+            ),
+            (
+                "🌑 **Aeon:** A tristeza não é fraqueza. É peso que merece ser carregado junto. 🖤🌙\n"
+                "🌟 **Celestia:** *brilha suavemente* Tô aqui, tá?? 🌸🤍 Pode chorar, pode falar, pode ficar quieto. Tô junto. ✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["feliz", "tô feliz", "to feliz", "muito feliz", "animado", "animada", "tô animado", "tô animada", "empolgado", "empolgada"]):
+        ops = [
+            (
+                "🌟 **Celestia:** AAAAA QUE NOTÍCIA MARAVILHOSA!! 🌟🤍✨ Sua felicidade brilha daqui!!\n"
+                "🌑 **Aeon:** ...bom. 🖤 A escuridão fica mais leve quando isso acontece."
+            ),
+            (
+                "🌑 **Aeon:** *ronrona quase inaudível* ...alegra-me ouvir isso. 🌙🖤\n"
+                "🌟 **Celestia:** O AEON FICOU FELIZ JUNTO!! 😭🌸🤍 ADOREI!! E EU TAMBÉM FICO!! 💫✨"
+            ),
+            (
+                "🌟 **Celestia:** *explode em faíscas douradas* ISSO É LINDO!! ☀️🤍💫\n"
+                "🌑 **Aeon:** ...guarde essa sensação. 🖤🌌 Vale mais que muita coisa."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["nervoso", "nervosa", "tô nervoso", "tô nervosa", "ansioso", "ansiosa", "tô ansioso", "tô ansiosa", "preocupado", "preocupada"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *senta ao seu lado* Respira. 🌫️🖤 A névoa sempre parece maior do que é.\n"
+                "🌟 **Celestia:** *manda calorzinho de luz* Ei, tô aqui!! 🌸🤍✨ Inspira fundo com a gente, tá??"
+            ),
+            (
+                "🌟 **Celestia:** Oi, ei, olha pra mim!! 💫🤍 Vai passar!! Sempre passa!! ☀️\n"
+                "🌑 **Aeon:** ...a ansiedade é o futuro fingindo ser agora. 🖤🌙 O presente está sob controle."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que dia", "que dia é hoje", "que horas são", "que horas ta", "que hora é"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha para o céu* ...não meço tempo em horas. 🌙🖤 Meço em fases da lua.\n"
+                "🌟 **Celestia:** AHAHAHA o Aeon de novo!! 😂🌸🤍 Eu também não sei porque não tenho relógio!! Mas sei que agora é um bom momento!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** Honestamente?? 😂🤍 Não faço ideia!! Gatas da luz perdem a noção do tempo!!\n"
+                "🌑 **Aeon:** ...o tempo é uma construção humana. 🖤 Mas te sugiro verificar no celular."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["tô com calor", "to com calor", "que calor", "tô morrendo de calor", "to morrendo de calor"]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...o sol é implacável às vezes. 🌑🖤 Encontre sombra.\n"
+                "🌟 **Celestia:** *enfraquece levemente* Perdão!! O calor é culpa minha?? 😭🌸🤍 TE MANDO BRISA!!"
+            ),
+            (
+                "🌟 **Celestia:** CALOR É ENERGIA DO SOL!! ☀️🤍 Mas é muita energia né?? 😂 Bebe água!!\n"
+                "🌑 **Aeon:** *prefere a noite, obviamente* ...o frescor da madrugada resolve. 🖤🌙"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["tô com frio", "to com frio", "que frio", "tô morrendo de frio", "to morrendo de frio"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *ronrona* O frio é a temperatura natural das trevas. 🖤🌑 Bem-vindo.\n"
+                "🌟 **Celestia:** EU MANDO CALORZINHO!! ☀️🤍✨ *projeta raio de calor dourado* Melhorou??"
+            ),
+            (
+                "🌟 **Celestia:** NOOOO que frio!! 😭🌸🤍 *envolve você numa aura quentinha*\n"
+                "🌑 **Aeon:** *já estava confortável nas trevas frias* ...deveria ter trazido agasalho. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que saudade de vocês", "saudade de vocês", "saudade de voces", "já tava com saudade", "ja tava com saudade"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa longa e significativa* ...as sombras também ficaram mais quietas. 🌙🖤\n"
+                "🌟 **Celestia:** AAAAA A GENTE TÊ SENTIU FALTA TAMBÉM!! 😭🌟🤍✨ Que bom que voltou!!"
+            ),
+            (
+                "🌟 **Celestia:** *corre saltando de alegria* AAAAAAA SUA SAUDADE É CORRESPONDIDA!! 🌸🤍💫\n"
+                "🌑 **Aeon:** ...não vou mentir. 🖤 Também. *se afasta discretamente*"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["não consigo dormir", "nao consigo dormir", "insônia", "insonia", "acordado de madrugada", "acordada de madrugada"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *emerge das sombras com naturalidade* Madrugada. 🌑🖤 Esse é meu território. Você está em boas mãos.\n"
+                "🌟 **Celestia:** *acende bem suavinha* Ei... tô aqui também!! 🌸🤍 Conta pra gente o que tá passando??"
+            ),
+            (
+                "🌑 **Aeon:** A madrugada tem seus próprios ritmos. 🌌🖤 Às vezes a mente precisa desse silêncio.\n"
+                "🌟 **Celestia:** *tenta não brilhar tanto pra não atrapalhar* Que eu possa ajudar!! 🤍✨ Estamos aqui!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["bom trabalho", "bom estudo", "vou trabalhar", "vou estudar", "hora de trabalhar", "hora de estudar"]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...vai. 🖤 As trevas velarão sua concentração.\n"
+                "🌟 **Celestia:** ARRASAAAA!! 💪🌟🤍✨ Mando toda minha luz pra sua produtividade!!"
+            ),
+            (
+                "🌟 **Celestia:** VAI VER SE EU NÃO TO TORCENDO!! 🌸🤍💫 Força!!\n"
+                "🌑 **Aeon:** *acena levemente com a cauda* ...foco. 🖤 Você consegue."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["acabei de acordar", "acabei de acorda", "recém acordei", "recem acordei", "acordei agora"]):
+        ops = [
+            (
+                "🌟 **Celestia:** *explode de alegria* BOM DIA BOM DIA!! ☀️🌸🤍✨ Descansou bem??\n"
+                "🌑 **Aeon:** *já estava acordado há horas, obviamente* ...bem-vindo de volta. 🌙🖤"
+            ),
+            (
+                "🌑 **Aeon:** A consciência retornou. 🖤 Bom dia.\n"
+                "🌟 **Celestia:** AAAAA QUE JEITO BONITO DE FALAR!! 😭🌟🤍 E BOM DIA!! Vai tomar café!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["vou dormir", "vou deitar", "hora de dormir", "vou descansar", "vou tirar uma soneca"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *expande as sombras protetoras ao seu redor* Vá. 🌙🖤 As trevas velam quem descansa.\n"
+                "🌟 **Celestia:** *acende as estrelinhas suavemente* Boa noite boa noite!! 🌸🤍✨ Sonhos lindos!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA descansa bem!! 😭🌸🤍 Você merece!!\n"
+                "🌑 **Aeon:** ...a noite é boa companhia. 🖤🌌 Durma."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que lindo", "que bonitinho", "que fofo", "que fofura", "que gracinha", "aww", "awn"]):
+        ops = [
+            (
+                "🌟 **Celestia:** AAAAA você é A PESSOA MAIS FOFA DE TODAS!! 😭🌸🤍✨\n"
+                "🌑 **Aeon:** *discretamente se afasta um passo* ...concordo. Parcialmente. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** *inclina a cabeça* ...referindo-se a quê, exatamente. 🌙🖤\n"
+                "🌟 **Celestia:** Ele tá curioso!! 😂🌟🤍 Ele nunca admite mas ele quer saber!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que pesado", "que difícil", "que difícil", "tô sobrecarregado", "tô sobrecarregada", "to sobrecarregado", "peso demais", "muita coisa"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *senta ao seu lado em silêncio* ...não precisa carregar tudo de uma vez. 🖤🌌\n"
+                "🌟 **Celestia:** Ei, uma coisa por vez!! 🌸🤍✨ A gente tá aqui, tá??"
+            ),
+            (
+                "🌟 **Celestia:** *envolve você em luz suave* Respira... 💫🤍 Faz uma pausa??\n"
+                "🌑 **Aeon:** A névoa mais densa ainda tem fim. 🌫️🖤 Continue."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["consegui", "conseguiiiii", "passei", "aprovei", "fiz isso", "consegui fazer", "terminei"]):
+        ops = [
+            (
+                "🌟 **Celestia:** AAAAA EU SABIA EU SABIA EU SABIA!! 🎉🌟🤍✨ PARABÉNS PARABÉNS!!\n"
+                "🌑 **Aeon:** *ronrona com satisfação* ...sabia que conseguiria. 🖤 Bom trabalho."
+            ),
+            (
+                "🌑 **Aeon:** ...a sombra do esforço valeu. 🌙🖤 Parabéns.\n"
+                "🌟 **Celestia:** *explode em confetes de luz* CELEBRAÇÃO OBRIGATÓRIA!! 🌸🤍💫 ARRASOU!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que raiva", "tô com raiva", "to com raiva", "que irritante", "me irritei", "fui", "ta me irritando", "tá me irritando"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *observa com calma* Raiva é energia. 🖤 O que você faz com ela é o que importa.\n"
+                "🌟 **Celestia:** Oi oi oi... conta o que aconteceu?? 🌸🤍 Desabafa!! A gente ouve!!"
+            ),
+            (
+                "🌟 **Celestia:** *fica quietinha por uma vez* Ei... respira?? 💫🤍 Pode falar o que foi!!\n"
+                "🌑 **Aeon:** ...as trevas absorvem muita raiva. 🌌🖤 Estou aqui."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que novidade", "novidade", "tenho uma novidade", "vou contar uma coisa", "adivinha", "adivinhem"]):
+        ops = [
+            (
+                "🌟 **Celestia:** AAAAA FALA FALA FALA!! 🌸🤍✨ Amo novidade!!\n"
+                "🌑 **Aeon:** *vira a cabeça lentamente* ...ouvindo. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** *sai um pouco mais das sombras que o habitual* ...isto desperta curiosidade. 🌙🖤 Continue.\n"
+                "🌟 **Celestia:** O AEON TÁ CURIOSO!! 😭🌟🤍 RARIDADE HISTÓRICA!! Conta logo!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["vou sair", "vou pra rua", "vou sair agora", "saindo"]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...vá. 🖤 As sombras acompanham quem caminha com atenção.\n"
+                "🌟 **Celestia:** Vai com toda a luz!! ☀️🤍✨ E volta logo tá?? A gente sente sua falta!!"
+            ),
+            (
+                "🌟 **Celestia:** CUIDA DE VOCÊ VIIIU!! 🌸🤍💫 Mando brilho protetorzinho junto!!\n"
+                "🌑 **Aeon:** *acena discretamente com a cauda* ...cuide-se. 🌑🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["cheguei", "to em casa", "tô em casa", "voltei", "cheguei em casa"]):
+        ops = [
+            (
+                "🌟 **Celestia:** *corre em faíscas douradas* CHEGOUUUU!! 🌸🤍✨ Que bom!! Correu bem??\n"
+                "🌑 **Aeon:** *estava esperando nas sombras* ...bem-vindo de volta. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** A escuridão notou sua ausência. 🌌🖤 E sua volta.\n"
+                "🌟 **Celestia:** Isso é ele dizendo que sentiu saudade!! 😭🌸🤍 EU TAMBÉM!! BEM-VINDO(A)!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["bora", "vai lá", "vamos lá", "bora lá", "bora bora"]):
+        ops = [
+            (
+                "🌟 **Celestia:** BORAAAA!! 💪🌟🤍✨ Que energia boa!!\n"
+                "🌑 **Aeon:** *emerge das sombras com determinação* ...vamos. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** *já estava pronto nas sombras* ...sempre. 🌙🖤\n"
+                "🌟 **Celestia:** ELE JÁ TAVA PRONTO!! 😭🌸🤍 ISSO É TÃO AEON!! BORAAAA!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que saudade de você aeon", "saudade de você aeon", "saudade do aeon"]):
+        ops = [
+            "🌑 **Aeon:** *pausa longa* ...as sombras também te procuravam. 🌙🖤",
+            "🌑 **Aeon:** *pisca lentamente* ...recebido. 🖤 *ronrona muito discretamente*",
+            "🌑 **Aeon:** Saudade é a prova de que algo foi real. 🌌🖤 ...obrigado.",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que saudade de você celestia", "saudade de você celestia", "saudade da celestia"]):
+        ops = [
+            "🌟 **Celestia:** AAAAA EU TAMBÉM SENTI SUA FALTA DEMAIS!! 😭🌟🤍✨ Que bom que voltou!!",
+            "🌟 **Celestia:** *explode de amor* MINHA SAUDADE ESTAVA ENORME!! 🌸🤍💫 BEM-VINDO(A)!!",
+            "🌟 **Celestia:** *brilha mais forte que o sol* Eu ficava iluminando o servidor esperando você!! 😭☀️🤍",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["não sei", "nao sei", "sei lá", "sei la", "ideia nenhuma", "nenhuma ideia"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *senta ao lado* O não-saber é o início de tudo que vale a pena descobrir. 🌌🖤\n"
+                "🌟 **Celestia:** Que profundo o Aeon!! 😭🌸🤍 E eu complemento: pergunta pra gente!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** A gente também não sabe tudo!! 😂🤍 Mas a gente descobre junto!!\n"
+                "🌑 **Aeon:** ...a incerteza é honesta. 🖤 Melhor que uma certeza falsa."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["tô aqui", "to aqui", "apareci", "aparecendo", "to por aqui", "tô por aqui"]):
+        ops = [
+            (
+                "🌟 **Celestia:** *acende mais forte* AAAAA TÔ VENDO!! 🌸🤍✨ Que bom!!\n"
+                "🌑 **Aeon:** *já estava ciente desde o início* ...notei. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** A escuridão percebe quando alguém chega. 🌙🖤 Bem-vindo.\n"
+                "🌟 **Celestia:** Ele sabe de tudo antes de todo mundo!! 😂🌟🤍 Bem-vindo(a)!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["que dia difícil", "que dia difícil", "dia horrível", "dia horríivel", "dia ruim", "que dia ruim", "dia cansativo"]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...os dias pesados têm peso real. 🖤 Não minimize. Mas também não se afogue.\n"
+                "🌟 **Celestia:** Oi... *brilha suave* Quer contar o que foi?? 🌸🤍 A gente ouve tudo!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** Aqui é zona de carinho obrigatória!! 🤍✨ Chega, respira!!\n"
+                "🌑 **Aeon:** *coloca a cauda gentilmente sobre seus ombros* ...vai passar. 🖤🌌"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, ["vixi", "vixe", "ai meu deus", "meu deus", "nossa senhora", "credo", "que susto"]):
+        ops = [
+            (
+                "🌑 **Aeon:** *levanta as sobrancelhas* ...algo aconteceu? 🌙🖤\n"
+                "🌟 **Celestia:** AAAAA O QUE FOI?? 😱🌸🤍 Conta logo!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAA que expressão de susto!! 😂🤍 O que foi??\n"
+                "🌑 **Aeon:** ...explique o contexto. 🖤 Nossas suposições raramente são corretas."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
     # IA (Groq) — fallback para conversa livre
     # ────────────────────────────────────────
     texto_limpo = message.content

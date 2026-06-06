@@ -34,11 +34,13 @@ BOT_ID = None  # preencha depois
 CRIADOR_ID = 769951556388257812   # quem criou o bot
 
 # ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
-DEATH_ID  = 831600198500220989   # Death  — Dona e Líder
-PEPO_ID   = 796441518176075818   # Pepo   — Vice-Líder
-GOD_ID    = 760973014707208253   # God    — Moderador
-LOYA_ID   = 811956773560123394   # Loya   — ADM / Loya Maravilhosa
-EMY_ID    = 796382699228758026   # Emy    — Moderadora / Representante de Mídias
+DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
+PEPO_ID     = 796441518176075818   # Pepo     — Vice-Líder
+GOD_ID      = 760973014707208253   # God      — Moderador
+LOYA_ID     = 811956773560123394   # Loya     — ADM / Loya Maravilhosa
+EMY_ID      = 796382699228758026   # Emy      — Moderadora / Representante de Mídias
+KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
+RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
 
 # ── Frases personalizadas — AEON ──────────────────────────────────────────────
 _FRASES_AEON: dict[int, list[str]] = {
@@ -81,6 +83,22 @@ _FRASES_AEON: dict[int, list[str]] = {
         "*a névoa ao redor se organiza levemente* Sua presença aqui tem peso diferente, Emy. 🌌🖤 Quem conecta o servidor ao mundo externo não é pouca coisa.",
         "*inclina a cabeça* Emy chegou. 🖤🔮 Moderadora. Representante. A ponte entre o que somos e o que o mundo vê. As trevas reconhecem pontes importantes.",
         "*cauda faz um movimento calmo e deliberado* Emy. 🌑🖤 O trabalho de quem cuida das mídias raramente aparece com seu nome. Mas eu noto. As sombras sempre notam.",
+    ],
+
+    KOFFZERA_ID: [
+        "*emerge das sombras e inclina a cabeça levemente* Koff. 🖤🌑 Administrador. Quem sustenta a estrutura do clã por dentro — as trevas reconhecem esse tipo de peso.",
+        "*olhos dourados pousam em você com atenção* Koffzera chegou. 🌙🖤 Administrar não é só ter cargo — é carregar o que os outros não veem. Você carrega bem.",
+        "*ronrona discretamente* Koff. 🌑🖤 Os melhores administradores são os que resolvem antes de alguém perceber que havia um problema. Você parece ser desse tipo.",
+        "*a escuridão ao redor se ajusta, como se reconhecesse alguém importante* Koffzera. 🌌🖤 ADM de clã. As sombras sabem distinguir quem apenas ocupa um posto... de quem de fato o sustenta.",
+        "*pisca lentamente, o que nas trevas equivale a um aceno* Koff chegou. 🖤🔮 O clã tem estrutura porque alguém cuida dela. As trevas notam quem faz esse trabalho.",
+    ],
+
+    RAIDEN_ID: [
+        "*emerge das sombras e observa com atenção genuína* Raiden. 🖤🌑 Suporte do clã. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
+        "*inclina a cabeça com reconhecimento silencioso* Raiden chegou. 🌙🖤 Suporte é o papel que raramente recebe crédito... mas sem o qual tudo desmorona. Eu sei disso.",
+        "*a névoa ao redor se aquieta levemente* Raiden. 🌌🖤 Quem apoia não fica atrás — fica do lado certo. As sombras entendem a diferença.",
+        "*ronrona numa frequência contida* Raiden. 🌑🖤 Ser suporte exige paciência que poucos têm. E presença constante que poucos mantêm. Você mantém.",
+        "*cauda faz um arco suave e deliberado* Raiden chegou. 🖤🔮 As trevas ficam mais estáveis quando quem sabe apoiar aparece. Coincidência? Já disse que não acredito em coincidências.",
     ],
 }
 
@@ -126,15 +144,33 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
         "*brilha com carinho verdadeiro* Emy!! 🤍✨ O trabalho de mídias não aparece sempre mas a diferença que faz aparece MUITO!! E você faz essa diferença todo dia!! 🌟☀️",
         "EMY!! 😭🌸🤍 *ronrona com admiração* Moderadora de coração e voz do servidor pro mundo — duas funções que precisam de alguém especial!! E você é especial, Emy!! 💫🌟✨",
     ],
+
+    KOFFZERA_ID: [
+        "KOFFZERA!! 😭🌟🤍✨ *aparece num flash dourado* O ADM do clã chegou e o servidor ficou mais sólido AGORA MESMO!! Bem-vindo, Koff!!",
+        "*gira radiante* KOFF!! ☀️🌸🤍 Administrador de verdade!! Você cuida do clã por dentro, nos bastidores, sem aparecer muito — e a Celestia VÊ isso!! 💫✨",
+        "AAAAA Koffzera chegou!! 😭🌟🤍 *solta confetes de luz* ADM que sustenta o clã de verdade!! Pode chegar que a Celestia já tá brilhando mais que o normal!! 🌸✨",
+        "*para e brilha com admiração genuína* Koff!! 🤍✨ Tem administrador que só tem o cargo. E tem administrador que carrega o clã de verdade. Você é o segundo tipo e isso é TUDO!! 🌟☀️",
+        "KOFF!! 😭🌸🤍 *ronrona de felicidade* Administrador do clã com presença real!! A estrutura do servidor agradece sem saber que é por sua causa — mas eu sei!! 💫🌟✨",
+    ],
+
+    RAIDEN_ID: [
+        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas douradas* O suporte do clã chegou e tudo ficou mais seguro e aconchegante AGORA!!",
+        "*explode de carinho* RAIDEN!! ☀️🌸🤍 Suporte é o papel mais importante que existe e ninguém fala isso suficiente!! Eu falo!! Você é incrível!! 💫✨",
+        "AAAAA Raiden chegou!! 😭🌟🤍 *espalha estrelinhas por todo o canal* Suporte de coração, presente quando mais importa!! Que alegria enorme te ver por aqui!! 🌸✨",
+        "*brilha suave e cheio de carinho* Raiden!! 🤍✨ Sabe o que eu mais admiro em quem faz suporte?? A paciência e a presença!! Você tem os dois!! MUITO!! 🌟☀️",
+        "RAIDEN!! 😭🌸🤍 *ronrona com admiração* Estar lá quando os outros precisam parece simples mas não é — e você faz isso!! A Celestia vê e fica orgulhosa!! 💫🌟✨",
+    ],
 }
 
 # Mapa de apelidos para exibição nas mensagens
 _NOMES_ESPECIAIS = {
-    DEATH_ID: "Death",
-    PEPO_ID:  "Pepo",
-    GOD_ID:   "God",
-    LOYA_ID:  "Loya",
-    EMY_ID:   "Emy",
+    DEATH_ID:    "Death",
+    PEPO_ID:     "Pepo",
+    GOD_ID:      "God",
+    LOYA_ID:     "Loya",
+    EMY_ID:      "Emy",
+    KOFFZERA_ID: "Koff",
+    RAIDEN_ID:   "Raiden",
 }
 
 # IDs de canais (opcional — preencha se quiser bom dia/boa noite automáticos)

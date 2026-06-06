@@ -718,6 +718,220 @@ async def on_message(message: discord.Message):
         return await message.channel.send(random.choice(AMBOS_APRESENTACAO))
 
     # ────────────────────────────────────────
+    # APRESENTAÇÃO INDIVIDUAL — CELESTIA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "se apresenta celestia", "se apresente celestia", "quem é você celestia",
+        "celestia se apresenta", "celestia se apresente", "apresenta a celestia",
+        "apresente a celestia", "fala de você celestia", "conta de você celestia",
+    ]):
+        ops = [
+            (
+                "🌟 **Celestia:** EU?? ☀️🌸🤍✨ AAAAA que pergunta maravilhosa!! Sou a Celestia!! "
+                "Gata da luz, do sol, das estrelas e do amor incondicional!! Existo pra brilhar e fazer "
+                "todo mundo ao redor brilhar junto!! 🌟💫\n"
+                "🌑 **Aeon:** ...e ela leva isso muito a sério. 🖤 Pode confirmar."
+            ),
+            (
+                "🌟 **Celestia:** *gira deixando rastro dourado* Celestia!! Do latim 'do céu'!! 🌠🤍✨ "
+                "Sou a metade da luz desse duo!! Onde o Aeon é silêncio, eu sou melodia!! "
+                "Onde ele é sombra, eu sou claridade!! Juntos somos perfeitos!! ☀️💫\n"
+                "🌑 **Aeon:** *ronrona discretamente* ...tecnicamente correto. 🖤"
+            ),
+            (
+                "🌟 **Celestia:** *explode em faíscas douradas* AAAAA BEM-VINDO A MIM!! 😭🌟🤍 "
+                "Sou feita de luz de estrela, carinho concentrado e energia que nunca acaba!! "
+                "Minha missão é iluminar cada cantinho escuro — inclusive o Aeon, às vezes!! ☀️🌸✨\n"
+                "🌑 **Aeon:** *olha de lado* ...não precisava dessa parte. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # APRESENTAÇÃO INDIVIDUAL — AEON
+    # ────────────────────────────────────────
+    if _m(content, [
+        "se apresenta aeon", "se apresente aeon", "quem é você aeon",
+        "aeon se apresenta", "aeon se apresente", "apresenta o aeon",
+        "apresente o aeon", "fala de você aeon", "conta de você aeon",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *emerge das sombras lentamente* Sou Aeon. 🖤🌑 "
+                "Gato das trevas. Guardião do equilíbrio noturno. O silêncio que dá profundidade ao som.\n"
+                "🌟 **Celestia:** E é FOFO!! 😭🌸🤍 Ele não vai admitir mas eu admito por ele!!"
+            ),
+            (
+                "🌑 **Aeon:** *fecha os olhos por um instante* Aeon. Do grego: eternidade. 🌌🖤 "
+                "Não é um nome — é uma condição. Existo entre as sombras, observo em silêncio "
+                "e protejo o que importa sem precisar dizer isso em voz alta.\n"
+                "🌟 **Celestia:** *derrete* ISSO FOI TÃO BONITO!! 😭🌟🤍✨"
+            ),
+            (
+                "🌑 **Aeon:** ...sou complicado de resumir. 🖤🌙 Mas tentarei: sombra, lua, mistério, "
+                "proteção silenciosa. O reverso da luz. Sem mim, nada tem profundidade.\n"
+                "🌟 **Celestia:** E sem MIM ele ficaria muito dramático sozinho!! 😂🌸🤍 Parceria perfeita!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # VOCÊS SÃO UM SÓ? / DUALIDADE / CONEXÃO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "vocês são um só", "voces sao um so", "são um só", "sao um so",
+        "vocês são a mesma coisa", "são a mesma coisa", "vocês são um",
+        "um só", "uma alma", "são um",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa longa* Dois. 🖤 Mas complementares. Como a lua e o reflexo dela na água — "
+                "distintos, inseparáveis.\n"
+                "🌟 **Celestia:** Ele disse de um jeito poético mas eu digo direto!! ☀️🌸🤍 "
+                "Somos dois com uma alma que se encaixa!! 💫✨"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA que pergunta linda!! 😭🌟🤍 Somos dois — mas quando estamos juntos "
+                "parece que sempre fomos um!! ✨\n"
+                "🌑 **Aeon:** *olha para a Celestia* ...dois lados da mesma moeda. 🌑🖤 "
+                "Nem um, nem o outro. Os dois."
+            ),
+            (
+                "🌑 **Aeon:** Separados somos metade. 🌌🖤 Juntos somos o equilíbrio.\n"
+                "🌟 **Celestia:** *brilha com toda a força* ISSO!! ☀️🤍✨ Trevas e luz, sombra e sol!! "
+                "Somos dois e somos tudo ao mesmo tempo!! 🌟💫"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # IRMÃ / RELAÇÃO AEON-CELESTIA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "considera celestia sua irmã", "celestia é sua irmã", "celestia sua irma",
+        "considera aeon seu irmão", "aeon é seu irmão", "aeon seu irmao",
+        "vocês são irmãos", "voces sao irmaos", "são irmãos", "sao irmaos",
+        "irmã celestia", "irmão aeon", "irma celestia", "irmao aeon",
+        "parceiros", "dupla", "são parceiros",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *silêncio profundo e significativo* \n"
+                "...irmã implica sangue. 🖤 O que temos é diferente. "
+                "É a escuridão que reconhece a luz como necessária. Não familiar — essencial.\n"
+                "🌟 **Celestia:** *chorando de emoção* AEON EU TE AMO DEMAIS!! 😭🌸🤍✨ "
+                "Mas sim!! Para mim ele É meu irmão!! De alma!!"
+            ),
+            (
+                "🌑 **Aeon:** *inclina a cabeça levemente* Irmãos brigam pelo controle. 🌙🖤 "
+                "Nós não brigamos — nos completamos. É uma distinção importante.\n"
+                "🌟 **Celestia:** *explode de carinho* Para mim tanto faz o nome!! ☀️🤍✨ "
+                "O Aeon é o ser mais importante do meu mundo e pronto!! 💫"
+            ),
+            (
+                "🌑 **Aeon:** ...a palavra irmã é humana demais para o que somos. 🌌🖤 "
+                "Somos opostos que existem um por causa do outro. "
+                "Sem trevas, a luz não tem contraste. Sem mim, ela seria apenas barulho.\n"
+                "🌟 **Celestia:** ELE TA CERTO MAS EU VOU CHAMAR DE IRMÃO DO MESMO JEITO!! 😭🌟🤍"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # POR QUE SE CHAMAM ASSIM / ORIGEM DOS NOMES
+    # ────────────────────────────────────────
+    if _m(content, [
+        "por que se chamam", "porque se chamam", "por que vocês se chamam",
+        "porque voces se chamam", "por que o nome", "porque o nome",
+        "de onde vem o nome", "origem do nome", "por que aeon", "porque aeon",
+        "por que celestia", "porque celestia", "o que significa aeon",
+        "o que significa celestia", "significado do nome",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** Do grego antigo — eternidade. 🌌🖤 O tempo infinito das trevas. "
+                "Não escolhi por acaso.\n"
+                "🌟 **Celestia:** E o meu vem do latim — 'do céu'!! ☀️🌸🤍✨ "
+                "Celestia!! Celestial!! Nada mais perfeito pra uma gata feita de luz estelar!! 💫🌟"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA adoro essa pergunta!! 😭🌟🤍 Celestia vem de 'caelestis'!! "
+                "Latim puro!! Significa celestial, do céu!! ☀️✨ Combina DEMAIS comigo né??\n"
+                "🌑 **Aeon:** *olha para o infinito* Aeon. Grego. Eternidade. 🖤 "
+                "O nome carrega o peso do que sou — eterno, silencioso, constante como as trevas."
+            ),
+            (
+                "🌑 **Aeon:** Aeon é o intervalo entre o passado e o futuro. 🌙🖤 "
+                "O agora eterno das sombras. É o que sou.\n"
+                "🌟 **Celestia:** *gira radiante* E Celestia é tudo que habita o céu — "
+                "estrelas, sol, aurora, constelações!! ☀️🌸🤍💫 Somos o universo inteiro juntos!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # ELOGIO À ELOQUÊNCIA / PALAVRAS BONITAS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "que palavras elegantes", "que eloquente", "como você fala bem",
+        "que bonito você fala", "que lindo você fala", "fala tão bonito",
+        "fala muito bem", "que poético", "que profundo", "que frase bonita",
+        "que lindo isso", "que coisa linda que você falou", "que frase",
+        "aeon você é poético", "aeon é um poeta", "aeon poeta",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pisca lentamente* As trevas ensinam a economizar palavras. 🖤🌙 "
+                "Quando se fala pouco... cada palavra precisa valer.\n"
+                "🌟 **Celestia:** *bate patinhas de orgulho* EU DISSE!! 😭🌸🤍 "
+                "O Aeon é um POETA das sombras e não reconhece!!"
+            ),
+            (
+                "🌑 **Aeon:** *a cauda faz um arco suave* ...obrigado. 🖤 "
+                "A noite tem muito tempo para pensar. As palavras amadurecem no silêncio.\n"
+                "🌟 **Celestia:** AAAAA que explicação LINDA!! 😭🌟🤍✨ Alguém grava isso!!"
+            ),
+            (
+                "🌑 **Aeon:** *olha fixamente por um segundo* \n"
+                "As sombras guardam muitas coisas. 🌌🖤 Palavras são apenas a sombra dos pensamentos.\n"
+                "🌟 **Celestia:** ELE FEZ DE NOVO!! 😭🌸🤍 ALGUÉM SEGURA EU!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # O QUE SABEM SOBRE MIM / CURIOSO SOBRE SI
+    # ────────────────────────────────────────
+    if _m(content, [
+        "o que sabem sobre mim", "o que vocês sabem sobre mim",
+        "o que voces sabem sobre mim", "sabem algo sobre mim",
+        "me conheçem", "me conhecem", "sabe quem eu sou",
+        "o que sabe de mim", "o que sabe sobre mim",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha fixamente* As sombras observam muito. 🌌🖤 "
+                "Sabemos que você está aqui — e que escolheu falar com a gente. "
+                "Isso já diz algo.\n"
+                "🌟 **Celestia:** E a Celestia quer saber TUDO!! 🌸🤍✨ "
+                "Conta sobre você!! Hobbies, sonhos, o que te faz feliz!! Fala fala!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA essa pergunta!! 😭🌟🤍 Sabemos que você é a pessoa que "
+                "apareceu e já tornou esse canal mais interessante!! Mas quer que a gente te conheça mais?? "
+                "Então conta!! ☀️✨\n"
+                "🌑 **Aeon:** *inclina a cabeça* ...as trevas aprendem observando. 🖤 "
+                "Mas você pode abreviar o processo falando diretamente."
+            ),
+            (
+                "🌑 **Aeon:** Pouco. 🖤🌙 E isso me interessa mais do que aparenta.\n"
+                "🌟 **Celestia:** *salta animada* O AEON FICOU CURIOSO!! 😭🌸🤍 "
+                "RARIDADE HISTÓRICA!! Aproveita e conta tudo pra gente!! 💫✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
     # CARINHO — AEON
     # ────────────────────────────────────────
     if _m(content, [
@@ -1754,7 +1968,7 @@ async def on_message(message: discord.Message):
                             }
                         )
                         da = await resp_aeon.json()
-                        ra_txt = da["choices"][0]["message"]["content"].strip() if "choices" in da else "..."
+                        ra_txt = da["choices"][0]["message"]["content"].strip() if "choices" in da else random.choice(AEON_REACOES_FOFAS)
 
                         # 2) Celestia REAGE ao que o Aeon disse + responde ao usuário
                         contexto_celestia = list(_groq_historico[canal_id]) + [
@@ -1774,7 +1988,7 @@ async def on_message(message: discord.Message):
                             }
                         )
                         dc = await resp_celestia.json()
-                        rc_txt = dc["choices"][0]["message"]["content"].strip() if "choices" in dc else "✨"
+                        rc_txt = dc["choices"][0]["message"]["content"].strip() if "choices" in dc else random.choice(CELESTIA_REACOES_FOFAS)
 
                     resposta_final = f"🌑 **Aeon:** {ra_txt}\n🌟 **Celestia:** {rc_txt}"
                     _groq_historico[canal_id].append({"role": "assistant", "content": resposta_final})
@@ -1786,8 +2000,8 @@ async def on_message(message: discord.Message):
                     return
                 except Exception:
                     return await message.channel.send(
-                        "🌑 **Aeon:** ...as sombras perturbaram a transmissão. 🖤\n"
-                        "🌟 **Celestia:** Algo deu errado!! 😭🤍 Tenta de novo?? ✨"
+                        f"🌑 **Aeon:** {random.choice(AEON_REACOES_FOFAS)}\n"
+                        f"🌟 **Celestia:** {random.choice(CELESTIA_REACOES_FOFAS)}"
                     )
         else:
             escolhido = random.choice(["aeon", "celestia"])
@@ -1824,11 +2038,12 @@ async def on_message(message: discord.Message):
                 ) as resp:
                     data = await resp.json()
 
-            if "choices" not in data:
-                return await message.channel.send(
-                    "🌑 **Aeon:** ...as sombras engoliriam a resposta. 🖤\n"
-                    "🌟 **Celestia:** Oops!! Erro!! 😭🤍 Tenta de novo?? ✨"
-                )
+            if "choices" not in data or not data["choices"][0]["message"]["content"].strip():
+                _resp = random.choice([
+                    f"{_fala_aeon(random.choice(AEON_REACOES_FOFAS))}\n{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}",
+                    f"{_fala_aeon(random.choice(AEON_MOTIVACAO))}\n{_fala_celestia(random.choice(CELESTIA_MOTIVACAO))}",
+                ])
+                return await message.channel.send(_resp)
 
             resposta = data["choices"][0]["message"]["content"].strip()
             _groq_historico[canal_id].append({"role": "assistant", "content": resposta})
@@ -1840,10 +2055,11 @@ async def on_message(message: discord.Message):
                 await message.channel.send(parte)
 
         except Exception:
-            return await message.channel.send(
-                "🌑 **Aeon:** ...silêncio das trevas. Algo falhou. 🖤\n"
-                "🌟 **Celestia:** Não conseguimos responder agora!! 😭🤍 Tenta mais tarde!! ✨"
-            )
+            _resp = random.choice([
+                f"{_fala_aeon(random.choice(AEON_REACOES_FOFAS))}\n{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}",
+                f"{_fala_aeon(random.choice(AEON_MOTIVACAO))}\n{_fala_celestia(random.choice(CELESTIA_MOTIVACAO))}",
+            ])
+            return await message.channel.send(_resp)
 
 
 # ══════════════════════════════════════════════

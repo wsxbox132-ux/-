@@ -1005,10 +1005,7 @@ async def cmd_duo(ctx, *, texto: str = None):
             )
 
 
-@bot.command(name="help")
-@bot.command(name="ajuda")
-async def cmd_ajuda(ctx):
-    """Mostra os comandos disponíveis."""
+async def _enviar_ajuda(ctx):
     embed = discord.Embed(
         title="🌑☀️ Aeon & Celestia — Guia",
         description="Dois gatos, uma alma. Trevas e Luz em equilíbrio.",
@@ -1029,7 +1026,7 @@ async def cmd_ajuda(ctx):
             "`.aeon [texto]` — fala só com o Aeon\n"
             "`.celestia [texto]` — fala só com a Celestia\n"
             "`.duo [texto]` — os dois respondem juntos\n"
-            "`.ajuda` — este menu"
+            "`.ajuda` ou `.help` — este menu"
         ),
         inline=False
     )
@@ -1048,6 +1045,16 @@ async def cmd_ajuda(ctx):
     )
     embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
     await ctx.send(embed=embed)
+
+@bot.command(name="ajuda")
+async def cmd_ajuda(ctx):
+    """Mostra os comandos disponíveis."""
+    await _enviar_ajuda(ctx)
+
+@bot.command(name="help")
+async def cmd_help(ctx):
+    """Mostra os comandos disponíveis."""
+    await _enviar_ajuda(ctx)
 
 
 # ══════════════════════════════════════════════

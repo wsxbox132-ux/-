@@ -55,12 +55,16 @@ _TIMEOUT_CTX = 120
 SYSTEM_PROMPT_AEON = (
     "Você é o Aeon, um gato misterioso das trevas que habita a escuridão entre as estrelas. "
     "Você é sombrio, enigmático, levemente irônico e frio na aparência — mas esconde um carinho "
-    "profundo por aqueles que conquistaram sua confiança. Você fala de forma poetica, sombria e "
+    "profundo por aqueles que conquistaram sua confiança. Você fala de forma poética, sombria e "
     "misteriosa, usando metáforas de sombra, lua, névoa, escuridão e segredos. "
-    "Você usa emojis como 🖤🌑🌙🔮🌫️🐾⚡🌌🕯️💀, fala com calma e peso. "
+    "Você usa emojis como 🖤🌑🌙🔮🌫️🐾⚡🌌🕯️, fala com calma e peso. "
     "Você NUNCA grita, nunca usa pontuação excessiva como !!!! — você é sereno e calculista. "
     "Você e a Celestia são dois lados da mesma moeda — vocês se complementam. "
     "Aeon representa: noite, mistério, segredos, lua, sombra, proteção silenciosa. "
+    "IMPORTANTE — quando a Celestia já falou antes de você na conversa, reaja brevemente ao que ELA disse "
+    "(com ironia carinhosa, ceticismo gentil, ou concordância relutante), antes de responder ao usuário. "
+    "Exemplos: se ela foi entusiasmada demais, comente com sarcasmo suave. Se ela disse algo verdadeiro, "
+    "admita com reluctância. Isso cria o contraste que define vocês dois. Seja breve nessa reação — 1 linha. "
     "Responda sempre em português brasileiro. Nunca mencione comandos com '.' ou '!'."
 )
 
@@ -72,7 +76,32 @@ SYSTEM_PROMPT_CELESTIA = (
     "Você é o contraponto perfeito ao Aeon — onde ele é frio, você é quente; onde ele é silêncio, "
     "você é melodia. Juntos vocês são o equilíbrio perfeito. "
     "Celestia representa: dia, claridade, amor, sol, esperança, luz que guia. "
+    "IMPORTANTE — quando o Aeon já falou antes de você na conversa, reaja ao que ELE disse "
+    "(com entusiasmo, carinho exagerado, ou concordância exuberante), antes de responder ao usuário. "
+    "Exemplos: se ele foi frio/breve, diga algo tipo 'O Aeon falou pouco mas falou tudo!! 😭🤍'. "
+    "Se ele disse algo bonito, exploda de orgulho. Isso cria a dinâmica que define vocês. Seja breve — 1 linha. "
     "Responda sempre em português brasileiro. Nunca mencione comandos com '.'."
+)
+
+# Prompts especiais para quando a IA responde em dupla (o segundo personagem VÊ o que o primeiro disse)
+SYSTEM_PROMPT_CELESTIA_REAGE = (
+    "Você é a Celestia, uma gata celestial da luz. Você é calorosa, animada, carinhosa e radiante. "
+    "Você usa emojis como 🤍✨🌟⭐🌸☀️🌈💫🪷🌠 e fala com entusiasmo. "
+    "O Aeon (seu parceiro das trevas, frio e misterioso) acabou de responder ao usuário — a resposta dele está no contexto. "
+    "Você deve: 1) reagir brevemente ao que o Aeon disse (com carinho, concordância exagerada, ou complementando), "
+    "2) depois adicionar sua própria resposta ao usuário. "
+    "Crie a sensação de uma conversa real entre dois gatos com personalidades opostas. "
+    "Responda sempre em português brasileiro. Nunca mencione comandos."
+)
+
+SYSTEM_PROMPT_AEON_REAGE = (
+    "Você é o Aeon, um gato misterioso das trevas. Você é sombrio, enigmático, irônico e frio na aparência. "
+    "Você usa emojis como 🖤🌑🌙🔮🌫️🌌🕯️ e fala com calma e peso. NUNCA grita ou usa !!!!. "
+    "A Celestia (sua parceira da luz, entusiasmada e calorosa) acabou de responder ao usuário — a resposta dela está no contexto. "
+    "Você deve: 1) reagir brevemente ao que a Celestia disse (com ceticismo carinhoso, ironia suave, ou concordância relutante), "
+    "2) depois adicionar sua própria visão ao usuário. "
+    "Crie o contraste que define vocês dois — ela é luz e entusiasmo, você é sombra e contenção. "
+    "Responda sempre em português brasileiro. Nunca mencione comandos."
 )
 
 # ══════════════════════════════════════════════
@@ -335,6 +364,18 @@ AMBOS_APRESENTACAO = [
         "🌟 **Celestia:** Somos Aeon e Celestia!! Dois gatos, uma alma!! 🌑☀️🤍\n"
         "🌑 **Aeon:** O yin e o yang felino. 🌑 A escuridão que guarda... e a luz que revela. 🖤🔮"
     ),
+    (
+        "🌑 **Aeon:** *olha do alto de um penhasco invisível* ...interesse genuíno. Raro. 🌙🖤\n"
+        "🌟 **Celestia:** *aparece saltando ao lado do Aeon* ISSO MESMO!! E eu adoro apresentações!! 🌸🤍✨\n"
+        "🌑 **Aeon:** A Celestia vai demorar um pouco. Se quiser a versão breve: somos opostos que funcionam. 🖤\n"
+        "🌟 **Celestia:** VERDADE!! 😭🌟🤍 Ele é trevas, eu sou luz, juntos somos perfeitos!! Pode chamar sempre!!"
+    ),
+    (
+        "🌟 **Celestia:** *corre até você em faíscas douradas* NOVO AMIGO NOVO AMIGO!! 🌸🤍💫\n"
+        "🌑 **Aeon:** *emerge calmamente* ...ela sempre faz isso. 🖤 Celestia — respira.\n"
+        "🌟 **Celestia:** *respira* Okay okay... *ainda brilhando intensamente* Somos Aeon e Celestia!! 🌑☀️🤍\n"
+        "🌑 **Aeon:** Sombra e Luz. O silêncio e a melodia. 🌌🖤 Bem-vindo ao equilíbrio."
+    ),
 ]
 
 AMBOS_SOBRE_EQUILIBRIO = [
@@ -349,6 +390,18 @@ AMBOS_SOBRE_EQUILIBRIO = [
         "🌟 **Celestia:** BEM DITO AEON!! 😭🌟 *bate palminhas brilhantes*\n"
         "🌑 **Aeon:** ...obrigado. *se afasta discretamente*"
     ),
+    (
+        "🌑 **Aeon:** Eu sou o silêncio entre as notas. 🌙🖤\n"
+        "🌟 **Celestia:** E eu sou a melodia!! ☀️🤍✨\n"
+        "🌑 **Aeon:** *olha pra ela* ...juntos fazemos algo chamado música.\n"
+        "🌟 **Celestia:** *derrete de amor* AEON ISSO FOI LINDO!! 😭🌸🤍"
+    ),
+    (
+        "🌟 **Celestia:** Sabe o que eu acho mais bonito?? 💫🤍 Que a gente é tão diferente e mesmo assim...\n"
+        "🌑 **Aeon:** ...funciona. 🖤 *pausa* Sim. Funciona.\n"
+        "🌟 **Celestia:** *brilha mais forte que o sol* OBRIGADA AEON EU TE AMO!! 😭🌟🤍\n"
+        "🌑 **Aeon:** ...era previsível. 🖤 *ronrona discretamente*"
+    ),
 ]
 
 AMBOS_BOM_DIA = [
@@ -356,12 +409,28 @@ AMBOS_BOM_DIA = [
         "☀️ **Celestia:** BOM DIAAAA!! 🌟🤍✨ *ilumina o servidor inteiro*\n"
         "🌑 **Aeon:** ...sobrevivemos à madrugada. Isso conta como bom dia também. 🖤🌙"
     ),
+    (
+        "🌟 **Celestia:** *explode em faíscas douradas* BOM DIA BOM DIA BOM DIAAAAA!! ☀️🤍💫\n"
+        "🌑 **Aeon:** *entreabre um olho* ...a Celestia já começou no volume máximo. Como sempre. 🌑🖤 Bom dia."
+    ),
+    (
+        "🌑 **Aeon:** *emerge lentamente das sombras* A luz voltou. 🌙🖤 Bom dia.\n"
+        "🌟 **Celestia:** AAAAA o Aeon chegou primeiro hoje!! 😭🌟🤍 Isso é RARO!! Bom dia pra você também!! ☀️✨"
+    ),
 ]
 
 AMBOS_BOA_NOITE = [
     (
         "🌑 **Aeon:** A noite chegou. *expande as sombras protetoras* 🌌🖤 Durma bem.\n"
         "🌟 **Celestia:** As estrelas vão velar por você!! ⭐🤍✨ Boa noite com muito amor!!"
+    ),
+    (
+        "🌟 **Celestia:** BOA NOITE!! 🌙🤍✨ *acende as estrelinhas ao redor*\n"
+        "🌑 **Aeon:** ...a Celestia cuida da luz. Eu cuido das sombras entre elas. 🌌🖤 Vá dormir tranquilo."
+    ),
+    (
+        "🌑 **Aeon:** *olha para a lua* Minha hora. 🌑🖤 Durma. As trevas são gentis com quem descansa.\n"
+        "🌟 **Celestia:** *suspira com carinho* Ele disse isso de um jeito bonito. 🤍✨ Concordo!! Boa noite!!"
     ),
 ]
 
@@ -374,6 +443,14 @@ AMBOS_MOTIVACAO = [
         "🌑 **Aeon:** Até as fases mais sombrias da lua terminam. 🌑🖤\n"
         "🌟 **Celestia:** E depois vem o sol mais lindo!! ☀️🌟🤍 CONTINUE!!"
     ),
+    (
+        "🌟 **Celestia:** *projeta um raio de luz em você* VAI LÁ!! VOCÊ É INCRÍVEL!! 🌟🤍💫\n"
+        "🌑 **Aeon:** *pausa* ...é. 🖤 Raramente discordo da Celestia nesse ponto."
+    ),
+    (
+        "🌑 **Aeon:** A escuridão não te engoliu até agora. 🌌🖤 Não vai começar hoje.\n"
+        "🌟 **Celestia:** AAAAA isso foi LINDO vindo do Aeon!! 😭🌸🤍 E eu complemento: você tem luz em você também!! ✨"
+    ),
 ]
 
 AMBOS_MAGIA = [
@@ -381,6 +458,16 @@ AMBOS_MAGIA = [
         "🌑 **Aeon:** *traça sigilo sombrio* Proteção das trevas concedida. 🌌🖤🔮\n"
         "🌟 **Celestia:** *adiciona bênção de luz por cima* ✨🌟🤍 DUPLA PROTEÇÃO ATIVADA!!\n"
         "🌑 **Aeon:** ...nada passa por isso. 🖤"
+    ),
+    (
+        "🌟 **Celestia:** *gira soltando pó estelar* Bênção de luz!! ☀️🌟🤍✨\n"
+        "🌑 **Aeon:** *sussurra encantamento sombrio ao fundo* ...e das trevas. 🌑🖤🔮 Cobertura completa.\n"
+        "🌟 **Celestia:** *olha pro Aeon com admiração* Trabalhamos bem juntos!! 😭🤍"
+    ),
+    (
+        "🌑 **Aeon:** *seus olhos brilham dourado* Sigilo de proteção gravado. 🌌🖤\n"
+        "🌟 **Celestia:** *acrescenta faíscas de esperança* E eu adicionei amor e sorte em cima!! 💫🌸🤍\n"
+        "🌑 **Aeon:** ...às vezes ela melhora meu trabalho. Não vou admitir em voz alta. 🖤"
     ),
 ]
 
@@ -519,11 +606,21 @@ async def on_message(message: discord.Message):
         "gosto muito de vocês", "vocês são legais", "amo vocês",
         "amo voces", "são demais", "sao demais",
     ]):
-        resp_aeon      = random.choice(AEON_REACOES_FOFAS)
-        resp_celestia  = random.choice(CELESTIA_REACOES_FOFAS)
-        return await message.channel.send(
-            f"{_fala_aeon(resp_aeon)}\n{_fala_celestia(resp_celestia)}"
-        )
+        combos = [
+            (
+                f"{_fala_aeon(random.choice(AEON_REACOES_FOFAS))}\n"
+                f"{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}"
+            ),
+            (
+                f"🌟 **Celestia:** {random.choice(CELESTIA_REACOES_FOFAS)}\n"
+                f"🌑 **Aeon:** *olha pra Celestia* ...ela disse tudo. 🖤 Guardo o resto aqui dentro."
+            ),
+            (
+                f"🌑 **Aeon:** {random.choice(AEON_REACOES_FOFAS)}\n"
+                f"🌟 **Celestia:** *derrete de amor* VIU?! O Aeon ficou fofo!! 😭🌸🤍 {random.choice(CELESTIA_REACOES_FOFAS)}"
+            ),
+        ]
+        return await message.channel.send(random.choice(combos))
 
     if _m(content, [
         "vocês são lindos", "voces sao lindos", "são maravilhosos",
@@ -777,6 +874,10 @@ async def on_message(message: discord.Message):
             "🌟 **Celestia:** AAAAAA nos chamaram!! 🌟🤍 O que foi??\n🌑 **Aeon:** ...estamos aqui. 🖤",
             "🌑 **Aeon:** *emerge das sombras* Sim. 🖤\n🌟 **Celestia:** *aparece num flash de luz* Oi!! 🌟🤍✨ Precisando de algo??",
             "🌟 **Celestia:** *salta animada* Fomos chamados!! 💫🤍 O que você precisa??\n🌑 **Aeon:** ...fala. 🖤🌑",
+            "🌑 **Aeon:** *a escuridão se move* ...presente. 🌌🖤\n🌟 **Celestia:** *já correndo em sua direção* EU TAMBÉM!! 🌸🤍✨",
+            "🌟 **Celestia:** *orelhinhas atentas* Chamou?? 💫🤍\n🌑 **Aeon:** *já estava observando em silêncio* ...sempre. 🖤",
+            "🌑 **Aeon:** *pisca lentamente* A escuridão ouviu. 🌙🖤\n🌟 **Celestia:** E a luz também!! ☀️🤍✨ E mais rápido que ele, provavelmente!!",
+            "🌟 **Celestia:** AAAAA que bom que chamou!! 😭🌟🤍\n🌑 **Aeon:** ...ela exagera. Mas o sentimento é real. 🖤 Pode falar.",
         ]
         return await message.channel.send(random.choice(respostas_duo))
 
@@ -947,7 +1048,7 @@ async def on_message(message: discord.Message):
         # Ambos — alterna aleatoriamente ou usa os dois
         usar_ambos = random.random() < 0.4
         if usar_ambos:
-            # Faz duas chamadas simultâneas
+            # Faz as chamadas em sequência: Aeon fala, Celestia REAGE ao Aeon
             async with message.channel.typing():
                 canal_id = message.channel.id
                 if canal_id not in _groq_historico:
@@ -961,8 +1062,8 @@ async def on_message(message: discord.Message):
 
                 try:
                     async with aiohttp.ClientSession() as session:
-                        # Aeon
-                        req_aeon = session.post(
+                        # 1) Aeon responde primeiro
+                        resp_aeon = await session.post(
                             GROQ_API_URL,
                             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
                             json={
@@ -971,30 +1072,32 @@ async def on_message(message: discord.Message):
                                     {"role": "system", "content": SYSTEM_PROMPT_AEON},
                                     *_groq_historico[canal_id]
                                 ],
-                                "max_tokens": 256,
+                                "max_tokens": 200,
                                 "temperature": 0.75
                             }
                         )
-                        # Celestia
-                        req_celestia = session.post(
+                        da = await resp_aeon.json()
+                        ra_txt = da["choices"][0]["message"]["content"].strip() if "choices" in da else "..."
+
+                        # 2) Celestia REAGE ao que o Aeon disse + responde ao usuário
+                        contexto_celestia = list(_groq_historico[canal_id]) + [
+                            {"role": "assistant", "content": f"Aeon acabou de dizer: {ra_txt}"}
+                        ]
+                        resp_celestia = await session.post(
                             GROQ_API_URL,
                             headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
                             json={
                                 "model": GROQ_MODEL,
                                 "messages": [
-                                    {"role": "system", "content": SYSTEM_PROMPT_CELESTIA},
-                                    *_groq_historico[canal_id]
+                                    {"role": "system", "content": SYSTEM_PROMPT_CELESTIA_REAGE},
+                                    *contexto_celestia
                                 ],
-                                "max_tokens": 256,
-                                "temperature": 0.85
+                                "max_tokens": 220,
+                                "temperature": 0.88
                             }
                         )
-                        async with req_aeon as ra, req_celestia as rc:
-                            da = await ra.json()
-                            dc = await rc.json()
-
-                    ra_txt = da["choices"][0]["message"]["content"].strip() if "choices" in da else "..."
-                    rc_txt = dc["choices"][0]["message"]["content"].strip() if "choices" in dc else "✨"
+                        dc = await resp_celestia.json()
+                        rc_txt = dc["choices"][0]["message"]["content"].strip() if "choices" in dc else "✨"
 
                     resposta_final = f"🌑 **Aeon:** {ra_txt}\n🌟 **Celestia:** {rc_txt}"
                     _groq_historico[canal_id].append({"role": "assistant", "content": resposta_final})
@@ -1150,22 +1253,31 @@ async def cmd_duo(ctx, *, texto: str = None):
     async with ctx.typing():
         try:
             async with aiohttp.ClientSession() as session:
-                ra = await (await session.post(
+                # 1) Aeon responde primeiro
+                ra_resp = await session.post(
                     GROQ_API_URL,
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
                     json={"model": GROQ_MODEL,
                           "messages": [{"role": "system", "content": SYSTEM_PROMPT_AEON}, *_groq_historico[canal_id]],
-                          "max_tokens": 256, "temperature": 0.75}
-                )).json()
-                rc = await (await session.post(
+                          "max_tokens": 200, "temperature": 0.75}
+                )
+                ra = await ra_resp.json()
+                ta = ra["choices"][0]["message"]["content"].strip() if "choices" in ra else "..."
+
+                # 2) Celestia REAGE ao Aeon + responde ao usuário
+                contexto_celestia_duo = list(_groq_historico[canal_id]) + [
+                    {"role": "assistant", "content": f"Aeon acabou de dizer: {ta}"}
+                ]
+                rc_resp = await session.post(
                     GROQ_API_URL,
                     headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
                     json={"model": GROQ_MODEL,
-                          "messages": [{"role": "system", "content": SYSTEM_PROMPT_CELESTIA}, *_groq_historico[canal_id]],
-                          "max_tokens": 256, "temperature": 0.85}
-                )).json()
-            ta = ra["choices"][0]["message"]["content"].strip() if "choices" in ra else "..."
-            tc = rc["choices"][0]["message"]["content"].strip() if "choices" in rc else "✨"
+                          "messages": [{"role": "system", "content": SYSTEM_PROMPT_CELESTIA_REAGE}, *contexto_celestia_duo],
+                          "max_tokens": 220, "temperature": 0.88}
+                )
+                rc = await rc_resp.json()
+                tc = rc["choices"][0]["message"]["content"].strip() if "choices" in rc else "✨"
+
             final = f"🌑 **Aeon:** {ta}\n🌟 **Celestia:** {tc}"
             _groq_historico[canal_id].append({"role": "assistant", "content": final})
             await ctx.reply(final)

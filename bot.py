@@ -667,12 +667,12 @@ async def _chamar_groq_traducao(texto: str, direcao: str) -> str:
 
 def _tem_cargo_translate(member) -> bool:
     """Verifica se o membro tem o cargo Translate."""
-    if member is None:
+    if not isinstance(member, discord.Member):
         return False
     return any(r.id == TRANSLATE_ROLE_ID for r in member.roles)
 
 def _detectar_ingles(texto: str) -> bool:
-    """Heuristica simples: maioria das palavras parecem ser ingles."""
+    """Detecta ingles por vocabulario — usa lista (com repeticao) para pegar frases curtas."""
     palavras_en = {
         "the","is","are","was","were","be","been","being","have","has","had",
         "do","does","did","will","would","could","should","may","might","shall",
@@ -683,14 +683,44 @@ def _detectar_ingles(texto: str) -> bool:
         "get","got","go","going","come","see","know","think","want","need",
         "good","bad","great","nice","ok","okay","yeah","yes","no","hi","hey",
         "hello","lol","haha","thanks","thank","please","sorry","help","time",
-        "some","all","more","can","make","here","there","now",
+        "some","all","more","can","make","here","there","now","everything",
+        "something","nothing","everyone","someone","anyone","nobody","anybody",
+        "really","very","much","little","few","many","most","other","another",
+        "because","then","than","when","while","after","before","since","until",
+        "right","wrong","sure","well","still","already","always","never","often",
+        "back","way","thing","things","day","time","year","man","woman","people",
+        "too","also","even","only","same","new","old","big","small","long","high",
+        "own","any","both","each","every","either","neither","enough","such",
+        "feel","felt","tell","told","let","put","keep","start","end","turn",
+        "show","give","gave","take","took","find","found","call","ask","work",
+        "seem","look","play","run","move","live","believe","hold","bring","happen",
+        "remember","follow","change","lead","stand","lose","pay","meet","include",
+        "continue","set","learn","miss","eat","watch","everything","anything",
+        "with","without","around","between","through","during","along","across",
+        "behind","below","above","off","over","under","again","further","once",
+        "hey","hi","hello","bye","goodbye","please","thank","thanks","sorry",
+        "okay","ok","yeah","yep","nope","nah","yup","ugh","omg","wtf","lol",
+        "haha","hehe","lmao","bruh","bro","dude","man","babe","love","miss",
+        "today","tomorrow","yesterday","morning","evening","night","week","month",
+        "speaking","talking","looking","thinking","going","doing","coming","saying",
+        "getting","making","taking","giving","putting","keeping","showing","working",
+        "every","everything","nothing","something","anything","someone","anyone",
     }
-    words = set(texto.lower().split())
-    if len(words) == 0:
+    # usa lista (nao set) para contar multiplas ocorrencias
+    words = texto.lower().split()
+    if not words:
         return False
-    matches = words & palavras_en
-    # Precisa de pelo menos 2 palavras em ingles OU mais de 40% das palavras
-    return len(matches) >= 2 or (len(matches) / len(words) >= 0.4 and len(words) >= 3)
+    # remove pontuacao basica de cada palavra
+    import re
+    words_clean = [re.sub(r"[^a-z]", "", w) for w in words]
+    words_clean = [w for w in words_clean if w]
+    if not words_clean:
+        return False
+    matches = sum(1 for w in words_clean if w in palavras_en)
+    total = len(words_clean)
+    ratio = matches / total
+    # Aceita se: 1 palavra em ingles numa msg curta, ou 2+ palavras, ou 35%+ de ratio
+    return matches >= 1 and (total <= 3 or matches >= 2 or ratio >= 0.35)
 
 # ══════════════════════════════════════════════
 # EVENTOS
@@ -839,7 +869,7 @@ async def on_message(message: discord.Message):
     # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
     # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
     # ════════════════════════════════════════════════════════════════
-    autor_tem_translate = _tem_cargo_translate(message.author if hasattr(message.author, "roles") else None)
+    autor_tem_translate = _tem_cargo_translate(message.author)
 
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
     if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:
@@ -862,11 +892,13 @@ async def on_message(message: discord.Message):
             )
             embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
             msg_trad = await message.channel.send(embed=embed)
-            await asyncio.sleep(120)
-            try:
-                await msg_trad.delete()
-            except Exception:
-                pass
+            async def _deletar_depois(m):
+                await asyncio.sleep(120)
+                try:
+                    await m.delete()
+                except Exception:
+                    pass
+            asyncio.create_task(_deletar_depois(msg_trad))
         return
 
     # Caso 2 — autor NÃO tem translate, mas está respondendo a alguém que tem
@@ -880,7 +912,7 @@ async def on_message(message: discord.Message):
         ref_autor = ref_msg.author
         if (
             not ref_autor.bot
-            and _tem_cargo_translate(ref_autor if hasattr(ref_autor, "roles") else None)
+            and _tem_cargo_translate(ref_autor)
             and not _detectar_ingles(message.content)
             and len(message.content.strip()) >= 5
         ):
@@ -908,11 +940,13 @@ async def on_message(message: discord.Message):
                 )
                 embed.set_footer(text="🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation")
                 msg_trad = await message.channel.send(embed=embed)
-                await asyncio.sleep(120)
-                try:
-                    await msg_trad.delete()
-                except Exception:
-                    pass
+                async def _deletar_depois_pt(m):
+                    await asyncio.sleep(120)
+                    try:
+                        await m.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(_deletar_depois_pt(msg_trad))
             return
 
     if not fala_bot:

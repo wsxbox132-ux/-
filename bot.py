@@ -686,9 +686,30 @@ async def on_message(message: discord.Message):
     mencao_pura = mention_ok and len(_sem_mencao) == 0
     tem_nome    = "aeon" in content or "celestia" in content
 
-    # Só responde se: @ puro (apresentação formal) OU texto tem "aeon"/"celestia"
-    # @ com texto mas sem os nomes → ignora completamente
-    fala_bot = mencao_pura or tem_nome
+    # Frases que ativam o bot mesmo sem mencionar "aeon" ou "celestia"
+    _GATILHOS_SEM_NOME = [
+        # saudações
+        "bom dia", "boa tarde", "boa noite", "boa madrugada",
+        "oi gatos", "oi gatinhos", "olá gatos", "ola gatos",
+        "ei gatos", "ei gatinhos", "hey gatos",
+        # check-in
+        "como vocês estão", "como voces estao", "como vocês tão", "como voces tao",
+        "tudo bem com vocês", "tudo bem com voces",
+        "tudo bom com vocês", "tudo bom com voces",
+        "vocês estão bem", "voces estao bem", "vocês tão bem", "voces tao bem",
+        "como tão os gatos", "como tão os gatinhos",
+        "vc esta bem", "vc está bem", "voces estao", "vocês estão",
+        "estão bem", "estao bem",
+        # chegadas / saídas genéricas dirigidas aos gatos
+        "voltei gatos", "voltei gatinhos", "tchau gatos", "tchau gatinhos",
+        "até gatos", "ate gatos", "até gatinhos", "ate gatinhos",
+        "obrigado gatos", "obrigada gatos", "valeu gatos",
+        "obrigado gatinhos", "obrigada gatinhos",
+    ]
+    tem_gatilho = any(g in content for g in _GATILHOS_SEM_NOME)
+
+    # Só responde se: @ puro OU texto tem "aeon"/"celestia" OU tem gatilho sem nome
+    fala_bot = mencao_pura or tem_nome or tem_gatilho
 
     if not fala_bot:
         return

@@ -1021,11 +1021,9 @@ async def on_message(message: discord.Message):
 
     autor_tem_translate = _tem_cargo_translate(_member_completo)
 
-    # DEBUG — apague depois de confirmar que funciona
-    print(f"[TRANSLATE] autor={message.author} | guild={_guild} | member={_member_completo} | roles={getattr(_member_completo,'roles',[])} | tem_translate={autor_tem_translate} | detectou_en={_detectar_ingles(message.content)}")
 
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
-    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:
+    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
         traducao = await _chamar_traducao(message.content, "en_to_pt")
         if traducao:
             embed = discord.Embed(color=0x2b2b3b)
@@ -1077,7 +1075,7 @@ async def on_message(message: discord.Message):
             not ref_autor.bot
             and _tem_cargo_translate(ref_autor)
             and not _detectar_ingles(message.content)
-            and len(message.content.strip()) >= 5
+            and len(message.content.strip()) >= 2
         ):
             traducao = await _chamar_traducao(message.content, "pt_to_en")
             if traducao:

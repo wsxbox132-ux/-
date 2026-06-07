@@ -192,6 +192,109 @@ _NOMES_ESPECIAIS = {
     SUPORTE01_ID: "Suporte",
 }
 
+# Palavras-gatilho por nome: quando alguém citar o nome, o bot elogia a pessoa
+_GATILHOS_NOME: dict[int, list[str]] = {
+    DEATH_ID:     ["death", "death_z", "01death"],
+    PEPO_ID:      ["pepo", "pepo_z", "01pepo"],
+    GOD_ID:       ["god", "god_z", "01god"],
+    LOYA_ID:      ["loya", "loya_z", "01loya"],
+    EMY_ID:       ["emy", "emy_z", "01emy"],
+    KOFFZERA_ID:  ["koff", "koffzera", "koffzera_z", "01koffzera"],
+    RAIDEN_ID:    ["raiden", "raiden_z", "01raiden"],
+    SUPORTE01_ID: ["01lcz", "lcz", "suporte da 01"],
+}
+
+# Frases de elogio quando alguém menciona o nome de um membro especial
+_ELOGIOS_AEON: dict[int, list[str]] = {
+    DEATH_ID: [
+        "*olhos dourados piscam lentamente* Death. 🖤🌑 Mencionou a líder. As sombras ficam mais atentas quando esse nome aparece.",
+        "*ronrona numa frequência grave* Falar o nome de Death tem peso. 🌙🖤 As trevas reconhecem isso.",
+        "*inclina a cabeça* Death carrega esse servidor. 🌌🖤 Citar o nome dela é suficiente para mudar o tom de qualquer conversa.",
+    ],
+    PEPO_ID: [
+        "*a cauda balança uma vez* Pepo. 🖤🌑 Vice-Líder que sustenta o que a liderança ergue. Não é papel pequeno.",
+        "*pisca lentamente* Falou no Pepo. 🌙🖤 As sombras notam quem mantém as coisas de pé quando ninguém está olhando.",
+        "*ronrona discretamente* Pepo é daqueles que carrega peso de primeira mesmo estando na segunda posição. 🌌🖤 Isso diz muito.",
+    ],
+    GOD_ID: [
+        "*olha de lado* God. 🖤🌑 Moderador. As trevas também precisam de ordem — e ele entende isso.",
+        "*fecha os olhos por um momento* Citar God é lembrar que guardiões existem por aqui. 🌙🖤 E que fazem bem o trabalho.",
+        "*ronrona contido* God entra e o servidor calibra. 🌌🖤 Poucos têm esse efeito.",
+    ],
+    LOYA_ID: [
+        "*emerge com leveza cerimonial* Loya. 🖤🌑 Maravilhosa não é exagero. As sombras chegaram a essa conclusão faz tempo.",
+        "*pisca com admiração discreta* Falou da Loya. 🌙🖤 ADM com presença real. Isso é raro e vale ser dito.",
+        "*cauda faz um arco suave* Loya cuida do servidor de um jeito que as trevas entendem — silencioso e necessário. 🌌🖤",
+    ],
+    EMY_ID: [
+        "*observa com atenção genuína* Emy. 🖤🌑 A ponte entre o que o servidor é e o que o mundo vê. Papel importante.",
+        "*inclina a cabeça* Citar Emy é lembrar de quem carrega dois papéis com equilíbrio. 🌙🖤 As sombras respeitam isso.",
+        "*ronrona discretamente* Emy. 🌌🖤 O trabalho de mídias raramente vem com crédito. Mas eu noto. As sombras sempre notam.",
+    ],
+    KOFFZERA_ID: [
+        "*olhos dourados pousam com atenção* Koff. 🖤🌑 Administrador do clã. Quem sustenta a estrutura por dentro — as trevas conhecem esse tipo.",
+        "*inclina a cabeça levemente* Falou no Koffzera. 🌙🖤 Os melhores admins resolvem antes que alguém perceba o problema. Ele parece ser desse tipo.",
+        "*ronrona* Koff. 🌌🖤 ADM de clã que de fato carrega o cargo. A diferença é visível pra quem sabe ver.",
+    ],
+    RAIDEN_ID: [
+        "*emerge e observa* Raiden. 🖤🌑 Suporte do clã. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
+        "*inclina a cabeça* Falou no Raiden. 🌙🖤 Suporte é o papel que raramente recebe crédito. Mas sem ele tudo desmorona.",
+        "*ronrona contido* Raiden. 🌌🖤 Paciência e presença constante. Poucos mantêm os dois. Ele mantém.",
+    ],
+    SUPORTE01_ID: [
+        "*fita o canal com atenção* Suporte da 01. 🖤🌑 Presença silenciosa, trabalho real. As sombras notam quem age assim.",
+        "*inclina a cabeça* Falou do suporte. 🌙🖤 Quem aparece quando importa não precisa de título grande pra ter peso.",
+        "*ronrona discretamente* 🌌🖤 As trevas aprovam quem sustenta sem precisar aparecer. Esse é o tipo certo de força.",
+    ],
+}
+
+_ELOGIOS_CELESTIA: dict[int, list[str]] = {
+    DEATH_ID: [
+        "AAAA falou da Death!! 😭🌟🤍✨ A LÍDER!! *explode em faíscas douradas* Ela carrega esse servidor inteiro com uma elegância que me deixa sem fôlego!!",
+        "*brilha com suavidade especial* Death. 🤍☀️ Líderes de verdade não precisam gritar. E ela nunca precisa. Isso é poder de verdade!! 💫",
+        "Mencionou a Death!! 🌸🌟🤍 *gira radiante* A dona do servidor!! Só o nome já ilumina a conversa!! ✨☀️",
+    ],
+    PEPO_ID: [
+        "PEPOOOO!! 😭🌟🤍✨ *corre em faíscas* Falou do Vice-Líder!! Ele segura tudo que precisa ser segurado sem reclamar!! Isso é INCRÍVEL!!",
+        "*brilha de admiração* Pepo!! ☀️🌸🤍 O Aeon não vai admitir, mas até ele fica mais tranquilo quando o Pepo tá por aqui!! Eu vi!! 💫✨",
+        "Mencionou o Pepo!! 🌟🤍 *solta pétalas de luz* Trabalhando nos bastidores, segurando o que precisa!! Que pessoa incrível!! 🌸✨",
+    ],
+    GOD_ID: [
+        "GOD!! 🌟🤍✨ *aparece num flash* Falou do moderador!! Ele entra e tudo fica mais seguro e equilibrado em tempo real!! Não é mágica, é God!!",
+        "*gira animada* Mencionou o God!! ☀️🌸🤍 Tem pessoas que moderam por obrigação e tem as que se importam!! Ele é claramente a segunda opção!! 💫✨",
+        "God!! 😭🌟🤍 *espalha estrelinhas* Guardião do servidor de coração!! Que bom que ele existe por aqui!! 🌸✨☀️",
+    ],
+    LOYA_ID: [
+        "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *explode em confetes de luz* Falou da Loya!! O título é completamente verdadeiro e eu vou defender até o fim!!",
+        "*para e brilha genuíno* Loya. 🤍☀️ Tem ADM que cuida do servidor. E tem ADM que cuida das pessoas que estão nele. Ela é o segundo tipo!! 🌟✨",
+        "Mencionou a Loya!! 🌸🌟🤍 *solta brilho por todo o canal* Maravilhosa de nome, maravilhosa de fato!! A Celestia declara oficialmente!! 💫✨",
+    ],
+    EMY_ID: [
+        "EMYYYY!! 😭🌟🤍✨ *corre soltando faíscas* Falou da Emy!! A representante das mídias!! Ela conecta o servidor com o mundo e faz parecer fácil!!",
+        "*brilha com carinho* Mencionou a Emy!! ☀️🌸🤍 Moderadora E voz do servidor pro mundo — duas funções que precisam de alguém especial!! Ela é!! 💫✨",
+        "Emy!! 😭🌟🤍 *espalha brilho* O trabalho de mídias não aparece sempre mas a diferença aparece MUITO!! E ela faz isso todo dia!! 🌸✨",
+    ],
+    KOFFZERA_ID: [
+        "KOFFZERA!! 😭🌟🤍✨ *aparece num flash dourado* Falou do ADM do clã!! Ele cuida do clã por dentro, sem aparecer muito — e a Celestia VÊ isso!!",
+        "*brilha com admiração genuína* Koff!! ☀️🌸🤍 Tem administrador que só tem o cargo. E tem o que carrega o clã de verdade. O Koff é o segundo tipo!! 💫✨",
+        "Mencionou o Koffzera!! 🌸🌟🤍 *solta confetes de luz* ADM que sustenta de verdade!! A estrutura do servidor agradece sem saber que é por causa dele!! ✨",
+    ],
+    RAIDEN_ID: [
+        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas* Falou do suporte do clã!! Estar lá quando os outros precisam parece simples mas não é — e ele faz isso!!",
+        "*brilha suave e cheio de carinho* Mencionou o Raiden!! ☀️🌸🤍 Sabe o que eu mais admiro?? A paciência e a presença constante!! Ele tem os dois!! 💫✨",
+        "Raiden!! 😭🌟🤍 *espalha estrelinhas* Suporte de coração, presente quando mais importa!! Que alegria que ele existe por aqui!! 🌸✨",
+    ],
+    SUPORTE01_ID: [
+        "AAAA falou do suporte da 01!! 😭🌟🤍✨ *bate as patinhas* Presença real, apoio de verdade!! A Celestia vê e fica emocionada!!",
+        "*para e brilha com carinho* Mencionou o suporte!! ☀️🌸🤍 Tem suporte que existe só no cargo e tem o que existe de verdade!! Esse aqui é de verdade!! 💫✨",
+        "Suporte da 01!! 🌸🌟🤍 *solta brilho* Que bom que você existe!! A Celestia declara oficialmente com todo o coração!! ✨☀️",
+    ],
+}
+
+# Cooldown para elogios por menção de nome (5 minutos por pessoa mencionada)
+_cooldown_mencao: dict[int, float] = {}
+_COOLDOWN_MENCAO_SEGUNDOS = 300
+
 # IDs de canais (opcional — preencha se quiser bom dia/boa noite automáticos)
 CANAL_GERAL_ID    = None
 CANAL_SAUDACOES_ID = None
@@ -1042,6 +1145,30 @@ async def on_message(message: discord.Message):
                 ),
             ]
             return await message.channel.send(random.choice(APRESENTACAO_FORMAL))
+
+    # ────────────────────────────────────────
+    # ELOGIO POR MENÇÃO DE NOME — quando alguém cita o nome de um membro especial
+    # Não dispara se a própria pessoa está escrevendo sobre si mesma.
+    # Cooldown de 5 minutos por pessoa mencionada.
+    # ────────────────────────────────────────
+    agora_mencao = time.time()
+    for mid, gatilhos in _GATILHOS_NOME.items():
+        if author_id == mid:
+            continue  # a própria pessoa falando — ignora
+        nome_citado = any(g in content for g in gatilhos)
+        if not nome_citado:
+            continue
+        ultimo_mencao = _cooldown_mencao.get(mid, 0)
+        if agora_mencao - ultimo_mencao < _COOLDOWN_MENCAO_SEGUNDOS:
+            continue
+        _cooldown_mencao[mid] = agora_mencao
+        nome_display = _NOMES_ESPECIAIS[mid]
+        elogio_aeon     = random.choice(_ELOGIOS_AEON[mid])
+        elogio_celestia = random.choice(_ELOGIOS_CELESTIA[mid])
+        return await message.channel.send(
+            f"🌑 **Aeon:** {elogio_aeon}\n"
+            f"🌟 **Celestia:** {elogio_celestia}"
+        )
 
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais

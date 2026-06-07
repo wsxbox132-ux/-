@@ -688,8 +688,7 @@ async def on_message(message: discord.Message):
 
     # Frases que ativam o bot mesmo sem mencionar "aeon" ou "celestia"
     _GATILHOS_SEM_NOME = [
-        # saudações
-        "bom dia", "boa tarde", "boa noite", "boa madrugada",
+        # saudações (bom dia/tarde/noite SÓ ativam se tiver o nome deles na msg)
         "oi gatos", "oi gatinhos", "olá gatos", "ola gatos",
         "ei gatos", "ei gatinhos", "hey gatos",
         # oi genérico e gírias de cumprimento (apenas strings seguras como substring)
@@ -1199,7 +1198,12 @@ async def on_message(message: discord.Message):
     # ────────────────────────────────────────
     # BOM DIA
     # ────────────────────────────────────────
-    if _m(content, [
+    _bom_dia_com_nome_2 = (
+        "aeon" in content or "celestia" in content
+        or "gatos" in content or "gatinhos" in content
+        or mention_ok or (message.reference is not None)
+    )
+    if _bom_dia_com_nome_2 and _m(content, [
         "bom dia aeon", "bom dia celestia", "bom dia aeon e celestia",
         "bom dia celestia e aeon", "bom dia gatos", "bom dia gatinhos", "bom dia",
     ]):
@@ -1433,7 +1437,13 @@ async def on_message(message: discord.Message):
     # ────────────────────────────────────────
     # BOM DIA (AMBOS) — versão expandida
     # ────────────────────────────────────────
-    if _m(content, [
+    _bom_dia_com_nome = (
+        "aeon" in content or "celestia" in content
+        or "gatos" in content or "gatinhos" in content
+        or mention_ok
+        or (message.reference is not None)
+    )
+    if _bom_dia_com_nome and _m(content, [
         "bom dia", "bom dia aeon", "bom dia celestia", "bom dia gatos",
         "bom dia gatinhos", "bom dia aeon e celestia", "bom dia celestia e aeon",
         "bomdia", "bom diaa", "bom diaaa",
@@ -1485,7 +1495,12 @@ async def on_message(message: discord.Message):
     # ────────────────────────────────────────
     # BOA TARDE
     # ────────────────────────────────────────
-    if _m(content, [
+    _boa_tarde_com_nome = (
+        "aeon" in content or "celestia" in content
+        or "gatos" in content or "gatinhos" in content
+        or mention_ok or (message.reference is not None)
+    )
+    if _boa_tarde_com_nome and _m(content, [
         "boa tarde", "boa tarde aeon", "boa tarde celestia", "boa tarde gatos",
         "boa tarde gatinhos", "boa tarde aeon e celestia", "boa tarde celestia e aeon",
         "boa tardee", "boa tardeee",

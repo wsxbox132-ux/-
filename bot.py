@@ -23,9 +23,7 @@ bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 # CONFIGURAÇÃO — preencha com seus valores reais
 # ══════════════════════════════════════════════
 TOKEN        = os.getenv("TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_KEY")
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL   = "llama3-8b-8192"
+
 
 # IDs dos bots (preencha com o ID real do bot depois de criar)
 BOT_ID = None  # preencha depois
@@ -44,6 +42,7 @@ LOYA_ID     = 811956773560123394   # Loya     — ADM / Loya Maravilhosa
 EMY_ID      = 796382699228758026   # Emy      — Moderadora / Representante de Mídias
 KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
 RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
+SUPORTE01_ID = 1267338784765251625  # Suporte   — Suporte da 01
 
 # ── Frases personalizadas — AEON ──────────────────────────────────────────────
 _FRASES_AEON: dict[int, list[str]] = {
@@ -102,6 +101,14 @@ _FRASES_AEON: dict[int, list[str]] = {
         "*a névoa ao redor se aquieta levemente* Raiden. 🌌🖤 Quem apoia não fica atrás — fica do lado certo. As sombras entendem a diferença.",
         "*ronrona numa frequência contida* Raiden. 🌑🖤 Ser suporte exige paciência que poucos têm. E presença constante que poucos mantêm. Você mantém.",
         "*cauda faz um arco suave e deliberado* Raiden chegou. 🖤🔮 As trevas ficam mais estáveis quando quem sabe apoiar aparece. Coincidência? Já disse que não acredito em coincidências.",
+    ],
+
+    SUPORTE01_ID: [
+        "*emerge das sombras e fixa os olhos dourados em você* Suporte da 01. 🖤🌑 Quem sustenta o servidor por baixo — as trevas conhecem bem esse tipo de presença.",
+        "*inclina a cabeça com reconhecimento* Você chegou. 🌙🖤 Suporte não é papel menor. É o que mantém tudo de pé quando ninguém está olhando.",
+        "*a névoa ao redor se organiza* 🌌🖤 As sombras notam quem aparece quando é preciso. Você é desse tipo. Isso tem peso.",
+        "*ronrona discretamente* Suporte da 01. 🌑🖤 Presença constante, trabalho silencioso. As trevas aprovam quem age assim.",
+        "*cauda balança uma vez com leveza* 🖤🔮 Não precisa de título grande para carregar peso real. As sombras já sabem o que você vale.",
     ],
 }
 
@@ -163,17 +170,26 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
         "*brilha suave e cheio de carinho* Raiden!! 🤍✨ Sabe o que eu mais admiro em quem faz suporte?? A paciência e a presença!! Você tem os dois!! MUITO!! 🌟☀️",
         "RAIDEN!! 😭🌸🤍 *ronrona com admiração* Estar lá quando os outros precisam parece simples mas não é — e você faz isso!! A Celestia vê e fica orgulhosa!! 💫🌟✨",
     ],
+
+    SUPORTE01_ID: [
+        "AAAA SUPORTE DA 01!! 😭🌟🤍✨ *aparece num flash dourado* Chegou e o servidor ficou mais seguro AGORA MESMO!! Bem-vindo!!",
+        "*gira soltando faíscas de alegria* 🌸🤍 Suporte de verdade!! Você aparece quando importa e isso é TUDO!! A Celestia vê e fica emocionada!! ☀️💫✨",
+        "AAAAA chegouuuu!! 😭🌟🤍 *espalha brilho por todo o canal* Suporte da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais!! 🌸✨",
+        "*para e brilha com carinho genuíno* 🤍✨ Tem suporte que existe só no cargo. E tem suporte que existe de verdade!! Você é o segundo tipo!! 🌟☀️",
+        "SUPORTE DA 01!! 😭🌸🤍 *ronrona de felicidade* Presença real, apoio de verdade!! A Celestia declara oficialmente: que bom que você existe!! 💫🌟✨",
+    ],
 }
 
 # Mapa de apelidos para exibição nas mensagens
 _NOMES_ESPECIAIS = {
-    DEATH_ID:    "Death",
-    PEPO_ID:     "Pepo",
-    GOD_ID:      "God",
-    LOYA_ID:     "Loya",
-    EMY_ID:      "Emy",
-    KOFFZERA_ID: "Koff",
-    RAIDEN_ID:   "Raiden",
+    DEATH_ID:     "Death",
+    PEPO_ID:      "Pepo",
+    GOD_ID:       "God",
+    LOYA_ID:      "Loya",
+    EMY_ID:       "Emy",
+    KOFFZERA_ID:  "Koff",
+    RAIDEN_ID:    "Raiden",
+    SUPORTE01_ID: "Suporte",
 }
 
 # IDs de canais (opcional — preencha se quiser bom dia/boa noite automáticos)
@@ -181,7 +197,6 @@ CANAL_GERAL_ID    = None
 CANAL_SAUDACOES_ID = None
 
 # Cooldowns
-_groq_historico   = {}
 _cooldown_custom  = {}
 _COOLDOWN_SEGUNDOS = 600
 
@@ -639,30 +654,8 @@ def _cooldown_ok(user_id: int) -> bool:
         return True
     return False
 
-async def _chamar_groq_traducao(texto: str, direcao: str) -> str:
-    """Usa Groq para traduzir. direcao: 'en_to_pt' ou 'pt_to_en'."""
-    if direcao == "en_to_pt":
-        prompt = f"Translate the following text from English to Brazilian Portuguese. Return ONLY the translation, nothing else:\n{texto}"
-    else:
-        prompt = f"Translate the following text from Brazilian Portuguese to English. Return ONLY the translation, nothing else:\n{texto}"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                GROQ_API_URL,
-                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                json={
-                    "model": GROQ_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 512,
-                    "temperature": 0.2,
-                },
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as resp:
-                data = await resp.json()
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        pass
+async def _chamar_traducao(texto: str, direcao: str) -> str:
+    """Tradução via IA desabilitada."""
     return None
 
 def _tem_cargo_translate(member) -> bool:
@@ -889,7 +882,7 @@ async def on_message(message: discord.Message):
 
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
     if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:
-        traducao = await _chamar_groq_traducao(message.content, "en_to_pt")
+        traducao = await _chamar_traducao(message.content, "en_to_pt")
         if traducao:
             embed = discord.Embed(color=0x2b2b3b)
             embed.set_author(
@@ -932,7 +925,7 @@ async def on_message(message: discord.Message):
             and not _detectar_ingles(message.content)
             and len(message.content.strip()) >= 5
         ):
-            traducao = await _chamar_groq_traducao(message.content, "pt_to_en")
+            traducao = await _chamar_traducao(message.content, "pt_to_en")
             if traducao:
                 embed = discord.Embed(color=0x1a1a2e)
                 embed.set_author(
@@ -4101,7 +4094,7 @@ async def on_message(message: discord.Message):
         ]
         return await message.channel.send(random.choice(ops))
 
-    # IA (Groq) — fallback para conversa livre
+    # Fallback — resposta aleatória das listas existentes
     # ────────────────────────────────────────
     texto_limpo = message.content
     for prefixo in ["aeon,", "celestia,", "aeon e celestia,", "celestia e aeon,"]:
@@ -4115,138 +4108,24 @@ async def on_message(message: discord.Message):
     if not texto_limpo:
         return
 
-    # Escolhe qual gato responde pela IA com base no contexto
+    # Escolhe qual gato responde com base no contexto
     if "aeon" in content and "celestia" not in content:
-        system_prompt = SYSTEM_PROMPT_AEON
-        prefixo_resp  = "🌑 **Aeon:** "
+        return await message.reply(_fala_aeon(random.choice(AEON_REACOES_FOFAS)))
     elif "celestia" in content and "aeon" not in content:
-        system_prompt = SYSTEM_PROMPT_CELESTIA
-        prefixo_resp  = "🌟 **Celestia:** "
+        return await message.reply(_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS)))
     else:
-        # Ambos — alterna aleatoriamente ou usa os dois
         usar_ambos = random.random() < 0.4
         if usar_ambos:
-            # Faz as chamadas em sequência: Aeon fala, Celestia REAGE ao Aeon
-            async with message.channel.typing():
-                canal_id = message.channel.id
-                if canal_id not in _groq_historico:
-                    _groq_historico[canal_id] = []
-                _groq_historico[canal_id].append({
-                    "role": "user",
-                    "content": f"{message.author.display_name}: {texto_limpo}"
-                })
-                if len(_groq_historico[canal_id]) > 20:
-                    _groq_historico[canal_id] = _groq_historico[canal_id][-20:]
-
-                try:
-                    async with aiohttp.ClientSession() as session:
-                        # 1) Aeon responde primeiro
-                        resp_aeon = await session.post(
-                            GROQ_API_URL,
-                            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                            json={
-                                "model": GROQ_MODEL,
-                                "messages": [
-                                    {"role": "system", "content": SYSTEM_PROMPT_AEON},
-                                    *_groq_historico[canal_id]
-                                ],
-                                "max_tokens": 200,
-                                "temperature": 0.75
-                            }
-                        )
-                        da = await resp_aeon.json()
-                        ra_txt = da["choices"][0]["message"]["content"].strip() if "choices" in da else random.choice(AEON_REACOES_FOFAS)
-
-                        # 2) Celestia REAGE ao que o Aeon disse + responde ao usuário
-                        contexto_celestia = list(_groq_historico[canal_id]) + [
-                            {"role": "assistant", "content": f"Aeon acabou de dizer: {ra_txt}"}
-                        ]
-                        resp_celestia = await session.post(
-                            GROQ_API_URL,
-                            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                            json={
-                                "model": GROQ_MODEL,
-                                "messages": [
-                                    {"role": "system", "content": SYSTEM_PROMPT_CELESTIA_REAGE},
-                                    *contexto_celestia
-                                ],
-                                "max_tokens": 220,
-                                "temperature": 0.88
-                            }
-                        )
-                        dc = await resp_celestia.json()
-                        rc_txt = dc["choices"][0]["message"]["content"].strip() if "choices" in dc else random.choice(CELESTIA_REACOES_FOFAS)
-
-                    resposta_final = f"🌑 **Aeon:** {ra_txt}\n🌟 **Celestia:** {rc_txt}"
-                    _groq_historico[canal_id].append({"role": "assistant", "content": resposta_final})
-
-                    if len(resposta_final) <= 2000:
-                        return await message.reply(resposta_final)
-                    for parte in [resposta_final[i:i+1990] for i in range(0, len(resposta_final), 1990)]:
-                        await message.channel.send(parte)
-                    return
-                except Exception:
-                    return await message.channel.send(
-                        f"🌑 **Aeon:** {random.choice(AEON_REACOES_FOFAS)}\n"
-                        f"🌟 **Celestia:** {random.choice(CELESTIA_REACOES_FOFAS)}"
-                    )
+            return await message.reply(
+                f"🌑 **Aeon:** {random.choice(AEON_REACOES_FOFAS)}\n"
+                f"🌟 **Celestia:** {random.choice(CELESTIA_REACOES_FOFAS)}"
+            )
         else:
             escolhido = random.choice(["aeon", "celestia"])
             if escolhido == "aeon":
-                system_prompt = SYSTEM_PROMPT_AEON
-                prefixo_resp  = "🌑 **Aeon:** "
+                return await message.reply(_fala_aeon(random.choice(AEON_REACOES_FOFAS)))
             else:
-                system_prompt = SYSTEM_PROMPT_CELESTIA
-                prefixo_resp  = "🌟 **Celestia:** "
-
-    # Chamada única à IA
-    async with message.channel.typing():
-        canal_id = message.channel.id
-        if canal_id not in _groq_historico:
-            _groq_historico[canal_id] = []
-        _groq_historico[canal_id].append({
-            "role": "user",
-            "content": f"{message.author.display_name}: {texto_limpo}"
-        })
-        if len(_groq_historico[canal_id]) > 20:
-            _groq_historico[canal_id] = _groq_historico[canal_id][-20:]
-
-        msgs_api = [
-            {"role": "system", "content": system_prompt},
-            *_groq_historico[canal_id]
-        ]
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": GROQ_MODEL, "messages": msgs_api, "max_tokens": 512, "temperature": 0.85}
-                ) as resp:
-                    data = await resp.json()
-
-            if "choices" not in data or not data["choices"][0]["message"]["content"].strip():
-                _resp = random.choice([
-                    f"{_fala_aeon(random.choice(AEON_REACOES_FOFAS))}\n{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}",
-                    f"{_fala_aeon(random.choice(AEON_MOTIVACAO))}\n{_fala_celestia(random.choice(CELESTIA_MOTIVACAO))}",
-                ])
-                return await message.channel.send(_resp)
-
-            resposta = data["choices"][0]["message"]["content"].strip()
-            _groq_historico[canal_id].append({"role": "assistant", "content": resposta})
-
-            resposta_final = f"{prefixo_resp}{resposta}"
-            if len(resposta_final) <= 2000:
-                return await message.reply(resposta_final)
-            for parte in [resposta_final[i:i+1990] for i in range(0, len(resposta_final), 1990)]:
-                await message.channel.send(parte)
-
-        except Exception:
-            _resp = random.choice([
-                f"{_fala_aeon(random.choice(AEON_REACOES_FOFAS))}\n{_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS))}",
-                f"{_fala_aeon(random.choice(AEON_MOTIVACAO))}\n{_fala_celestia(random.choice(CELESTIA_MOTIVACAO))}",
-            ])
-            return await message.channel.send(_resp)
+                return await message.reply(_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS)))
 
 
 # ══════════════════════════════════════════════
@@ -4258,32 +4137,7 @@ async def cmd_aeon(ctx, *, texto: str = None):
     """Fala diretamente com o Aeon."""
     if not texto:
         return await ctx.send(_fala_aeon("...me chamou. Diga algo. 🖤🌑"))
-    canal_id = ctx.channel.id
-    if canal_id not in _groq_historico:
-        _groq_historico[canal_id] = []
-    _groq_historico[canal_id].append({"role": "user", "content": f"{ctx.author.display_name}: {texto}"})
-    if len(_groq_historico[canal_id]) > 20:
-        _groq_historico[canal_id] = _groq_historico[canal_id][-20:]
-    async with ctx.typing():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                    json={
-                        "model": GROQ_MODEL,
-                        "messages": [{"role": "system", "content": SYSTEM_PROMPT_AEON}, *_groq_historico[canal_id]],
-                        "max_tokens": 512, "temperature": 0.75
-                    }
-                ) as resp:
-                    data = await resp.json()
-            if "choices" not in data:
-                return await ctx.send(_fala_aeon("...as trevas calaram minha resposta. 🖤"))
-            resposta = data["choices"][0]["message"]["content"].strip()
-            _groq_historico[canal_id].append({"role": "assistant", "content": resposta})
-            await ctx.reply(_fala_aeon(resposta))
-        except Exception:
-            await ctx.send(_fala_aeon("...falha no canal escuro. 🖤"))
+    await ctx.reply(_fala_aeon(random.choice(AEON_REACOES_FOFAS)))
 
 
 @bot.command(name="celestia")
@@ -4291,32 +4145,7 @@ async def cmd_celestia(ctx, *, texto: str = None):
     """Fala diretamente com a Celestia."""
     if not texto:
         return await ctx.send(_fala_celestia("OI!! Me fala algo!! 🤍✨🌟"))
-    canal_id = ctx.channel.id
-    if canal_id not in _groq_historico:
-        _groq_historico[canal_id] = []
-    _groq_historico[canal_id].append({"role": "user", "content": f"{ctx.author.display_name}: {texto}"})
-    if len(_groq_historico[canal_id]) > 20:
-        _groq_historico[canal_id] = _groq_historico[canal_id][-20:]
-    async with ctx.typing():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                    json={
-                        "model": GROQ_MODEL,
-                        "messages": [{"role": "system", "content": SYSTEM_PROMPT_CELESTIA}, *_groq_historico[canal_id]],
-                        "max_tokens": 512, "temperature": 0.85
-                    }
-                ) as resp:
-                    data = await resp.json()
-            if "choices" not in data:
-                return await ctx.send(_fala_celestia("Opa!! Não consegui responder!! 😭🤍"))
-            resposta = data["choices"][0]["message"]["content"].strip()
-            _groq_historico[canal_id].append({"role": "assistant", "content": resposta})
-            await ctx.reply(_fala_celestia(resposta))
-        except Exception:
-            await ctx.send(_fala_celestia("Eita, deu erro!! 😭🤍 Tenta de novo??"))
+    await ctx.reply(_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS)))
 
 
 @bot.command(name="duo")
@@ -4324,48 +4153,10 @@ async def cmd_duo(ctx, *, texto: str = None):
     """Os dois respondem ao mesmo tempo."""
     if not texto:
         return await ctx.send(random.choice(AMBOS_APRESENTACAO))
-    canal_id = ctx.channel.id
-    if canal_id not in _groq_historico:
-        _groq_historico[canal_id] = []
-    _groq_historico[canal_id].append({"role": "user", "content": f"{ctx.author.display_name}: {texto}"})
-    if len(_groq_historico[canal_id]) > 20:
-        _groq_historico[canal_id] = _groq_historico[canal_id][-20:]
-    async with ctx.typing():
-        try:
-            async with aiohttp.ClientSession() as session:
-                # 1) Aeon responde primeiro
-                ra_resp = await session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": GROQ_MODEL,
-                          "messages": [{"role": "system", "content": SYSTEM_PROMPT_AEON}, *_groq_historico[canal_id]],
-                          "max_tokens": 200, "temperature": 0.75}
-                )
-                ra = await ra_resp.json()
-                ta = ra["choices"][0]["message"]["content"].strip() if "choices" in ra else "..."
-
-                # 2) Celestia REAGE ao Aeon + responde ao usuário
-                contexto_celestia_duo = list(_groq_historico[canal_id]) + [
-                    {"role": "assistant", "content": f"Aeon acabou de dizer: {ta}"}
-                ]
-                rc_resp = await session.post(
-                    GROQ_API_URL,
-                    headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": GROQ_MODEL,
-                          "messages": [{"role": "system", "content": SYSTEM_PROMPT_CELESTIA_REAGE}, *contexto_celestia_duo],
-                          "max_tokens": 220, "temperature": 0.88}
-                )
-                rc = await rc_resp.json()
-                tc = rc["choices"][0]["message"]["content"].strip() if "choices" in rc else "✨"
-
-            final = f"🌑 **Aeon:** {ta}\n🌟 **Celestia:** {tc}"
-            _groq_historico[canal_id].append({"role": "assistant", "content": final})
-            await ctx.reply(final)
-        except Exception:
-            await ctx.send(
-                "🌑 **Aeon:** ...interferência nas trevas. 🖤\n"
-                "🌟 **Celestia:** Algo errado!! 😭🤍 Tenta de novo?? ✨"
-            )
+    await ctx.reply(
+        f"🌑 **Aeon:** {random.choice(AEON_REACOES_FOFAS)}\n"
+        f"🌟 **Celestia:** {random.choice(CELESTIA_REACOES_FOFAS)}"
+    )
 
 
 async def _enviar_ajuda(ctx):

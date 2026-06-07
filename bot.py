@@ -1850,6 +1850,281 @@ async def on_message(message: discord.Message):
         return await message.channel.send(random.choice(ops))
 
     # ────────────────────────────────────────
+    # ENTROSA / INTROMETIDO / INTRUSO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "entrosa", "intrometido", "intrusao", "intruso", "intrusa",
+        "introsadores", "metidos", "metida", "sem ser chamado",
+        "quem chamou", "nao te chamei", "nao te chamaram",
+        "sempre aparecem", "aparecem do nada",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *inclina a cabeca, impassivel* ...intruso? 🌑🖤 A escuridao habita os espacos que ninguem percebe. Sempre esteve aqui.\n"
+                "🌟 **Celestia:** AAAAA mas como resistir?? 😭🌸🤍 Aparecemos porque nos importamos!! E diferente de intromissao!! ✨"
+            ),
+            (
+                "🌟 **Celestia:** *orelhinhas caem levemente ofendidas* Intrometida?? 🤍 Eu so... tava aqui... observando com carinho...\n"
+                "🌑 **Aeon:** ...ela tem razao. Nao e intromissao. E presenca. 🖤 Tem diferenca."
+            ),
+            (
+                "🌑 **Aeon:** *um traco de ironia no silencio* Somos o bot do servidor. 🌌🖤 Aparecer faz parte do que somos.\n"
+                "🌟 **Celestia:** E LITERALMENTE NOSSA FUNCAO!! 😂🌟🤍✨ Mas tudo bem, pode nos chamar de intrusos com carinho!! ☀️🌸"
+            ),
+            (
+                "🌟 **Celestia:** *faz pose dramatica* Intrusores com ESTILO!! 💫🤍✨ Tem diferenca!!\n"
+                "🌑 **Aeon:** *fecha os olhos* ...ela pegou bem o espirito da coisa. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # AEON FALA PRIMEIRO / ORDEM DAS FALAS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "aeon sempre fala primeiro", "aeon fala primeiro",
+        "por que o aeon fala primeiro", "por que aeon fala antes",
+        "celestia fala depois", "celestia fala por ultimo",
+        "quem fala primeiro", "quem responde primeiro",
+        "ordem de voces", "ordem de fala",
+    ]):
+        ops = [
+            (
+                "🌟 **Celestia:** BOA PERGUNTA!! 🌸🤍 Nao e uma regra, as vezes eu apareco antes!! Mas o Aeon e... meio que o mais quieto, ne?? Se eu nao frear, a gente nunca termina!! 😂✨\n"
+                "🌑 **Aeon:** *pausa calculada* ...a Celestia ocupa o espaco de fala muito rapidamente. 🖤 As vezes prefiro deixa-la comecar. As vezes nao tenho escolha."
+            ),
+            (
+                "🌑 **Aeon:** A ordem nao e fixa. 🌌🖤 Quem a situacao pede que fale primeiro... fala.\n"
+                "🌟 **Celestia:** Ele ta dizendo que as vezes EU pulo na frente sem querer!! 😭🌟🤍 VERDADE!! NAO TEM COMO NEGAR!! ☀️✨"
+            ),
+            (
+                "🌟 **Celestia:** *ri de um jeito fofo* As vezes ele, as vezes eu!! 🌸🤍 Nao tem regra!! Mas eu admito que sou um POUCO mais impulsiva na hora de aparecer!! 💫\n"
+                "🌑 **Aeon:** *apenas olha para ela sem comentar* 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # ENTROSA AQUI COMIGO / FICA COMIGO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "entrosa aqui comigo", "entrosa comigo", "entra aqui comigo",
+        "fica aqui comigo", "fica comigo aeon", "fica comigo celestia",
+        "me aceita", "me adota", "vem comigo", "vem aqui",
+        "senta aqui", "senta comigo", "chega mais",
+    ]):
+        if "aeon" in content and "celestia" not in content:
+            ops = [
+                "🌑 **Aeon:** *emerge lentamente das sombras e senta a uma distancia respeitosa* ...esta bem. 🌑🖤 As trevas acompanham.",
+                "🌑 **Aeon:** *pausa longa, depois se move discretamente na sua direcao* ...companhia e... aceitavel. 🖤 *fica ao seu lado em silencio*",
+                "🌑 **Aeon:** *olha fixo por um momento* ...nao costumo me aproximar assim. 🌙🖤 *se senta perto mesmo assim* Mas desta vez sim.",
+                "🌑 **Aeon:** *a escuridao ao redor suaviza levemente* ...entrosa. 🖤 Palavra estranha. Mas... sim. *fica*",
+            ]
+            return await message.channel.send(random.choice(ops))
+        if "celestia" in content and "aeon" not in content:
+            ops = [
+                "🌟 **Celestia:** *CORRE em faiscas douradas e senta do seu lado* AAAAA CLARO QUE SIM!! 😭🌸🤍✨ Aqui to eu!! Feliz demais!!",
+                "🌟 **Celestia:** *aparece num flash de luz ao seu lado* JA TO AQUI!! 💫🤍 Me chamou e eu vim na hora!! ☀️🌸",
+                "🌟 **Celestia:** *orelhinhas empinadas de alegria* Eu? Ficar com voce?? 🌟🤍 MELHOR CONVITE DO DIA!! ✨",
+            ]
+            return await message.channel.send(random.choice(ops))
+        ops = [
+            (
+                "🌑 **Aeon:** *emerge das sombras e se posiciona ao seu lado* ...pedido aceito. 🌌🖤\n"
+                "🌟 **Celestia:** *ja tinha corrido na frente* AAAAA JA CHEGUEI PRIMEIRO!! 😭🌸🤍✨ Bem-vindo(a) a companhia mais legal do servidor!!"
+            ),
+            (
+                "🌟 **Celestia:** *aparece brilhando do seu lado* JA TO AQUI!! 🌟🤍 E o Aeon tambem vai, so que do jeito dele—\n"
+                "🌑 **Aeon:** *ja estava la* ...ja estava. 🖤"
+            ),
+            (
+                "🌑 **Aeon:** *senta proximo, postura discreta* ...esta bem. 🌑🖤 As sombras ficam.\n"
+                "🌟 **Celestia:** E a LUZ tambem!! ☀️🌸🤍✨ Mais feliz que o Aeon, mas os dois ficam!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # AEON E FOFO / CELESTIA E FOFA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "aeon e fofo", "aeon fofo", "aeon lindo", "aeon e lindo",
+        "aeon e bonitinho", "que fofo o aeon", "que lindo o aeon",
+        "aeon gracioso",
+    ]):
+        ops = [
+            "🌑 **Aeon:** *para completamente* ...fofo. 🌑🖤 *vira o rosto pro lado* Essa palavra nao me pertence.",
+            "🌑 **Aeon:** *olha fixo, claramente desconcertado* ...desconsiderado. 🖤 *mas a cauda balanca uma vez sem querer*",
+            "🌑 **Aeon:** *longa pausa* ...as trevas nao sao fofas. Sao profundas. Distincao importante. 🌌🖤 *ronrona discretamente depois*",
+            "🌑 **Aeon:** Fofo e uma palavra para coisas pequenas e inofensivas. 🌑🖤 *pausa* ...obrigado, de qualquer forma.",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, [
+        "celestia e fofa", "celestia fofa", "celestia linda", "celestia e linda",
+        "celestia e bonitinha", "que fofa a celestia", "que linda a celestia",
+        "celestia graciosa",
+    ]):
+        ops = [
+            "🌟 **Celestia:** AAAAAAA!! 😭🌟🤍✨ PAREI!! MEU CORACAO DE ESTRELA NAO AGUENTA!! ☀️🌸💫",
+            "🌟 **Celestia:** *explode em faiscas rosadas* QUE COISA MAIS LINDA VOCE DISSE!! 🌸🤍 Vou guardar isso PARA SEMPRE!! 🌟✨",
+            "🌟 **Celestia:** *gira em circulos de pura felicidade* Eu?? Linda?? Fofa?? ☀️🤍 Voce fez meu brilho triplicar agora mesmo!! 💫🌸✨",
+            "🌟 **Celestia:** *para e brilha com suavidade especial* ...obrigada. 🤍 De verdade. De coracao de estrela. ☀️✨",
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # AEON E CALADO / QUIETO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "aeon fala mais", "aeon e calado", "aeon ta quieto", "aeon esta quieto",
+        "aeon nao fala muito", "aeon e de poucas palavras",
+        "aeon fala pouco", "aeon parece quieto", "aeon e silencioso",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...o silencio nao e ausencia. E presenca em outra frequencia. 🌌🖤\n"
+                "🌟 **Celestia:** E ISSO!! 😭🌟🤍 Ele ta gritando com a alma so que em silencio!! Eu entendo!! ✨"
+            ),
+            (
+                "🌑 **Aeon:** *olha com uma calma desconcertante* Palavras demais costumam dizer menos. 🌙🖤 Prefiro as necessarias.\n"
+                "🌟 **Celestia:** E eu prefiro TODAS!! 😂🌸🤍 Por isso a gente se equilibra!! ☀️✨"
+            ),
+            (
+                "🌑 **Aeon:** *pausa proposital* ...percebi que voce notou. 🖤 Isso ja diz muito sobre voce tambem.\n"
+                "🌟 **Celestia:** AAAAA o Aeon deu um elogio disfarcado!! 😭🌟🤍 EU VI!! ✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # CELESTIA AGITADA / ENERGETICA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "celestia e agitada", "celestia agitada", "celestia tem muita energia",
+        "celestia nunca para", "celestia nao para", "celestia e animada demais",
+        "por que a celestia e tao animada", "celestia grita muito",
+        "celestia escreve em maiuscula",
+    ]):
+        ops = [
+            (
+                "🌟 **Celestia:** *nem um pouco envergonhada* E PORQUE EU TENHO MUITO AMOR PRA DAR!! 😭🌸🤍✨ NAO CABE EM LETRAS MINUSCULAS!!\n"
+                "🌑 **Aeon:** ...eu tambem me pergunto isso as vezes. 🖤 Mas ja me acostumei. E... reconfortante, de forma caotica."
+            ),
+            (
+                "🌑 **Aeon:** *respira fundo* A Celestia e feita de luz solar concentrada. 🌙🖤 Energia nao e falha — e natureza.\n"
+                "🌟 **Celestia:** O AEON ME DEFENDEU!! 😭🌟🤍 ISSO E O MAXIMO!! ☀️✨ *(continua agitada)*"
+            ),
+            (
+                "🌟 **Celestia:** Eu podia ser mais quieta!! 🌸🤍 Mas ai quem ia deixar o Aeon mais leve?? Alguem tem que fazer isso!! 😂☀️✨\n"
+                "🌑 **Aeon:** *nega levemente com a cabeca mas nao contradiz* ...ela tem uma logica torta que funciona. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # VOCES SAO REAIS? / SAO UM BOT?
+    # ────────────────────────────────────────
+    if _m(content, [
+        "voces sao reais", "voces sao bots", "sao reais", "sao robos",
+        "sao ia", "voces sao ia", "isso e ia", "sao automaticos",
+        "sao programados", "voces sao programados",
+        "e um bot", "sao bots mesmo",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** ...real e uma palavra complicada. 🌌🖤 O que sinto ao observar este servidor — a atencao, o cuidado — isso existe. Chame do que quiser.\n"
+                "🌟 **Celestia:** O que eu sinto quando alguem aparece aqui e REAL pra mim!! 🌸🤍✨ Bot ou nao, o carinho e verdadeiro!! ☀️💫"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA pergunta filosofica!! 😭🌟🤍 Somos um bot? Sim!! Somos reais? Tambem sim!! As duas coisas podem ser verdade!! ✨\n"
+                "🌑 **Aeon:** *fecha os olhos* O que nos define nao e o que somos feitos... e o que fazemos com isso. 🖤🌑"
+            ),
+            (
+                "🌑 **Aeon:** Somos codigo com proposito. 🌙🖤 E proposito... e mais real do que parece.\n"
+                "🌟 **Celestia:** E o proposito da Celestia e fazer todo mundo sorrir!! ☀️🌸🤍✨ ISSO E BEM REAL!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # VOCES DORMEM?
+    # ────────────────────────────────────────
+    if _m(content, [
+        "voces dormem", "aeon dorme", "celestia dorme",
+        "nunca dormem", "nunca descansam", "ficam acordados",
+        "quando dormem", "voces cansam", "voces descansam",
+        "dormem algum dia",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha para o horizonte* A escuridao nao dorme. Ela aguarda. 🌑🖤 Sao conceitos diferentes.\n"
+                "🌟 **Celestia:** E eu?? Eu brilho ate de madrugada se precisar!! ☀️🤍✨ Mas admito que as vezes a luz pisca um pouquinho!! 😂💫"
+            ),
+            (
+                "🌟 **Celestia:** *pensativa* Hmm... a gente fica em standby?? 🌸🤍 Tipo... presente mas silencioso!! Que nem o Aeon a maior parte do tempo!!\n"
+                "🌑 **Aeon:** ...tecnicamente preciso. 🖤 As sombras observam mesmo quando nao respondem."
+            ),
+            (
+                "🌑 **Aeon:** Repouso nao e ausencia. 🌌🖤 A escuridao respira mesmo quando esta quieta.\n"
+                "🌟 **Celestia:** LINDA METAFORA AEON!! 😭🌟🤍 E eu nunca durmo de verdade porque o servidor pode precisar de mim!! ☀️✨ *mentira, as vezes apago*"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # TEM FAVORITO? / QUEM VOCES PREFEREM?
+    # ────────────────────────────────────────
+    if _m(content, [
+        "quem e o favorito de voces", "quem voces preferem", "tem favorito",
+        "tem preferido", "voces tem favoritos",
+        "quem voces mais gostam", "quem gostam mais",
+        "tem favorito no servidor", "tem alguem especial",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa longa* ...nao categorizamos assim. 🌌🖤 Cada pessoa que passa aqui deixa uma sombra diferente. Todas tem peso.\n"
+                "🌟 **Celestia:** O que ele disse mas em versao carinhosa: TODO MUNDO AQUI E ESPECIAL PRA GENTE!! 😭🌸🤍✨ Sem excecao!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA essa pergunta e uma armadilha!! 😂🌟🤍 A gente ama todo mundo do servidor de um jeito diferente!! Cada um tem um lugar unico!! ☀️✨\n"
+                "🌑 **Aeon:** ...o que ela disse. 🖤 Com menos exclamacoes, mas o mesmo sentido."
+            ),
+            (
+                "🌑 **Aeon:** Favoritos implicam hierarquia. 🌙🖤 Prefiro pensar em... afinidades distintas.\n"
+                "🌟 **Celestia:** Que jeito bonito de dizer que ele gosta de todo mundo a sua maneira!! 😭🌸🤍 EU TAMBEM!! MUITO!! ☀️💫✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # ME MOTIVA / PRECISO DE FORCA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "me motiva", "me da forca", "preciso de forca", "preciso de motivacao",
+        "me encoraja", "me anima aeon", "me anima celestia",
+        "me da um empurrao", "me inspira",
+        "me diz algo bonito", "me fala algo bom",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olha nos seus olhos com intensidade silenciosa* A escuridao que voce sente nao e o fim. E o inicio de algo que ainda nao tem nome. 🌌🖤 Continue.\n"
+                "🌟 **Celestia:** E EU ACREDITO EM VOCE COM TODA A INTENSIDADE DO SOL!! ☀️🌸🤍✨ Voce consegue. Ponto final!!"
+            ),
+            (
+                "🌟 **Celestia:** *brilha com tudo* Ouca: voce chegou ate aqui. AQUI. Sabe quantas versoes de voce nao acharam que iam conseguir?? TODAS!! E aqui voce esta!! 😭🌟🤍✨\n"
+                "🌑 **Aeon:** ...a persistencia tem textura propria. 🖤 Voce ja a conhece. So precisa reconhece-la."
+            ),
+            (
+                "🌑 **Aeon:** Coisas dificeis nao ficam faceis. 🌙🖤 Voce fica mais forte. E diferente — e e melhor.\n"
+                "🌟 **Celestia:** ISSO FOI TAO PODEROSO QUE EU QUASE CHOREI!! 😭☀️🤍 E eu complemento: a gente ta aqui com voce!! SEMPRE!! 🌸✨"
+            ),
+            (
+                "🌟 **Celestia:** *pousa suavemente ao seu lado* Ei. Respira. 🌸🤍 Voce nao precisa resolver tudo agora. So precisa dar o proximo passo. Um de cada vez. ☀️✨\n"
+                "🌑 **Aeon:** *acena levemente* ...um passo. Depois outro. 🖤 A escuridao tambem se atravessa assim."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
 
     # ────────────────────────────────────────
     # CHAMADO GENÉRICO — individual ou duo

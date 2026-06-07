@@ -33,6 +33,9 @@ BOT_ID = None  # preencha depois
 # IDs de usuários especiais
 CRIADOR_ID = 769951556388257812   # quem criou o bot
 
+# ── Cargo de tradução ──────────────────────────────────────────────────────────
+TRANSLATE_ROLE_ID = 1513180948424953946  # cargo translate: PT->EN e EN->PT
+
 # ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
 DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
 PEPO_ID     = 796441518176075818   # Pepo     — Vice-Líder
@@ -636,6 +639,59 @@ def _cooldown_ok(user_id: int) -> bool:
         return True
     return False
 
+async def _chamar_groq_traducao(texto: str, direcao: str) -> str:
+    """Usa Groq para traduzir. direcao: 'en_to_pt' ou 'pt_to_en'."""
+    if direcao == "en_to_pt":
+        prompt = f"Translate the following text from English to Brazilian Portuguese. Return ONLY the translation, nothing else:\n{texto}"
+    else:
+        prompt = f"Translate the following text from Brazilian Portuguese to English. Return ONLY the translation, nothing else:\n{texto}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": GROQ_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 512,
+                    "temperature": 0.2,
+                },
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                data = await resp.json()
+        if "choices" in data:
+            return data["choices"][0]["message"]["content"].strip()
+    except Exception:
+        pass
+    return None
+
+def _tem_cargo_translate(member) -> bool:
+    """Verifica se o membro tem o cargo Translate."""
+    if member is None:
+        return False
+    return any(r.id == TRANSLATE_ROLE_ID for r in member.roles)
+
+def _detectar_ingles(texto: str) -> bool:
+    """Heuristica simples: maioria das palavras parecem ser ingles."""
+    palavras_en = {
+        "the","is","are","was","were","be","been","being","have","has","had",
+        "do","does","did","will","would","could","should","may","might","shall",
+        "and","but","or","not","this","that","these","those","it","its",
+        "he","she","they","we","you","i","my","your","his","her","our","their",
+        "in","on","at","to","for","of","with","by","from","up","about","into",
+        "what","how","why","when","where","who","which","if","so","just","like",
+        "get","got","go","going","come","see","know","think","want","need",
+        "good","bad","great","nice","ok","okay","yeah","yes","no","hi","hey",
+        "hello","lol","haha","thanks","thank","please","sorry","help","time",
+        "some","all","more","can","make","here","there","now",
+    }
+    words = set(texto.lower().split())
+    if len(words) == 0:
+        return False
+    matches = words & palavras_en
+    # Precisa de pelo menos 2 palavras em ingles OU mais de 40% das palavras
+    return len(matches) >= 2 or (len(matches) / len(words) >= 0.4 and len(words) >= 3)
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -777,6 +833,87 @@ async def on_message(message: discord.Message):
 
     # Só responde se: @ puro OU texto tem "aeon"/"celestia" OU tem gatilho sem nome
     fala_bot = mencao_pura or tem_nome or tem_gatilho
+
+    # ════════════════════════════════════════════════════════════════
+    # SISTEMA DE TRADUÇÃO — Cargo Translate
+    # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
+    # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
+    # ════════════════════════════════════════════════════════════════
+    autor_tem_translate = _tem_cargo_translate(message.author if hasattr(message.author, "roles") else None)
+
+    # Caso 1 — autor TEM cargo translate e escreveu em inglês
+    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:
+        traducao = await _chamar_groq_traducao(message.content, "en_to_pt")
+        if traducao:
+            embed = discord.Embed(color=0x2b2b3b)
+            embed.set_author(
+                name=f"{message.author.display_name} · Tradução automática",
+                icon_url=message.author.display_avatar.url
+            )
+            embed.add_field(
+                name="🌐 Inglês (original)",
+                value=f"```{message.content}```",
+                inline=False
+            )
+            embed.add_field(
+                name="🌑☀️ Português (traduzido por Aeon & Celestia)",
+                value=f"> {traducao}",
+                inline=False
+            )
+            embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
+            msg_trad = await message.channel.send(embed=embed)
+            await asyncio.sleep(120)
+            try:
+                await msg_trad.delete()
+            except Exception:
+                pass
+        return
+
+    # Caso 2 — autor NÃO tem translate, mas está respondendo a alguém que tem
+    if (
+        not autor_tem_translate
+        and message.reference is not None
+        and message.reference.resolved is not None
+        and isinstance(message.reference.resolved, discord.Message)
+    ):
+        ref_msg = message.reference.resolved
+        ref_autor = ref_msg.author
+        if (
+            not ref_autor.bot
+            and _tem_cargo_translate(ref_autor if hasattr(ref_autor, "roles") else None)
+            and not _detectar_ingles(message.content)
+            and len(message.content.strip()) >= 5
+        ):
+            traducao = await _chamar_groq_traducao(message.content, "pt_to_en")
+            if traducao:
+                embed = discord.Embed(color=0x1a1a2e)
+                embed.set_author(
+                    name=f"{message.author.display_name} · Resposta traduzida",
+                    icon_url=message.author.display_avatar.url
+                )
+                embed.add_field(
+                    name="💬 Português (original)",
+                    value=f"```{message.content}```",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🌐 English (translated by Aeon & Celestia)",
+                    value=f"> {traducao}",
+                    inline=False
+                )
+                embed.add_field(
+                    name="↩️ Em resposta a",
+                    value=f"{ref_autor.mention}",
+                    inline=True
+                )
+                embed.set_footer(text="🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation")
+                msg_trad = await message.channel.send(embed=embed)
+                await asyncio.sleep(120)
+                try:
+                    await msg_trad.delete()
+                except Exception:
+                    pass
+            return
 
     if not fala_bot:
         return

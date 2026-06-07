@@ -869,7 +869,23 @@ async def on_message(message: discord.Message):
     # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
     # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
     # ════════════════════════════════════════════════════════════════
-    autor_tem_translate = _tem_cargo_translate(message.author)
+
+    # Garante que temos o Member completo com cargos (não apenas User do cache)
+    _guild = message.guild
+    if _guild is not None:
+        _member_completo = _guild.get_member(message.author.id)
+        if _member_completo is None:
+            try:
+                _member_completo = await _guild.fetch_member(message.author.id)
+            except Exception:
+                _member_completo = message.author
+    else:
+        _member_completo = message.author
+
+    autor_tem_translate = _tem_cargo_translate(_member_completo)
+
+    # DEBUG — apague depois de confirmar que funciona
+    print(f"[TRANSLATE] autor={message.author} | guild={_guild} | member={_member_completo} | roles={getattr(_member_completo,'roles',[])} | tem_translate={autor_tem_translate} | detectou_en={_detectar_ingles(message.content)}")
 
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
     if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:

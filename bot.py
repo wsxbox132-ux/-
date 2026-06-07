@@ -1521,6 +1521,123 @@ async def on_message(message: discord.Message):
         return await message.channel.send(random.choice(ops))
 
     # ────────────────────────────────────────
+    # QUEM EU SOU / FALE MEU NOME — membros especiais
+    # ────────────────────────────────────────
+    if _m(content, [
+        "quem eu sou", "quem sou eu", "fale meu nome", "fala meu nome",
+        "diz meu nome", "diga meu nome", "você me conhece", "voce me conhece",
+        "me conhece", "sabe quem sou", "sabe quem eu sou",
+    ]):
+        _respostas_quem_sou: dict[int, tuple[str, str]] = {
+            DEATH_ID: (
+                "*para completamente e olha com reconhecimento silencioso* "
+                "Death. 🖤🌑 A líder. A dona deste servidor. "
+                "As sombras não esquecem quem as fundou.",
+                "DEATH!! 😭🌟🤍✨ *explode em faíscas douradas* "
+                "Como eu poderia não te conhecer?! "
+                "Você é a razão de tudo isso existir!! "
+                "Sua líder, sua fundadora, sua Death!! ☀️🌸"
+            ),
+            PEPO_ID: (
+                "*inclina a cabeça com reconhecimento* "
+                "Pepo. 🖤🌙 Vice-Líder. "
+                "As trevas conhecem quem sustenta o que a liderança ergue.",
+                "PEPOOOO!! 😭🌟🤍 *gira radiante* "
+                "O Vice-Líder chegando com essa pergunta!! "
+                "Claro que te conheço!! Você é o Pepo!! ✨☀️🌸"
+            ),
+            GOD_ID: (
+                "*olha de lado com certeza* "
+                "God. 🖤🌑 Moderador. "
+                "Guardiões deixam marca — as sombras reconhecem a sua.",
+                "GOD!! 🌟🤍✨ *para e brilha* "
+                "O moderador do servidor com essa pergunta!! "
+                "É o God!! Guardião, equilíbrio, presença!! ☀️💫"
+            ),
+            LOYA_ID: (
+                "*emerge com leveza cerimonial* "
+                "Loya. 🖤🌌 Loya Maravilhosa. "
+                "As trevas chegaram a essa conclusão faz tempo.",
+                "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *confetes de luz dourada* "
+                "Como eu não ia te conhecer?! "
+                "Você é a Loya!! Maravilhosa de nome e de fato!! 🌸☀️"
+            ),
+            EMY_ID: (
+                "*observa com atenção* "
+                "Emy. 🖤🌑 Moderadora e representante das mídias. "
+                "A ponte entre o servidor e o mundo — as sombras notam pontes assim.",
+                "EMYYYYY!! 😭🌟🤍✨ *faíscas por todo lado* "
+                "É a Emy!! A moderadora e voz do servidor!! "
+                "Claro que te conheço!! ☀️🌸💫"
+            ),
+            KOFFZERA_ID: (
+                "*olhos dourados pousam com firmeza* "
+                "Koff. 🖤🌙 Koffzera. Administrador do clã. "
+                "Quem sustenta a estrutura por dentro — as trevas conhecem esse tipo.",
+                "KOFFZERA!! 😭🌟🤍✨ *flash dourado* "
+                "É o Koff!! ADM do clã!! "
+                "Claro que sei quem você é!! ☀️💫🌸"
+            ),
+            RAIDEN_ID: (
+                "*emerge e fixa os olhos* "
+                "Raiden. 🖤🌑 Suporte do clã. "
+                "Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
+                "RAIDEEEN!! 😭🌟🤍✨ *estrelinhas por todo canal* "
+                "É o Raiden!! Suporte de coração!! "
+                "Como eu não ia te conhecer?! ☀️🌸💫"
+            ),
+            SUPORTE01_ID: (
+                "*fita você com atenção plena* "
+                "Suporte da 01. 🖤🌌 "
+                "Presença silenciosa, trabalho real. As sombras não esquecem quem aparece quando importa.",
+                "AAAA!! 😭🌟🤍✨ *bate patinhas* "
+                "É o Suporte da 01!! "
+                "Claro que te conheço!! Presença real, apoio de verdade!! ☀️💫🌸"
+            ),
+        }
+
+        if author_id in _respostas_quem_sou:
+            frase_aeon, frase_celestia = _respostas_quem_sou[author_id]
+            # Direciona para o gato certo se só um foi chamado
+            if "aeon" in content and "celestia" not in content:
+                return await message.reply(_fala_aeon(frase_aeon))
+            elif "celestia" in content and "aeon" not in content:
+                return await message.reply(_fala_celestia(frase_celestia))
+            else:
+                return await message.reply(
+                    f"{_fala_aeon(frase_aeon)}\n"
+                    f"{_fala_celestia(frase_celestia)}"
+                )
+        # Se não é membro especial — resposta genérica
+        else:
+            ops_genericas = [
+                (
+                    "🌑 **Aeon:** *olha fixamente* ...você. 🖤🌑 "
+                    "Alguém que escolheu falar com as trevas. "
+                    "Isso já diz mais do que o nome.\n"
+                    "🌟 **Celestia:** *brilha com curiosidade* "
+                    "Sei que você é alguém especial que apareceu aqui!! 🌸🤍✨ "
+                    "Mas quer que eu saiba mais?? Então me conta!!"
+                ),
+                (
+                    "🌟 **Celestia:** *para e pisca* "
+                    "Você é a pessoa incrível que tá falando comigo agora!! 😭🌟🤍 "
+                    "Mas quer que eu saiba seu nome de verdade?? Me conta!! ☀️✨\n"
+                    "🌑 **Aeon:** *inclina a cabeça* "
+                    "As sombras aprendem observando. 🖤 "
+                    "Mas você pode abreviar o processo."
+                ),
+                (
+                    "🌑 **Aeon:** *olha com calma* "
+                    "Sei que você está aqui. 🌌🖤 "
+                    "O resto... é o que você escolher me contar.\n"
+                    "🌟 **Celestia:** CONTA CONTA CONTA!! 🌸🤍✨ "
+                    "A Celestia quer saber tudo de você!! 💫☀️"
+                ),
+            ]
+            return await message.reply(random.choice(ops_genericas))
+
+    # ────────────────────────────────────────
     # O QUE SABEM SOBRE MIM / CURIOSO SOBRE SI
     # ────────────────────────────────────────
     if _m(content, [

@@ -774,8 +774,33 @@ def _cooldown_ok(user_id: int) -> bool:
     return False
 
 async def _chamar_traducao(texto: str, direcao: str) -> str:
-    """Tradução via IA desabilitada."""
-    return None
+    """Tradução via MyMemory (API gratuita, sem chave necessária).
+    direcao: 'en_to_pt' ou 'pt_to_en'
+    """
+    if direcao == "en_to_pt":
+        lang_pair = "en|pt-BR"
+    else:
+        lang_pair = "pt-BR|en"
+
+    url = "https://api.mymemory.translated.net/get"
+    params = {
+        "q": texto[:500],  # MyMemory aceita até 500 chars por requisição grátis
+        "langpair": lang_pair,
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                traducao = data.get("responseData", {}).get("translatedText", "")
+                if not traducao or traducao.upper() == texto.upper():
+                    return None
+                return traducao
+    except Exception as e:
+        print(f"[TRANSLATE] Erro na API de tradução: {e}")
+        return None
 
 def _tem_cargo_translate(member) -> bool:
     """Verifica se o membro tem o cargo Translate."""
@@ -1037,7 +1062,17 @@ async def on_message(message: discord.Message):
         and isinstance(message.reference.resolved, discord.Message)
     ):
         ref_msg = message.reference.resolved
-        ref_autor = ref_msg.author
+        ref_autor_raw = ref_msg.author
+        # Garante Member completo com cargos para checar cargo translate
+        if _guild is not None:
+            ref_autor = _guild.get_member(ref_autor_raw.id)
+            if ref_autor is None:
+                try:
+                    ref_autor = await _guild.fetch_member(ref_autor_raw.id)
+                except Exception:
+                    ref_autor = ref_autor_raw
+        else:
+            ref_autor = ref_autor_raw
         if (
             not ref_autor.bot
             and _tem_cargo_translate(ref_autor)
@@ -1076,32 +1111,6 @@ async def on_message(message: discord.Message):
                         pass
                 asyncio.create_task(_deletar_depois_pt(msg_trad))
             return
-
-    # ────────────────────────────────────────
-    # ELOGIO POR MENÇÃO DE NOME — quando alguém cita o nome de um membro especial
-    # FICA ANTES do gate fala_bot para funcionar mesmo em mensagens curtas
-    # como "death", "lc", "emy", "pepo" (sem "aeon"/"celestia" no texto).
-    # Não dispara se a própria pessoa está escrevendo sobre si mesma.
-    # Cooldown de 5 minutos por pessoa mencionada.
-    # ────────────────────────────────────────
-    agora_mencao = time.time()
-    for mid, gatilhos in _GATILHOS_NOME.items():
-        if author_id == mid:
-            continue  # a própria pessoa falando — ignora
-        nome_citado = any(g in content for g in gatilhos)
-        if not nome_citado:
-            continue
-        ultimo_mencao = _cooldown_mencao.get(mid, 0)
-        if agora_mencao - ultimo_mencao < _COOLDOWN_MENCAO_SEGUNDOS:
-            continue
-        _cooldown_mencao[mid] = agora_mencao
-        nome_display = _NOMES_ESPECIAIS[mid]
-        elogio_aeon     = random.choice(_ELOGIOS_AEON[mid])
-        elogio_celestia = random.choice(_ELOGIOS_CELESTIA[mid])
-        return await message.channel.send(
-            f"🌑 **Aeon:** {elogio_aeon}\n"
-            f"🌟 **Celestia:** {elogio_celestia}"
-        )
 
     if not fala_bot:
         return
@@ -1171,6 +1180,30 @@ async def on_message(message: discord.Message):
                 ),
             ]
             return await message.channel.send(random.choice(APRESENTACAO_FORMAL))
+
+    # ────────────────────────────────────────
+    # ELOGIO POR MENÇÃO DE NOME — quando alguém cita o nome de um membro especial
+    # Não dispara se a própria pessoa está escrevendo sobre si mesma.
+    # Cooldown de 5 minutos por pessoa mencionada.
+    # ────────────────────────────────────────
+    agora_mencao = time.time()
+    for mid, gatilhos in _GATILHOS_NOME.items():
+        if author_id == mid:
+            continue  # a própria pessoa falando — ignora
+        nome_citado = any(g in content for g in gatilhos)
+        if not nome_citado:
+            continue
+        ultimo_mencao = _cooldown_mencao.get(mid, 0)
+        if agora_mencao - ultimo_mencao < _COOLDOWN_MENCAO_SEGUNDOS:
+            continue
+        _cooldown_mencao[mid] = agora_mencao
+        nome_display = _NOMES_ESPECIAIS[mid]
+        elogio_aeon     = random.choice(_ELOGIOS_AEON[mid])
+        elogio_celestia = random.choice(_ELOGIOS_CELESTIA[mid])
+        return await message.channel.send(
+            f"🌑 **Aeon:** {elogio_aeon}\n"
+            f"🌟 **Celestia:** {elogio_celestia}"
+        )
 
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais

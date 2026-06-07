@@ -32,8 +32,8 @@ BOT_ID = None  # preencha depois
 CRIADOR_ID = 769951556388257812   # quem criou o bot
 
 # ── Cargo de tradução ──────────────────────────────────────────────────────────
-TRANSLATE_ROLE_ID    = 1513180948424953946  # cargo translate: PT<->EN
-TRANSLATE_ZH_ROLE_ID = None  # cargo translate chinês: PT<->ZH  ← preencha com o ID real do cargo
+TRANSLATE_ROLE_ID    = 1513180948424953946  # cargo translate EN: PT<->EN
+TRANSLATE_ZH_ROLE_ID = 1513180948424953946  # cargo translate ZH: PT<->ZH (mesmo cargo do EN)
 
 # ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
 DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
@@ -775,8 +775,38 @@ def _cooldown_ok(user_id: int) -> bool:
     return False
 
 async def _chamar_traducao(texto: str, direcao: str) -> str:
-    """Tradução via IA desabilitada."""
-    return None
+    """Tradução via MyMemory (API gratuita, sem chave necessária).
+    direcao: 'en_to_pt' | 'pt_to_en' | 'zh_to_pt' | 'pt_to_zh'
+    """
+    _pares = {
+        "en_to_pt": "en|pt-BR",
+        "pt_to_en": "pt-BR|en",
+        "zh_to_pt": "zh|pt-BR",
+        "pt_to_zh": "pt-BR|zh",
+    }
+    lang_pair = _pares.get(direcao)
+    if not lang_pair:
+        return None
+
+    url = "https://api.mymemory.translated.net/get"
+    params = {
+        "q": texto[:500],  # MyMemory aceita até 500 chars por requisição grátis
+        "langpair": lang_pair,
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                traducao = data.get("responseData", {}).get("translatedText", "")
+                if not traducao or traducao.upper() == texto.upper():
+                    return None
+                return traducao
+    except Exception as e:
+        print(f"[TRANSLATE] Erro na API de tradução: {e}")
+        return None
 
 def _tem_cargo_translate(member) -> bool:
     """Verifica se o membro tem o cargo Translate (EN)."""
@@ -785,7 +815,7 @@ def _tem_cargo_translate(member) -> bool:
     return any(r.id == TRANSLATE_ROLE_ID for r in member.roles)
 
 def _tem_cargo_translate_zh(member) -> bool:
-    """Verifica se o membro tem o cargo Translate (ZH)."""
+    """Verifica se o membro tem o cargo Translate (ZH 中文)."""
     if not isinstance(member, discord.Member):
         return False
     if TRANSLATE_ZH_ROLE_ID is None:
@@ -793,69 +823,81 @@ def _tem_cargo_translate_zh(member) -> bool:
     return any(r.id == TRANSLATE_ZH_ROLE_ID for r in member.roles)
 
 def _detectar_chines(texto: str) -> bool:
-    """Detecta caracteres chineses (Han) na mensagem."""
-    import unicodedata
+    """Detecta caracteres chineses (Han/CJK) na mensagem."""
     for ch in texto:
         cp = ord(ch)
-        # Bloco CJK Unified Ideographs e extensões principais
-        if (0x4E00 <= cp <= 0x9FFF or   # CJK Unified Ideographs
-            0x3400 <= cp <= 0x4DBF or   # CJK Extension A
-            0x20000 <= cp <= 0x2A6DF or # CJK Extension B
-            0xF900 <= cp <= 0xFAFF or   # CJK Compatibility Ideographs
-            0x3000 <= cp <= 0x303F):    # CJK Symbols & Punctuation
+        if (0x4E00 <= cp <= 0x9FFF   # CJK Unified Ideographs
+                or 0x3400 <= cp <= 0x4DBF   # CJK Extension A
+                or 0x20000 <= cp <= 0x2A6DF  # CJK Extension B
+                or 0xF900 <= cp <= 0xFAFF    # CJK Compatibility Ideographs
+                or 0x3000 <= cp <= 0x303F):  # CJK Symbols & Punctuation
             return True
     return False
 
 def _detectar_ingles(texto: str) -> bool:
-    """Detecta ingles por vocabulario — usa lista (com repeticao) para pegar frases curtas."""
+    """
+    Detecta inglês por vocabulário.
+    Usa apenas palavras que NÃO existem em português para evitar falsos positivos.
+    Exige pelo menos 2 palavras exclusivas do inglês (ou 1 se a mensagem for muito curta).
+    """
+    import re
+    # Palavras que são exclusivas do inglês (não existem em português)
+    # Removidos: to, no, a, de, or, and, in, on, at, for, of, with, by, not, so,
+    #            man, more, come, most, back, set, end, lol, haha, ok, miss, love
     palavras_en = {
-        "the","is","are","was","were","be","been","being","have","has","had",
-        "do","does","did","will","would","could","should","may","might","shall",
-        "and","but","or","not","this","that","these","those","it","its",
-        "he","she","they","we","you","i","my","your","his","her","our","their",
-        "in","on","at","to","for","of","with","by","from","up","about","into",
-        "what","how","why","when","where","who","which","if","so","just","like",
-        "get","got","go","going","come","see","know","think","want","need",
-        "good","bad","great","nice","ok","okay","yeah","yes","no","hi","hey",
-        "hello","lol","haha","thanks","thank","please","sorry","help","time",
-        "some","all","more","can","make","here","there","now","everything",
-        "something","nothing","everyone","someone","anyone","nobody","anybody",
-        "really","very","much","little","few","many","most","other","another",
-        "because","then","than","when","while","after","before","since","until",
-        "right","wrong","sure","well","still","already","always","never","often",
-        "back","way","thing","things","day","time","year","man","woman","people",
-        "too","also","even","only","same","new","old","big","small","long","high",
-        "own","any","both","each","every","either","neither","enough","such",
-        "feel","felt","tell","told","let","put","keep","start","end","turn",
-        "show","give","gave","take","took","find","found","call","ask","work",
+        # verbos tipicamente ingleses
+        "the","is","are","was","were","been","being","have","has","had",
+        "do","does","did","will","would","could","should","might","shall",
+        "get","got","going","see","know","think","want","need",
+        "feel","felt","tell","told","keep","start","turn",
+        "show","give","gave","take","took","find","found","call","ask",
         "seem","look","play","run","move","live","believe","hold","bring","happen",
         "remember","follow","change","lead","stand","lose","pay","meet","include",
-        "continue","set","learn","miss","eat","watch","everything","anything",
-        "with","without","around","between","through","during","along","across",
-        "behind","below","above","off","over","under","again","further","once",
-        "hey","hi","hello","bye","goodbye","please","thank","thanks","sorry",
-        "okay","ok","yeah","yep","nope","nah","yup","ugh","omg","wtf","lol",
-        "haha","hehe","lmao","bruh","bro","dude","man","babe","love","miss",
-        "today","tomorrow","yesterday","morning","evening","night","week","month",
-        "speaking","talking","looking","thinking","going","doing","coming","saying",
+        "continue","learn","eat","watch",
+        # pronomes e determinantes exclusivos
+        "this","that","these","those","its",
+        "he","she","they","we","you","my","your","his","her","our","their",
+        # palavras funcionais exclusivas do inglês
+        "from","about","into","without","around","between","through",
+        "during","along","across","behind","below","above","further",
+        "what","how","why","when","where","who","which","just","like",
+        "because","while","after","before","since","until",
+        "really","very","much","little","few","many","another",
+        "right","wrong","sure","well","still","already","always","never","often",
+        "same","big","small","long","high",
+        "own","both","each","every","either","neither","enough","such",
+        "something","nothing","everything","everyone","someone","anyone",
+        "nobody","anybody","anything",
+        "thing","things","year","woman","people",
+        # saudções e expressões exclusivamente inglesas
+        "hi","hey","hello","bye","goodbye",
+        "thanks","thank","please","sorry",
+        "yeah","yep","nope","nah","yup","ugh","omg","wtf",
+        "lmao","bruh","bro","dude",
+        "today","tomorrow","yesterday","morning","evening",
+        "speaking","talking","looking","thinking","doing","coming","saying",
         "getting","making","taking","giving","putting","keeping","showing","working",
-        "every","everything","nothing","something","anything","someone","anyone",
+        "can","also","even","only","good","great","nice","okay",
     }
-    # usa lista (nao set) para contar multiplas ocorrencias
+    # Palavras comuns em PT que poderiam estar na lista acima (bloqueio extra)
+    falsos_positivos_pt = {
+        "to","no","na","nos","nas","de","do","da","dos","das",
+        "or","and","in","a","e","o","as","os","um","uma",
+        "for","bem","mal","so","ja","la","ca","vou","vai",
+        "ok","man","mais","mais","nao",
+    }
     words = texto.lower().split()
     if not words:
         return False
-    # remove pontuacao basica de cada palavra
-    import re
     words_clean = [re.sub(r"[^a-z]", "", w) for w in words]
     words_clean = [w for w in words_clean if w]
     if not words_clean:
         return False
-    matches = sum(1 for w in words_clean if w in palavras_en)
+    matches = sum(1 for w in words_clean if w in palavras_en and w not in falsos_positivos_pt)
     total = len(words_clean)
     ratio = matches / total
-    # Aceita se: 1 palavra em ingles numa msg curta, ou 2+ palavras, ou 35%+ de ratio
-    return matches >= 1 and (total <= 3 or matches >= 2 or ratio >= 0.35)
+    # Precisa de pelo menos 2 palavras inglês, ou 1 se a mensagem tiver só 1-2 palavras
+    return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
 
 # ══════════════════════════════════════════════
 # EVENTOS
@@ -1003,8 +1045,8 @@ async def on_message(message: discord.Message):
     # SISTEMA DE TRADUÇÃO — Cargo Translate
     # EN  (TRANSLATE_ROLE_ID)    → 1) fala EN  → traduz EN→PT
     #                               2) alguém responde em PT → traduz PT→EN
-    # ZH  (TRANSLATE_ZH_ROLE_ID) → 1) fala ZH  → traduz ZH→PT
-    #                               2) alguém responde em PT → traduz PT→ZH
+    # ZH  (TRANSLATE_ZH_ROLE_ID) → 3) fala ZH  → traduz ZH→PT
+    #                               4) alguém responde em PT → traduz PT→ZH
     # ════════════════════════════════════════════════════════════════
 
     # Garante que temos o Member completo com cargos (não apenas User do cache)
@@ -1022,12 +1064,9 @@ async def on_message(message: discord.Message):
     autor_tem_translate    = _tem_cargo_translate(_member_completo)
     autor_tem_translate_zh = _tem_cargo_translate_zh(_member_completo)
 
-    # DEBUG — apague depois de confirmar que funciona
-    print(f"[TRANSLATE] autor={message.author} | guild={_guild} | member={_member_completo} | roles={getattr(_member_completo,'roles',[])} | tem_translate={autor_tem_translate} | tem_translate_zh={autor_tem_translate_zh} | detectou_en={_detectar_ingles(message.content)} | detectou_zh={_detectar_chines(message.content)}")
-
     # ── BLOCO INGLÊS ─────────────────────────────────────────────────────────────
-    # Caso 1 — autor TEM cargo translate (EN) e escreveu em inglês
-    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 5:
+    # Caso 1 — autor TEM cargo translate e escreveu em inglês
+    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
         traducao = await _chamar_traducao(message.content, "en_to_pt")
         if traducao:
             embed = discord.Embed(color=0x2b2b3b)
@@ -1056,22 +1095,19 @@ async def on_message(message: discord.Message):
             asyncio.create_task(_deletar_depois(msg_trad))
         return
 
-    # Caso 2 — autor NÃO tem translate (EN), mas está respondendo a alguém que tem
+    # Caso 2 — alguém responde em PT a uma mensagem em inglês — traduz PT→EN
     if (
-        not autor_tem_translate
-        and message.reference is not None
+        message.reference is not None
         and message.reference.resolved is not None
         and isinstance(message.reference.resolved, discord.Message)
+        and not _detectar_ingles(message.content)
+        and not _detectar_chines(message.content)
+        and len(message.content.strip()) >= 2
     ):
         ref_msg = message.reference.resolved
         ref_autor = ref_msg.author
-        if (
-            not ref_autor.bot
-            and _tem_cargo_translate(ref_autor)
-            and not _detectar_ingles(message.content)
-            and not _detectar_chines(message.content)
-            and len(message.content.strip()) >= 5
-        ):
+        # Traduz se a mensagem respondida estava em inglês e não é do próprio bot
+        if not ref_autor.bot and _detectar_ingles(ref_msg.content):
             traducao = await _chamar_traducao(message.content, "pt_to_en")
             if traducao:
                 embed = discord.Embed(color=0x1a1a2e)
@@ -1103,11 +1139,11 @@ async def on_message(message: discord.Message):
                     except Exception:
                         pass
                 asyncio.create_task(_deletar_depois_pt(msg_trad))
-            return
+                return
 
     # ── BLOCO CHINÊS ─────────────────────────────────────────────────────────────
-    # Caso 3 — autor TEM cargo translate (ZH) e escreveu em chinês
-    if autor_tem_translate_zh and _detectar_chines(message.content) and len(message.content.strip()) >= 2:
+    # Caso 3 — autor TEM cargo translate ZH e escreveu em chinês
+    if autor_tem_translate_zh and _detectar_chines(message.content) and len(message.content.strip()) >= 1:
         traducao = await _chamar_traducao(message.content, "zh_to_pt")
         if traducao:
             embed = discord.Embed(color=0x2b1a3b)
@@ -1116,7 +1152,7 @@ async def on_message(message: discord.Message):
                 icon_url=message.author.display_avatar.url
             )
             embed.add_field(
-                name="🀄 Chinês (original)",
+                name="🀄 中文 (original)",
                 value=f"```{message.content}```",
                 inline=False
             )
@@ -1136,22 +1172,19 @@ async def on_message(message: discord.Message):
             asyncio.create_task(_deletar_depois_zh(msg_trad))
         return
 
-    # Caso 4 — autor NÃO tem translate (ZH), mas está respondendo a alguém que tem
+    # Caso 4 — alguém responde em PT a uma mensagem em chinês — traduz PT→ZH
     if (
-        not autor_tem_translate_zh
-        and message.reference is not None
+        message.reference is not None
         and message.reference.resolved is not None
         and isinstance(message.reference.resolved, discord.Message)
+        and not _detectar_chines(message.content)
+        and not _detectar_ingles(message.content)
+        and len(message.content.strip()) >= 2
     ):
         ref_msg_zh = message.reference.resolved
         ref_autor_zh = ref_msg_zh.author
-        if (
-            not ref_autor_zh.bot
-            and _tem_cargo_translate_zh(ref_autor_zh)
-            and not _detectar_chines(message.content)
-            and not _detectar_ingles(message.content)
-            and len(message.content.strip()) >= 5
-        ):
+        # Traduz se a mensagem respondida estava em chinês e não é do próprio bot
+        if not ref_autor_zh.bot and _detectar_chines(ref_msg_zh.content):
             traducao = await _chamar_traducao(message.content, "pt_to_zh")
             if traducao:
                 embed = discord.Embed(color=0x1a0e2e)
@@ -1184,6 +1217,7 @@ async def on_message(message: discord.Message):
                         pass
                 asyncio.create_task(_deletar_depois_pt_zh(msg_trad))
             return
+
 
     if not fala_bot:
         return

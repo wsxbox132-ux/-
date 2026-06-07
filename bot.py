@@ -1052,8 +1052,7 @@ async def on_message(message: discord.Message):
             asyncio.create_task(_deletar_depois(msg_trad))
         return
 
-    # Caso 2 — alguém responde em PT numa conversa com membro translate
-    # Dispara se: (autor TEM translate e respondeu em PT) OU (autor não tem translate mas respondeu a quem tem)
+    # Caso 2 — alguém responde em PT a uma mensagem em inglês — traduz PT→EN
     if (
         message.reference is not None
         and message.reference.resolved is not None
@@ -1062,23 +1061,9 @@ async def on_message(message: discord.Message):
         and len(message.content.strip()) >= 2
     ):
         ref_msg = message.reference.resolved
-        ref_autor_raw = ref_msg.author
-        # Garante Member completo com cargos
-        if _guild is not None:
-            ref_autor = _guild.get_member(ref_autor_raw.id)
-            if ref_autor is None:
-                try:
-                    ref_autor = await _guild.fetch_member(ref_autor_raw.id)
-                except Exception:
-                    ref_autor = ref_autor_raw
-        else:
-            ref_autor = ref_autor_raw
-        # Traduz se: quem enviou tem translate OU quem foi respondido tem translate
-        deve_traduzir = (
-            (autor_tem_translate and not ref_autor.bot)
-            or (not autor_tem_translate and not ref_autor.bot and _tem_cargo_translate(ref_autor))
-        )
-        if deve_traduzir:
+        ref_autor = ref_msg.author
+        # Traduz se a mensagem respondida estava em inglês e não é do próprio bot
+        if not ref_autor.bot and _detectar_ingles(ref_msg.content):
             traducao = await _chamar_traducao(message.content, "pt_to_en")
             if traducao:
                 embed = discord.Embed(color=0x1a1a2e)

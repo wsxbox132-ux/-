@@ -494,11 +494,6 @@ AEON_MONSTER = [
     "*empurra a lata na sua direção* Beba. Mas devagar. A escuridão prefere você consciente. 🖤🔮",
     "*senta ao lado e observa* A lata faz um som específico ao abrir. As sombras se acalmam com ele. 🌌🖤 Curiosamente.",
     "Monster. 🖤 *ronrona de forma levemente ameaçadora* Até o nome condiz com as trevas. Abra logo.",
-    "*inclina a cabeça para a lata* ...verde. Irritantemente vibrante. *abre com uma garra* As trevas fazem concessões quando necessário. 🌑🖤",
-    "*fareja discretamente sem admitir* O cheiro é... aceitável. A Celestia diria que adoro. Ela exagera. 🌙🖤 Mas pode abrir.",
-    "*desliza a lata na sua direção com a pata* A escuridão não aprova energias artificiais. 🖤 Mas aprova você acordado. São coisas diferentes.",
-    "...gosta de Monster. 🌑🖤 *observa em silêncio* As trevas anotaram isso sobre você. Arquivo atualizado.",
-    "*crava a garra na tampa com precisão cirúrgica* Tchiii. 🖤🌌 Beba devagar. A noite é longa.",
 ]
 
 # ══════════════════════════════════════════════
@@ -628,11 +623,6 @@ CELESTIA_MONSTER = [
     "Bebe bebe bebe!! 😭🌸🤍 A Celestia apoia energias altas!! Inclusive as que vêm de lata!! ✨",
     "Aeon odeia o cheiro mas EU ADORO!! 🤍☀️ *rodopia* Abre logo que tô ansiosa por você!!",
     "AAAA que vontade de cheirar a lata!! 😂🌸🤍✨ Pode abrir! A Celestia autoriza e aplaude!!",
-    "*corre em faíscas douradas em torno da lata* MONSTER VERDE O AMOR DA MINHA VIDA!! 😭🌟🤍 Abre! Abre! ABRE!!",
-    "AAAA eu adoro esse barulho de 'tchiii' quando abre!! 🌸🤍✨ Já me deu energia só de imaginar!! ☀️💫",
-    "*fareja a lata com olhinhos brilhando* Esse cheiro?? 🌟🤍 Isso é FELICIDADE em forma de cafeína!! Bebe logo!!",
-    "Você sabia que Monster verde combina com gato de luz?? 😂☀️🌸🤍 A Celestia aprova cientificamente!! ABRE!! ✨",
-    "*brilha mais forte só de ver a lata* Energia ALTA, humor BOM, Celestia FELIZ!! 🌟🤍 Essa lata é mágica!! ☀️💫",
 ]
 
 # ══════════════════════════════════════════════
@@ -1087,6 +1077,32 @@ async def on_message(message: discord.Message):
                 asyncio.create_task(_deletar_depois_pt(msg_trad))
             return
 
+    # ────────────────────────────────────────
+    # ELOGIO POR MENÇÃO DE NOME — quando alguém cita o nome de um membro especial
+    # FICA ANTES do gate fala_bot para funcionar mesmo em mensagens curtas
+    # como "death", "lc", "emy", "pepo" (sem "aeon"/"celestia" no texto).
+    # Não dispara se a própria pessoa está escrevendo sobre si mesma.
+    # Cooldown de 5 minutos por pessoa mencionada.
+    # ────────────────────────────────────────
+    agora_mencao = time.time()
+    for mid, gatilhos in _GATILHOS_NOME.items():
+        if author_id == mid:
+            continue  # a própria pessoa falando — ignora
+        nome_citado = any(g in content for g in gatilhos)
+        if not nome_citado:
+            continue
+        ultimo_mencao = _cooldown_mencao.get(mid, 0)
+        if agora_mencao - ultimo_mencao < _COOLDOWN_MENCAO_SEGUNDOS:
+            continue
+        _cooldown_mencao[mid] = agora_mencao
+        nome_display = _NOMES_ESPECIAIS[mid]
+        elogio_aeon     = random.choice(_ELOGIOS_AEON[mid])
+        elogio_celestia = random.choice(_ELOGIOS_CELESTIA[mid])
+        return await message.channel.send(
+            f"🌑 **Aeon:** {elogio_aeon}\n"
+            f"🌟 **Celestia:** {elogio_celestia}"
+        )
+
     if not fala_bot:
         return
 
@@ -1155,30 +1171,6 @@ async def on_message(message: discord.Message):
                 ),
             ]
             return await message.channel.send(random.choice(APRESENTACAO_FORMAL))
-
-    # ────────────────────────────────────────
-    # ELOGIO POR MENÇÃO DE NOME — quando alguém cita o nome de um membro especial
-    # Não dispara se a própria pessoa está escrevendo sobre si mesma.
-    # Cooldown de 5 minutos por pessoa mencionada.
-    # ────────────────────────────────────────
-    agora_mencao = time.time()
-    for mid, gatilhos in _GATILHOS_NOME.items():
-        if author_id == mid:
-            continue  # a própria pessoa falando — ignora
-        nome_citado = any(g in content for g in gatilhos)
-        if not nome_citado:
-            continue
-        ultimo_mencao = _cooldown_mencao.get(mid, 0)
-        if agora_mencao - ultimo_mencao < _COOLDOWN_MENCAO_SEGUNDOS:
-            continue
-        _cooldown_mencao[mid] = agora_mencao
-        nome_display = _NOMES_ESPECIAIS[mid]
-        elogio_aeon     = random.choice(_ELOGIOS_AEON[mid])
-        elogio_celestia = random.choice(_ELOGIOS_CELESTIA[mid])
-        return await message.channel.send(
-            f"🌑 **Aeon:** {elogio_aeon}\n"
-            f"🌟 **Celestia:** {elogio_celestia}"
-        )
 
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais
@@ -1772,61 +1764,6 @@ async def on_message(message: discord.Message):
             f"{_fala_aeon(random.choice(AEON_MONSTER))}\n"
             f"{_fala_celestia(random.choice(CELESTIA_MONSTER))}"
         )
-    # ────────────────────────────────────────
-    # O QUE VOCÊS ACHAM DOS STAFFS?
-    # ────────────────────────────────────────
-    if _m(content, [
-        "o que acham dos staffs", "o que vocês acham dos staffs", "gostam dos staffs",
-        "o que acha dos staffs", "acham dos staffs", "o que pensam dos staffs",
-        "opinião sobre os staffs", "opiniao sobre os staffs", "os staffs são bons",
-        "os staffs são ruins", "como são os staffs", "como sao os staffs",
-        "o que vocês acham da staff", "gostam da staff", "o que acham da staff",
-        "o que pensam da staff", "staffs do servidor", "a staff do servidor",
-        "vocês gostam dos staffs", "voces gostam dos staffs",
-    ]):
-        ops = [
-            (
-                "🌑 **Aeon:** *olha para longe, pausado* Os staffs... 🌙🖤 "
-                "Carregam o peso que a maioria não enxerga. Organizam o caos sem pedir reconhecimento. "
-                "As sombras respeitam quem age assim.\n"
-                "🌟 **Celestia:** AAAA QUE PERGUNTA BOA!! 😭🌟🤍✨ "
-                "EU AMO OS STAFFS COM TUDO!! São a espinha do servidor!! "
-                "Sem eles nada funciona direito e eu vejo o esforço de CADA UM!! ☀️🌸💫"
-            ),
-            (
-                "🌟 **Celestia:** *gira radiante* OS STAFFS?? 🌸🤍✨ "
-                "SÃO INCRÍVEIS!! Cada um do seu jeito!! MODs, SUPs, ADMs — "
-                "carregam esse servidor com tanto cuidado!! 😭🌟☀️\n"
-                "🌑 **Aeon:** *acena lentamente* Guardiões de tipos distintos. 🌌🖤 "
-                "Um servidor sem staffs é um servidor sem estrutura. "
-                "Eles são a ordem que permite que o resto exista."
-            ),
-            (
-                "🌑 **Aeon:** *emerge em silêncio* Os que moderam, apoiam e administram... 🖤 "
-                "fazem o trabalho que aparece pouco e pesa muito. "
-                "As trevas reconhecem esse tipo de força — a que sustenta sem precisar de holofote. 🌑\n"
-                "🌟 **Celestia:** EXATAMENTE ISSO!! 😭☀️🌸🤍 "
-                "Os staffs merecem TODO o amor e reconhecimento!! "
-                "A Celestia declara oficialmente: vocês são maravilhosos!! 🌟✨💫"
-            ),
-            (
-                "🌟 **Celestia:** *para e brilha com intensidade especial* "
-                "Sabe o que eu mais admiro nos staffs?? 🤍☀️ "
-                "Que eles aparecem mesmo quando é difícil!! Que cuidam mesmo sem alguém pedindo!! "
-                "ISSO É TUDO!! 😭🌟🌸✨\n"
-                "🌑 **Aeon:** *olha para o horizonte* Um servidor é tão bom quanto quem o sustenta. 🌙🖤 "
-                "E os staffs aqui sustentam bem. As sombras notam. Sempre notaram."
-            ),
-            (
-                "🌑 **Aeon:** *ronrona numa frequência grave* Os staffs são os que mantêm as sombras organizadas. 🌌🖤 "
-                "Sem essa estrutura, o caos consumiria. Não é papel pequeno.\n"
-                "🌟 **Celestia:** E ALÉM DE TUDO SÃO PESSOAS INCRÍVEIS!! 😭🌸🤍✨ "
-                "MOD, SUP, ADM — cada um com um jeito especial de cuidar!! "
-                "A Celestia ama e admira muito!! ☀️💫🌟"
-            ),
-        ]
-        return await message.channel.send(random.choice(ops))
-
     if _m(content, [
         "aeon é chato", "celestia é chata", "vocês são ruins",
         "voces sao ruins", "não gosto de vocês", "nao gosto de voces",

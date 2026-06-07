@@ -692,6 +692,8 @@ async def on_message(message: discord.Message):
         "bom dia", "boa tarde", "boa noite", "boa madrugada",
         "oi gatos", "oi gatinhos", "olá gatos", "ola gatos",
         "ei gatos", "ei gatinhos", "hey gatos",
+        # oi genérico e gírias de cumprimento (apenas strings seguras como substring)
+        "eae", "e aí", "e ai", "salve",
         # check-in
         "como vocês estão", "como voces estao", "como vocês tão", "como voces tao",
         "tudo bem com vocês", "tudo bem com voces",
@@ -770,7 +772,9 @@ async def on_message(message: discord.Message):
         "obrigado gatos", "obrigada gatos", "valeu gatos",
         "obrigado gatinhos", "obrigada gatinhos",
     ]
-    tem_gatilho = any(g in content for g in _GATILHOS_SEM_NOME)
+    _OI_EXACT = {"oi", "oii", "oiii", "oiiii", "oiiiii", "oiiiiii", "oiiiiiiii",
+                 "eae", "e ai", "e aí", "salve"}
+    tem_gatilho = any(g in content for g in _GATILHOS_SEM_NOME) or content.strip().rstrip("!? ") in _OI_EXACT
 
     # Só responde se: @ puro OU texto tem "aeon"/"celestia" OU tem gatilho sem nome
     fala_bot = mencao_pura or tem_nome or tem_gatilho
@@ -1532,7 +1536,11 @@ async def on_message(message: discord.Message):
         "hey aeon", "hey celestia", "hello aeon", "hello celestia",
         "oi gatos", "oi gatinhos", "oi aeon e celestia", "oii aeon", "oii celestia",
         "oiii aeon", "oiii celestia",
-    ]):
+        "eae", "e aí", "e ai", "salve", "fala",
+    ]) or content.strip().rstrip("!? ") in [
+        "oi", "oii", "oiii", "oiiii", "oiiiii", "oiiiiii", "oiiiiiiii",
+        "eae", "e ai", "e aí", "salve",
+    ]:
         if "aeon" in content and "celestia" not in content:
             ops = [
                 "*abre um olho* ...você me chamou. 🖤 O que precisa?",

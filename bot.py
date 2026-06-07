@@ -385,6 +385,14 @@ AEON_SOLTEIRO = [
     "Solteiro. 🌑🖤 A escuridão não ciúma... mas está sempre presente.",
 ]
 
+AEON_MONSTER = [
+    "*observa a lata com um olho entreaberto* ...verde. Brilhante. Cheira a cafeína e más decisões. 🌑🖤 Abre.",
+    "As trevas aprovam qualquer coisa que mantenha você acordado o suficiente para me fazer companhia. 🌙🖤 *abre com a garra*",
+    "*empurra a lata na sua direção* Beba. Mas devagar. A escuridão prefere você consciente. 🖤🔮",
+    "*senta ao lado e observa* A lata faz um som específico ao abrir. As sombras se acalmam com ele. 🌌🖤 Curiosamente.",
+    "Monster. 🖤 *ronrona de forma levemente ameaçadora* Até o nome condiz com as trevas. Abra logo.",
+]
+
 # ══════════════════════════════════════════════
 # LISTAS DE DIÁLOGOS — CELESTIA (LUZ)
 # ══════════════════════════════════════════════
@@ -504,6 +512,14 @@ CELESTIA_SOLTEIRA = [
     "*ronrona* Meu coração já está tão cheio de amor por todo mundo que mal caberia mais!! 🌸🤍☀️",
     "AAAA que pergunta!! 😭🤍 Eu e o Aeon temos uma relação complicada de opostos... 🌑☀️ mas não conta!",
     "Livre como a luz!! ☀️🤍✨ Que vai pra todo lado sem pedir permissão!! 😂",
+]
+
+CELESTIA_MONSTER = [
+    "ABRE A LATA!! 😭🤍✨ *bate as patinhas cheias de brilho* Esse barulhinho de abrir é o meu favorito!!",
+    "*gira em volta da lata* AAAA Monster verde!! 🌟🤍 O cheiro já me animou e eu nem tomei!! ☀️💫",
+    "Bebe bebe bebe!! 😭🌸🤍 A Celestia apoia energias altas!! Inclusive as que vêm de lata!! ✨",
+    "Aeon odeia o cheiro mas EU ADORO!! 🤍☀️ *rodopia* Abre logo que tô ansiosa por você!!",
+    "AAAA que vontade de cheirar a lata!! 😂🌸🤍✨ Pode abrir! A Celestia autoriza e aplaude!!",
 ]
 
 # ══════════════════════════════════════════════
@@ -1600,8 +1616,25 @@ async def on_message(message: discord.Message):
         )
 
     # ────────────────────────────────────────
-    # INSULTO / ALGO RUIM
+    # MONSTER / LATA
     # ────────────────────────────────────────
+    if _m(content, [
+        "abrir lata monster", "abre lata monster", "abre a lata", "abrir a lata",
+        "lata de monster", "lata monster", "tô bebendo monster", "to bebendo monster",
+        "bebendo monster", "monster energy", "quero um monster", "me dá um monster",
+        "me da um monster", "tomar monster", "tomei monster", "vou tomar monster",
+        "monster aeon", "monster celestia", "aeon monster", "celestia monster",
+        "abrir monstri", "abre monstri", "lata monstri", "monstri",
+        "bebendo monstri", "tomando monstri",
+    ]):
+        if "aeon" in content and "celestia" not in content:
+            return await message.channel.send(_fala_aeon(random.choice(AEON_MONSTER)))
+        if "celestia" in content and "aeon" not in content:
+            return await message.channel.send(_fala_celestia(random.choice(CELESTIA_MONSTER)))
+        return await message.channel.send(
+            f"{_fala_aeon(random.choice(AEON_MONSTER))}\n"
+            f"{_fala_celestia(random.choice(CELESTIA_MONSTER))}"
+        )
     if _m(content, [
         "aeon é chato", "celestia é chata", "vocês são ruins",
         "voces sao ruins", "não gosto de vocês", "nao gosto de voces",
@@ -2692,6 +2725,30 @@ async def on_message(message: discord.Message):
             (
                 "🌟 **Celestia:** AAAAA EU TAMBÉM TÔ COM FOME!! 😭🌟🤍 Solidariedade total!!\n"
                 "🌑 **Aeon:** *fita você* ...vá comer. Não há heroísmo em passar fome. 🖤"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, [
+        "abrir lata monster", "abre lata monster", "abre a lata", "abrir a lata",
+        "lata de monster", "lata monster", "tô bebendo monster", "to bebendo monster",
+        "bebendo monster", "monster energy", "quero um monster", "me dá um monster",
+        "me da um monster", "tomar monster", "tomei monster", "vou tomar monster",
+        "abrir monstri", "abre monstri", "lata monstri", "monstri",
+        "bebendo monstri", "tomando monstri",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *observa a lata com olhos entrecerrados* ...verde. Brilhante. Cheira a cafeína e más decisões. 🌙🖤 Abre logo.\n"
+                "🌟 **Celestia:** AAAA ABRE ABRE ABRE!! 😭🌸🤍✨ Esse barulhinho de abrir é o meu favorito!!"
+            ),
+            (
+                "🌟 **Celestia:** MONSTER!! 😭🌟🤍 *gira em volta da lata* Bebe bebe bebe!! A Celestia apoia energias altas!! ☀️💫\n"
+                "🌑 **Aeon:** ...as trevas aprovam qualquer coisa que te mantenha desperto o suficiente pra me fazer companhia. 🖤 Beba."
+            ),
+            (
+                "🌑 **Aeon:** *empurra a lata na sua direção com a garra* Beba. Devagar. A escuridão prefere você consciente. 🖤🔮\n"
+                "🌟 **Celestia:** O Aeon sendo gentil do jeito dele!! 😂🌸🤍 Vai lá!! A Celestia também quer ouvir o 'tsss' da lata!! ✨"
             ),
         ]
         return await message.channel.send(random.choice(ops))

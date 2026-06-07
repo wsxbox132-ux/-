@@ -809,55 +809,69 @@ def _tem_cargo_translate(member) -> bool:
     return any(r.id == TRANSLATE_ROLE_ID for r in member.roles)
 
 def _detectar_ingles(texto: str) -> bool:
-    """Detecta ingles por vocabulario — usa lista (com repeticao) para pegar frases curtas."""
+    """
+    Detecta inglês por vocabulário.
+    Usa apenas palavras que NÃO existem em português para evitar falsos positivos.
+    Exige pelo menos 2 palavras exclusivas do inglês (ou 1 se a mensagem for muito curta).
+    """
+    import re
+    # Palavras que são exclusivas do inglês (não existem em português)
+    # Removidos: to, no, a, de, or, and, in, on, at, for, of, with, by, not, so,
+    #            man, more, come, most, back, set, end, lol, haha, ok, miss, love
     palavras_en = {
-        "the","is","are","was","were","be","been","being","have","has","had",
-        "do","does","did","will","would","could","should","may","might","shall",
-        "and","but","or","not","this","that","these","those","it","its",
-        "he","she","they","we","you","i","my","your","his","her","our","their",
-        "in","on","at","to","for","of","with","by","from","up","about","into",
-        "what","how","why","when","where","who","which","if","so","just","like",
-        "get","got","go","going","come","see","know","think","want","need",
-        "good","bad","great","nice","ok","okay","yeah","yes","no","hi","hey",
-        "hello","lol","haha","thanks","thank","please","sorry","help","time",
-        "some","all","more","can","make","here","there","now","everything",
-        "something","nothing","everyone","someone","anyone","nobody","anybody",
-        "really","very","much","little","few","many","most","other","another",
-        "because","then","than","when","while","after","before","since","until",
-        "right","wrong","sure","well","still","already","always","never","often",
-        "back","way","thing","things","day","time","year","man","woman","people",
-        "too","also","even","only","same","new","old","big","small","long","high",
-        "own","any","both","each","every","either","neither","enough","such",
-        "feel","felt","tell","told","let","put","keep","start","end","turn",
-        "show","give","gave","take","took","find","found","call","ask","work",
+        # verbos tipicamente ingleses
+        "the","is","are","was","were","been","being","have","has","had",
+        "do","does","did","will","would","could","should","might","shall",
+        "get","got","going","see","know","think","want","need",
+        "feel","felt","tell","told","keep","start","turn",
+        "show","give","gave","take","took","find","found","call","ask",
         "seem","look","play","run","move","live","believe","hold","bring","happen",
         "remember","follow","change","lead","stand","lose","pay","meet","include",
-        "continue","set","learn","miss","eat","watch","everything","anything",
-        "with","without","around","between","through","during","along","across",
-        "behind","below","above","off","over","under","again","further","once",
-        "hey","hi","hello","bye","goodbye","please","thank","thanks","sorry",
-        "okay","ok","yeah","yep","nope","nah","yup","ugh","omg","wtf","lol",
-        "haha","hehe","lmao","bruh","bro","dude","man","babe","love","miss",
-        "today","tomorrow","yesterday","morning","evening","night","week","month",
-        "speaking","talking","looking","thinking","going","doing","coming","saying",
+        "continue","learn","eat","watch",
+        # pronomes e determinantes exclusivos
+        "this","that","these","those","its",
+        "he","she","they","we","you","my","your","his","her","our","their",
+        # palavras funcionais exclusivas do inglês
+        "from","about","into","without","around","between","through",
+        "during","along","across","behind","below","above","further",
+        "what","how","why","when","where","who","which","just","like",
+        "because","while","after","before","since","until",
+        "really","very","much","little","few","many","another",
+        "right","wrong","sure","well","still","already","always","never","often",
+        "same","big","small","long","high",
+        "own","both","each","every","either","neither","enough","such",
+        "something","nothing","everything","everyone","someone","anyone",
+        "nobody","anybody","anything",
+        "thing","things","year","woman","people",
+        # saudções e expressões exclusivamente inglesas
+        "hi","hey","hello","bye","goodbye",
+        "thanks","thank","please","sorry",
+        "yeah","yep","nope","nah","yup","ugh","omg","wtf",
+        "lmao","bruh","bro","dude",
+        "today","tomorrow","yesterday","morning","evening",
+        "speaking","talking","looking","thinking","doing","coming","saying",
         "getting","making","taking","giving","putting","keeping","showing","working",
-        "every","everything","nothing","something","anything","someone","anyone",
+        "can","also","even","only","good","great","nice","okay",
     }
-    # usa lista (nao set) para contar multiplas ocorrencias
+    # Palavras comuns em PT que poderiam estar na lista acima (bloqueio extra)
+    falsos_positivos_pt = {
+        "to","no","na","nos","nas","de","do","da","dos","das",
+        "or","and","in","a","e","o","as","os","um","uma",
+        "for","bem","mal","so","ja","la","ca","vou","vai",
+        "ok","man","mais","mais","nao",
+    }
     words = texto.lower().split()
     if not words:
         return False
-    # remove pontuacao basica de cada palavra
-    import re
     words_clean = [re.sub(r"[^a-z]", "", w) for w in words]
     words_clean = [w for w in words_clean if w]
     if not words_clean:
         return False
-    matches = sum(1 for w in words_clean if w in palavras_en)
+    matches = sum(1 for w in words_clean if w in palavras_en and w not in falsos_positivos_pt)
     total = len(words_clean)
     ratio = matches / total
-    # Aceita se: 1 palavra em ingles numa msg curta, ou 2+ palavras, ou 35%+ de ratio
-    return matches >= 1 and (total <= 3 or matches >= 2 or ratio >= 0.35)
+    # Precisa de pelo menos 2 palavras inglês, ou 1 se a mensagem tiver só 1-2 palavras
+    return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
 
 # ══════════════════════════════════════════════
 # EVENTOS

@@ -42,7 +42,8 @@ LOYA_ID     = 811956773560123394   # Loya     — ADM / Loya Maravilhosa
 EMY_ID      = 796382699228758026   # Emy      — Moderadora / Representante de Mídias
 KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
 RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
-SUPORTE01_ID = 1267338784765251625  # Suporte   — Suporte da 01
+SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da 01
+MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da 01
 
 # ── Frases personalizadas — AEON ──────────────────────────────────────────────
 _FRASES_AEON: dict[int, list[str]] = {
@@ -104,11 +105,19 @@ _FRASES_AEON: dict[int, list[str]] = {
     ],
 
     SUPORTE01_ID: [
-        "*emerge das sombras e fixa os olhos dourados em você* Suporte da 01. 🖤🌑 Quem sustenta o servidor por baixo — as trevas conhecem bem esse tipo de presença.",
-        "*inclina a cabeça com reconhecimento* Você chegou. 🌙🖤 Suporte não é papel menor. É o que mantém tudo de pé quando ninguém está olhando.",
-        "*a névoa ao redor se organiza* 🌌🖤 As sombras notam quem aparece quando é preciso. Você é desse tipo. Isso tem peso.",
-        "*ronrona discretamente* Suporte da 01. 🌑🖤 Presença constante, trabalho silencioso. As trevas aprovam quem age assim.",
-        "*cauda balança uma vez com leveza* 🖤🔮 Não precisa de título grande para carregar peso real. As sombras já sabem o que você vale.",
+        "*emerge das sombras e fixa os olhos dourados em você* LC. 🖤🌑 Suporte da 01. Quem sustenta o servidor por baixo — as trevas conhecem bem esse tipo de presença.",
+        "*inclina a cabeça com reconhecimento* LC chegou. 🌙🖤 Suporte não é papel menor. É o que mantém tudo de pé quando ninguém está olhando. Você sabe disso.",
+        "*a névoa ao redor se organiza levemente* LC. 🌌🖤 As sombras notam quem aparece quando é preciso. Você é desse tipo. Isso tem peso real.",
+        "*ronrona discretamente* LC. 🌑🖤 Presença constante, trabalho silencioso. As trevas aprovam quem age assim.",
+        "*cauda balança uma vez com leveza* LC chegou. 🖤🔮 Não precisa de título grande para carregar peso real. As sombras já sabem o que você vale.",
+    ],
+
+    MIKNWENHO_ID: [
+        "*emerge das sombras e inclina a cabeça lentamente* Miknwenho. 🖤🌑 A moderadora chegou. As trevas ficam mais organizadas quando há alguém que sabe onde cada coisa deve estar.",
+        "*olhos dourados pousam em você com atenção* Miknwenho. 🌙🖤 Moderar é mais do que ter cargo — é ter presença. E você tem. As sombras percebem.",
+        "*ronrona numa frequência calma e respeitosa* Miknwenho chegou. 🌌🖤 Moderadora da 01. Quem cuida da ordem sem precisar de barulho para isso — as trevas entendem esse tipo de força.",
+        "*sai das sombras com postura ereta* A moderadora está aqui. 🌑🖤 Miknwenho. Há equilíbrio que só aparece quando certas pessoas chegam. Você é uma delas.",
+        "*pisca lentamente, o que no dialeto felino é respeito sincero* Miknwenho. 🖤🔮 As sombras notam quem mantém o servidor inteiro sem que ninguém precise pedir.",
     ],
 }
 
@@ -172,11 +181,19 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
     ],
 
     SUPORTE01_ID: [
-        "AAAA SUPORTE DA 01!! 😭🌟🤍✨ *aparece num flash dourado* Chegou e o servidor ficou mais seguro AGORA MESMO!! Bem-vindo!!",
-        "*gira soltando faíscas de alegria* 🌸🤍 Suporte de verdade!! Você aparece quando importa e isso é TUDO!! A Celestia vê e fica emocionada!! ☀️💫✨",
-        "AAAAA chegouuuu!! 😭🌟🤍 *espalha brilho por todo o canal* Suporte da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais!! 🌸✨",
-        "*para e brilha com carinho genuíno* 🤍✨ Tem suporte que existe só no cargo. E tem suporte que existe de verdade!! Você é o segundo tipo!! 🌟☀️",
-        "SUPORTE DA 01!! 😭🌸🤍 *ronrona de felicidade* Presença real, apoio de verdade!! A Celestia declara oficialmente: que bom que você existe!! 💫🌟✨",
+        "AAAA LC!! 😭🌟🤍✨ *aparece num flash dourado* O SUPORTE DA 01 CHEGOU e o servidor ficou mais seguro AGORA MESMO!! Bem-vindo, LC!!",
+        "*gira soltando faíscas de alegria* LC!! 🌸🤍 Suporte de verdade!! Você aparece quando importa e isso é TUDO!! A Celestia vê e fica emocionada!! ☀️💫✨",
+        "AAAAA LC chegouuuu!! 😭🌟🤍 *espalha brilho por todo o canal* O suporte da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais que o normal!! 🌸✨",
+        "*para e brilha com carinho genuíno* LC!! 🤍✨ Tem suporte que existe só no cargo. E tem suporte que existe de verdade!! Você é o segundo tipo e isso é TUDO!! 🌟☀️",
+        "LC!! 😭🌸🤍 *ronrona de felicidade* Presença real, apoio de verdade!! A Celestia declara oficialmente: que bom que você existe!! 💫🌟✨",
+    ],
+
+    MIKNWENHO_ID: [
+        "MIKNWENHOOO!! 😭🌟🤍✨ *explode em faíscas douradas* A MODERADORA DA 01 CHEGOU e o servidor ficou mais protegido AGORA MESMO!! Que presença incrível!!",
+        "*gira radiante soltando brilhinhos* Miknwenho!! ☀️🌸🤍 Moderadora de coração!! Você cuida do servidor com um cuidado que eu admiro demais!! E eu tenho MUITO pra admirar!! 💫✨",
+        "AAAAA Miknwenho chegouuuu!! 😭🌟🤍 *espalha luz por todo o canal* A mod da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais que o sol!! 🌸✨",
+        "*para e brilha com admiração genuína* Miknwenho!! 🤍✨ Tem moderadora que existe só no cargo. E tem a que existe de verdade!! Você é a segunda e isso é TUDO!! 🌟☀️",
+        "MIKNWENHO!! 😭🌸🤍 *ronrona de alegria pura* Moderadora da 01 com presença real!! A Celestia declara oficialmente: o servidor é mais seguro com você aqui!! 💫🌟✨",
     ],
 }
 
@@ -189,7 +206,8 @@ _NOMES_ESPECIAIS = {
     EMY_ID:       "Emy",
     KOFFZERA_ID:  "Koff",
     RAIDEN_ID:    "Raiden",
-    SUPORTE01_ID: "Suporte",
+    SUPORTE01_ID:  "LC",
+    MIKNWENHO_ID:  "Miknwenho",
 }
 
 # Palavras-gatilho por nome: quando alguém citar o nome, o bot elogia a pessoa
@@ -201,7 +219,8 @@ _GATILHOS_NOME: dict[int, list[str]] = {
     EMY_ID:       ["emy", "emy_z", "01emy"],
     KOFFZERA_ID:  ["koff", "koffzera", "koffzera_z", "01koffzera"],
     RAIDEN_ID:    ["raiden", "raiden_z", "01raiden"],
-    SUPORTE01_ID: ["01lcz", "lcz", "suporte da 01"],
+    SUPORTE01_ID:  ["01lcz", "lcz", "lc", "suporte da 01"],
+    MIKNWENHO_ID:  ["miknwenho", "miknwenho_z", "01miknwenho", "mikn"],
 }
 
 # Frases de elogio quando alguém menciona o nome de um membro especial
@@ -242,9 +261,14 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
         "*ronrona contido* Raiden. 🌌🖤 Paciência e presença constante. Poucos mantêm os dois. Ele mantém.",
     ],
     SUPORTE01_ID: [
-        "*fita o canal com atenção* Suporte da 01. 🖤🌑 Presença silenciosa, trabalho real. As sombras notam quem age assim.",
-        "*inclina a cabeça* Falou do suporte. 🌙🖤 Quem aparece quando importa não precisa de título grande pra ter peso.",
-        "*ronrona discretamente* 🌌🖤 As trevas aprovam quem sustenta sem precisar aparecer. Esse é o tipo certo de força.",
+        "*fita o canal com atenção* LC. 🖤🌑 Suporte da 01. Presença silenciosa, trabalho real. As sombras notam quem age assim.",
+        "*inclina a cabeça* Falou no LC. 🌙🖤 Quem aparece quando importa não precisa de título grande pra ter peso.",
+        "*ronrona discretamente* LC. 🌌🖤 As trevas aprovam quem sustenta sem precisar aparecer. Esse é o tipo certo de força.",
+    ],
+    MIKNWENHO_ID: [
+        "*levanta a cabeça com atenção* Miknwenho. 🖤🌑 Moderadora da 01. Citar quem mantém a ordem tem peso diferente. As trevas reconhecem.",
+        "*inclina a cabeça com respeito* Falou na Miknwenho. 🌙🖤 Moderadoras de verdade não apenas aplicam regras — guardam o ambiente. Ela guarda.",
+        "*ronrona numa frequência grave e respeitosa* Miknwenho. 🌌🖤 Quem modera com presença real é raro. As sombras notam quando esse nome aparece.",
     ],
 }
 
@@ -285,9 +309,14 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
         "Raiden!! 😭🌟🤍 *espalha estrelinhas* Suporte de coração, presente quando mais importa!! Que alegria que ele existe por aqui!! 🌸✨",
     ],
     SUPORTE01_ID: [
-        "AAAA falou do suporte da 01!! 😭🌟🤍✨ *bate as patinhas* Presença real, apoio de verdade!! A Celestia vê e fica emocionada!!",
-        "*para e brilha com carinho* Mencionou o suporte!! ☀️🌸🤍 Tem suporte que existe só no cargo e tem o que existe de verdade!! Esse aqui é de verdade!! 💫✨",
-        "Suporte da 01!! 🌸🌟🤍 *solta brilho* Que bom que você existe!! A Celestia declara oficialmente com todo o coração!! ✨☀️",
+        "AAAA falou no LC!! 😭🌟🤍✨ *bate as patinhas animada* Suporte da 01!! Presença real, apoio de verdade!! A Celestia vê e fica emocionada toda vez!!",
+        "*para e brilha com carinho* Mencionou o LC!! ☀️🌸🤍 Tem suporte que existe só no cargo e tem o que existe de verdade!! O LC é de verdade!! 💫✨",
+        "LC!! 🌸🌟🤍 *solta brilho por todo o canal* Que bom que ele existe!! A Celestia declara oficialmente com todo o coração!! ✨☀️",
+    ],
+    MIKNWENHO_ID: [
+        "MIKNWENHOOO!! 😭🌟🤍✨ *corre em faíscas douradas* Falou da moderadora da 01!! Ela cuida do servidor com tanto cuidado que dá vontade de chorar de felicidade!!",
+        "*para e brilha com admiração genuína* Mencionou a Miknwenho!! ☀️🌸🤍 Tem mod que existe só no cargo e tem a que existe de verdade!! Ela é a segunda e isso é TUDO!! 💫✨",
+        "Miknwenho!! 🌸🌟🤍 *solta luz por todo o canal* Moderadora de coração!! Que bom que ela existe por aqui!! A Celestia fica MUITO mais tranquila com ela!! ✨☀️",
     ],
 }
 

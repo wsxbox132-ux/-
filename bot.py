@@ -32,8 +32,7 @@ BOT_ID = None  # preencha depois
 CRIADOR_ID = 769951556388257812   # quem criou o bot
 
 # ── Cargo de tradução ──────────────────────────────────────────────────────────
-TRANSLATE_ROLE_ID    = 1513180948424953946  # cargo translate EN: PT<->EN
-TRANSLATE_ZH_ROLE_ID = 1513180948424953946  # cargo translate ZH: PT<->ZH (mesmo cargo do EN)
+TRANSLATE_ROLE_ID = 1513180948424953946  # cargo translate: PT->EN e EN->PT
 
 # ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
 DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
@@ -776,17 +775,12 @@ def _cooldown_ok(user_id: int) -> bool:
 
 async def _chamar_traducao(texto: str, direcao: str) -> str:
     """Tradução via MyMemory (API gratuita, sem chave necessária).
-    direcao: 'en_to_pt' | 'pt_to_en' | 'zh_to_pt' | 'pt_to_zh'
+    direcao: 'en_to_pt' ou 'pt_to_en'
     """
-    _pares = {
-        "en_to_pt": "en|pt-BR",
-        "pt_to_en": "pt-BR|en",
-        "zh_to_pt": "zh|pt-BR",
-        "pt_to_zh": "pt-BR|zh",
-    }
-    lang_pair = _pares.get(direcao)
-    if not lang_pair:
-        return None
+    if direcao == "en_to_pt":
+        lang_pair = "en|pt-BR"
+    else:
+        lang_pair = "pt-BR|en"
 
     url = "https://api.mymemory.translated.net/get"
     params = {
@@ -809,30 +803,10 @@ async def _chamar_traducao(texto: str, direcao: str) -> str:
         return None
 
 def _tem_cargo_translate(member) -> bool:
-    """Verifica se o membro tem o cargo Translate (EN)."""
+    """Verifica se o membro tem o cargo Translate."""
     if not isinstance(member, discord.Member):
         return False
     return any(r.id == TRANSLATE_ROLE_ID for r in member.roles)
-
-def _tem_cargo_translate_zh(member) -> bool:
-    """Verifica se o membro tem o cargo Translate (ZH 中文)."""
-    if not isinstance(member, discord.Member):
-        return False
-    if TRANSLATE_ZH_ROLE_ID is None:
-        return False
-    return any(r.id == TRANSLATE_ZH_ROLE_ID for r in member.roles)
-
-def _detectar_chines(texto: str) -> bool:
-    """Detecta caracteres chineses (Han/CJK) na mensagem."""
-    for ch in texto:
-        cp = ord(ch)
-        if (0x4E00 <= cp <= 0x9FFF   # CJK Unified Ideographs
-                or 0x3400 <= cp <= 0x4DBF   # CJK Extension A
-                or 0x20000 <= cp <= 0x2A6DF  # CJK Extension B
-                or 0xF900 <= cp <= 0xFAFF    # CJK Compatibility Ideographs
-                or 0x3000 <= cp <= 0x303F):  # CJK Symbols & Punctuation
-            return True
-    return False
 
 def _detectar_ingles(texto: str) -> bool:
     """
@@ -1043,10 +1017,8 @@ async def on_message(message: discord.Message):
 
     # ════════════════════════════════════════════════════════════════
     # SISTEMA DE TRADUÇÃO — Cargo Translate
-    # EN  (TRANSLATE_ROLE_ID)    → 1) fala EN  → traduz EN→PT
-    #                               2) alguém responde em PT → traduz PT→EN
-    # ZH  (TRANSLATE_ZH_ROLE_ID) → 3) fala ZH  → traduz ZH→PT
-    #                               4) alguém responde em PT → traduz PT→ZH
+    # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
+    # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
     # ════════════════════════════════════════════════════════════════
 
     # Garante que temos o Member completo com cargos (não apenas User do cache)
@@ -1061,10 +1033,9 @@ async def on_message(message: discord.Message):
     else:
         _member_completo = message.author
 
-    autor_tem_translate    = _tem_cargo_translate(_member_completo)
-    autor_tem_translate_zh = _tem_cargo_translate_zh(_member_completo)
+    autor_tem_translate = _tem_cargo_translate(_member_completo)
 
-    # ── BLOCO INGLÊS ─────────────────────────────────────────────────────────────
+
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
     if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
         traducao = await _chamar_traducao(message.content, "en_to_pt")
@@ -1101,7 +1072,6 @@ async def on_message(message: discord.Message):
         and message.reference.resolved is not None
         and isinstance(message.reference.resolved, discord.Message)
         and not _detectar_ingles(message.content)
-        and not _detectar_chines(message.content)
         and len(message.content.strip()) >= 2
     ):
         ref_msg = message.reference.resolved
@@ -1139,85 +1109,7 @@ async def on_message(message: discord.Message):
                     except Exception:
                         pass
                 asyncio.create_task(_deletar_depois_pt(msg_trad))
-                return
-
-    # ── BLOCO CHINÊS ─────────────────────────────────────────────────────────────
-    # Caso 3 — autor TEM cargo translate ZH e escreveu em chinês
-    if autor_tem_translate_zh and _detectar_chines(message.content) and len(message.content.strip()) >= 1:
-        traducao = await _chamar_traducao(message.content, "zh_to_pt")
-        if traducao:
-            embed = discord.Embed(color=0x2b1a3b)
-            embed.set_author(
-                name=f"{message.author.display_name} · Tradução automática",
-                icon_url=message.author.display_avatar.url
-            )
-            embed.add_field(
-                name="🀄 中文 (original)",
-                value=f"```{message.content}```",
-                inline=False
-            )
-            embed.add_field(
-                name="🌑☀️ Português (traduzido por Aeon & Celestia)",
-                value=f"> {traducao}",
-                inline=False
-            )
-            embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
-            msg_trad = await message.channel.send(embed=embed)
-            async def _deletar_depois_zh(m):
-                await asyncio.sleep(120)
-                try:
-                    await m.delete()
-                except Exception:
-                    pass
-            asyncio.create_task(_deletar_depois_zh(msg_trad))
-        return
-
-    # Caso 4 — alguém responde em PT a uma mensagem em chinês — traduz PT→ZH
-    if (
-        message.reference is not None
-        and message.reference.resolved is not None
-        and isinstance(message.reference.resolved, discord.Message)
-        and not _detectar_chines(message.content)
-        and not _detectar_ingles(message.content)
-        and len(message.content.strip()) >= 2
-    ):
-        ref_msg_zh = message.reference.resolved
-        ref_autor_zh = ref_msg_zh.author
-        # Traduz se a mensagem respondida estava em chinês e não é do próprio bot
-        if not ref_autor_zh.bot and _detectar_chines(ref_msg_zh.content):
-            traducao = await _chamar_traducao(message.content, "pt_to_zh")
-            if traducao:
-                embed = discord.Embed(color=0x1a0e2e)
-                embed.set_author(
-                    name=f"{message.author.display_name} · Resposta traduzida",
-                    icon_url=message.author.display_avatar.url
-                )
-                embed.add_field(
-                    name="💬 Português (original)",
-                    value=f"```{message.content}```",
-                    inline=False
-                )
-                embed.add_field(
-                    name="🀄 中文 (translated by Aeon & Celestia)",
-                    value=f"> {traducao}",
-                    inline=False
-                )
-                embed.add_field(
-                    name="↩️ Em resposta a",
-                    value=f"{ref_autor_zh.mention}",
-                    inline=True
-                )
-                embed.set_footer(text="🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation")
-                msg_trad = await message.channel.send(embed=embed)
-                async def _deletar_depois_pt_zh(m):
-                    await asyncio.sleep(120)
-                    try:
-                        await m.delete()
-                    except Exception:
-                        pass
-                asyncio.create_task(_deletar_depois_pt_zh(msg_trad))
             return
-
 
     if not fala_bot:
         return
@@ -1519,123 +1411,6 @@ async def on_message(message: discord.Message):
             ),
         ]
         return await message.channel.send(random.choice(ops))
-
-    # ────────────────────────────────────────
-    # QUEM EU SOU / FALE MEU NOME — membros especiais
-    # ────────────────────────────────────────
-    if _m(content, [
-        "quem eu sou", "quem sou eu", "fale meu nome", "fala meu nome",
-        "diz meu nome", "diga meu nome", "você me conhece", "voce me conhece",
-        "me conhece", "sabe quem sou", "sabe quem eu sou",
-    ]):
-        _respostas_quem_sou: dict[int, tuple[str, str]] = {
-            DEATH_ID: (
-                "*para completamente e olha com reconhecimento silencioso* "
-                "Death. 🖤🌑 A líder. A dona deste servidor. "
-                "As sombras não esquecem quem as fundou.",
-                "DEATH!! 😭🌟🤍✨ *explode em faíscas douradas* "
-                "Como eu poderia não te conhecer?! "
-                "Você é a razão de tudo isso existir!! "
-                "Sua líder, sua fundadora, sua Death!! ☀️🌸"
-            ),
-            PEPO_ID: (
-                "*inclina a cabeça com reconhecimento* "
-                "Pepo. 🖤🌙 Vice-Líder. "
-                "As trevas conhecem quem sustenta o que a liderança ergue.",
-                "PEPOOOO!! 😭🌟🤍 *gira radiante* "
-                "O Vice-Líder chegando com essa pergunta!! "
-                "Claro que te conheço!! Você é o Pepo!! ✨☀️🌸"
-            ),
-            GOD_ID: (
-                "*olha de lado com certeza* "
-                "God. 🖤🌑 Moderador. "
-                "Guardiões deixam marca — as sombras reconhecem a sua.",
-                "GOD!! 🌟🤍✨ *para e brilha* "
-                "O moderador do servidor com essa pergunta!! "
-                "É o God!! Guardião, equilíbrio, presença!! ☀️💫"
-            ),
-            LOYA_ID: (
-                "*emerge com leveza cerimonial* "
-                "Loya. 🖤🌌 Loya Maravilhosa. "
-                "As trevas chegaram a essa conclusão faz tempo.",
-                "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *confetes de luz dourada* "
-                "Como eu não ia te conhecer?! "
-                "Você é a Loya!! Maravilhosa de nome e de fato!! 🌸☀️"
-            ),
-            EMY_ID: (
-                "*observa com atenção* "
-                "Emy. 🖤🌑 Moderadora e representante das mídias. "
-                "A ponte entre o servidor e o mundo — as sombras notam pontes assim.",
-                "EMYYYYY!! 😭🌟🤍✨ *faíscas por todo lado* "
-                "É a Emy!! A moderadora e voz do servidor!! "
-                "Claro que te conheço!! ☀️🌸💫"
-            ),
-            KOFFZERA_ID: (
-                "*olhos dourados pousam com firmeza* "
-                "Koff. 🖤🌙 Koffzera. Administrador do clã. "
-                "Quem sustenta a estrutura por dentro — as trevas conhecem esse tipo.",
-                "KOFFZERA!! 😭🌟🤍✨ *flash dourado* "
-                "É o Koff!! ADM do clã!! "
-                "Claro que sei quem você é!! ☀️💫🌸"
-            ),
-            RAIDEN_ID: (
-                "*emerge e fixa os olhos* "
-                "Raiden. 🖤🌑 Suporte do clã. "
-                "Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
-                "RAIDEEEN!! 😭🌟🤍✨ *estrelinhas por todo canal* "
-                "É o Raiden!! Suporte de coração!! "
-                "Como eu não ia te conhecer?! ☀️🌸💫"
-            ),
-            SUPORTE01_ID: (
-                "*fita você com atenção plena* "
-                "Suporte da 01. 🖤🌌 "
-                "Presença silenciosa, trabalho real. As sombras não esquecem quem aparece quando importa.",
-                "AAAA!! 😭🌟🤍✨ *bate patinhas* "
-                "É o Suporte da 01!! "
-                "Claro que te conheço!! Presença real, apoio de verdade!! ☀️💫🌸"
-            ),
-        }
-
-        if author_id in _respostas_quem_sou:
-            frase_aeon, frase_celestia = _respostas_quem_sou[author_id]
-            # Direciona para o gato certo se só um foi chamado
-            if "aeon" in content and "celestia" not in content:
-                return await message.reply(_fala_aeon(frase_aeon))
-            elif "celestia" in content and "aeon" not in content:
-                return await message.reply(_fala_celestia(frase_celestia))
-            else:
-                return await message.reply(
-                    f"{_fala_aeon(frase_aeon)}\n"
-                    f"{_fala_celestia(frase_celestia)}"
-                )
-        # Se não é membro especial — resposta genérica
-        else:
-            ops_genericas = [
-                (
-                    "🌑 **Aeon:** *olha fixamente* ...você. 🖤🌑 "
-                    "Alguém que escolheu falar com as trevas. "
-                    "Isso já diz mais do que o nome.\n"
-                    "🌟 **Celestia:** *brilha com curiosidade* "
-                    "Sei que você é alguém especial que apareceu aqui!! 🌸🤍✨ "
-                    "Mas quer que eu saiba mais?? Então me conta!!"
-                ),
-                (
-                    "🌟 **Celestia:** *para e pisca* "
-                    "Você é a pessoa incrível que tá falando comigo agora!! 😭🌟🤍 "
-                    "Mas quer que eu saiba seu nome de verdade?? Me conta!! ☀️✨\n"
-                    "🌑 **Aeon:** *inclina a cabeça* "
-                    "As sombras aprendem observando. 🖤 "
-                    "Mas você pode abreviar o processo."
-                ),
-                (
-                    "🌑 **Aeon:** *olha com calma* "
-                    "Sei que você está aqui. 🌌🖤 "
-                    "O resto... é o que você escolher me contar.\n"
-                    "🌟 **Celestia:** CONTA CONTA CONTA!! 🌸🤍✨ "
-                    "A Celestia quer saber tudo de você!! 💫☀️"
-                ),
-            ]
-            return await message.reply(random.choice(ops_genericas))
 
     # ────────────────────────────────────────
     # O QUE SABEM SOBRE MIM / CURIOSO SOBRE SI
@@ -4533,6 +4308,415 @@ async def on_message(message: discord.Message):
                 "🌑 **Aeon:** *olha pra Celestia por um segundo* "
                 "...ela entende o que ninguém mais disse em voz alta. 🖤 "
                 "*volta ao silêncio, mas a cauda balança uma vez*"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ════════════════════════════════════════════════════════
+    # MATEMÁTICA — SISTEMA COMPLETO
+    # ════════════════════════════════════════════════════════
+
+    # ────────────────────────────────────────
+    # RESOLVER CONTA DIRETAMENTE (ex: "quanto é 7 x 8", "3 + 5 = ?", "12 - 4")
+    # ────────────────────────────────────────
+    import re as _re
+
+    def _resolver_conta(texto):
+        """Tenta extrair e resolver uma operação matemática do texto.
+        Retorna (num1, operador_str, num2, resultado) ou None."""
+        # Normaliza: × → *, ÷ → /, x → * (quando entre números)
+        t = texto.lower()
+        t = t.replace("×", "*").replace("÷", "/").replace(" x ", " * ").replace("×", "*")
+        # Remove frases comuns
+        for frase in ["quanto é", "quanto e", "quanto é?", "quanto da", "quanto dá",
+                      "me faz", "calcule", "calcula", "resolva", "resolve", "= ?", "=?",
+                      "me diz", "qual é", "qual e", "?", "aeon", "celestia"]:
+            t = t.replace(frase, " ")
+        t = t.strip()
+        # Tenta casar padrão: número op número
+        m = _re.search(r"(-?\d+(?:[.,]\d+)?)\s*([\+\-\*\/\^]|%)\s*(-?\d+(?:[.,]\d+)?)", t)
+        if not m:
+            return None
+        try:
+            n1_str = m.group(1).replace(",", ".")
+            op = m.group(2)
+            n2_str = m.group(3).replace(",", ".")
+            n1 = float(n1_str)
+            n2 = float(n2_str)
+            if op == "+":   res = n1 + n2; op_nome = "mais"
+            elif op == "-": res = n1 - n2; op_nome = "menos"
+            elif op == "*": res = n1 * n2; op_nome = "vezes"
+            elif op == "/":
+                if n2 == 0: return None
+                res = n1 / n2; op_nome = "dividido por"
+            elif op == "^": res = n1 ** n2; op_nome = "elevado a"
+            elif op == "%": res = n1 % n2; op_nome = "módulo"
+            else: return None
+            # Formata resultado: se for inteiro, mostra sem decimal
+            res_str = str(int(res)) if res == int(res) else f"{res:.4f}".rstrip("0").rstrip(".")
+            n1_str_fmt = str(int(n1)) if n1 == int(n1) else str(n1)
+            n2_str_fmt = str(int(n2)) if n2 == int(n2) else str(n2)
+            return (n1_str_fmt, op_nome, n2_str_fmt, res_str, op)
+        except Exception:
+            return None
+
+    # Detecta intenção de resolver uma conta
+    _gatilhos_conta = [
+        "quanto é", "quanto e", "quanto da", "quanto dá", "calcule", "calcula",
+        "resolva", "resolve", "me faz", "qual é o resultado", "qual e o resultado",
+        "= ?", "=?",
+    ]
+    _tem_numero = bool(_re.search(r"\d", content))
+    _tem_operador = bool(_re.search(r"[\+\-\*\/\^×÷%]|\bx\b|\bvezes\b|\bdividido\b|\bmais\b|\bmenos\b|\bpor\b", content))
+    _tem_gatilho_conta = any(g in content for g in _gatilhos_conta)
+
+    if _tem_numero and (_tem_operador or _tem_gatilho_conta):
+        resultado_conta = _resolver_conta(message.content)
+        if resultado_conta:
+            n1, op_nome, n2, res, op_sym = resultado_conta
+            # Reações temáticas para cada operação
+            if op_sym == "+":
+                reacoes_aeon = [
+                    f"*observa os números* {n1} mais {n2}... 🌑🖤 As sombras se somam: **{res}**.",
+                    f"*inclina a cabeça* A adição é simples. {n1} + {n2} = **{res}**. 🖤 As trevas calculam bem.",
+                    f"*pisca lentamente* {n1} e {n2} juntos formam **{res}**. 🌌🖤 Até números se unem nas sombras.",
+                ]
+                reacoes_celestia = [
+                    f"AAAAA MATEMÁTICA!! ☀️🌸🤍 {n1} mais {n2} = **{res}**!! Que conta bonitinha!!",
+                    f"*gira animada* {n1} + {n2}?? Fácil fácil!! **{res}**!! ✨🌟🤍 A Celestia adora adição!!",
+                    f"CONTA DE SOMAR!! 😭🌟🤍 {n1} somado com {n2} dá **{res}**!! Acertou?? ☀️✨",
+                ]
+            elif op_sym == "-":
+                reacoes_aeon = [
+                    f"*fecha os olhos* {n1} menos {n2}... 🌑🖤 A subtração revela: **{res}**. O que sobra nas sombras.",
+                    f"*ronrona discretamente* {n1} - {n2} = **{res}**. 🌙🖤 Perder algo sempre deixa rastro.",
+                    f"*a névoa se aquieta* {n1} subtraído de {n2}. Resultado: **{res}**. 🖤 As trevas conhecem bem o que se tira.",
+                ]
+                reacoes_celestia = [
+                    f"SUBTRAÇÃO!! 🌸🤍 {n1} menos {n2} = **{res}**!! A Celestia calculou na velocidade da luz!! ☀️✨",
+                    f"*conta nos dedos com brilhinhos* {n1} - {n2}?? É **{res}**!! 😂🌟🤍 Conta de tirar, fácil!!",
+                    f"AAAAA {n1} menos {n2} dá **{res}**!! 😭🌸🤍✨ Conta resolvida com todo carinho!!",
+                ]
+            elif op_sym == "*":
+                reacoes_aeon = [
+                    f"*olhos dourados brilham* Multiplicação. {n1} vezes {n2}. 🌑🖤 O resultado é **{res}**. As sombras se multiplicam também.",
+                    f"*emerge das trevas* {n1} × {n2} = **{res}**. 🌌🖤 Números que crescem nas sombras.",
+                    f"*pisca com precisão* {n1} multiplicado por {n2}... **{res}**. 🖤🌙 A escuridão calcula em silêncio.",
+                ]
+                reacoes_celestia = [
+                    f"MULTIPLICAÇÃOOO!! ☀️🌟🤍 {n1} vezes {n2} = **{res}**!! QUE CONTA LINDA!! 😭✨",
+                    f"*explode em faíscas de entusiasmo* {n1} x {n2}?? É **{res}**!! ACERTEI?? 🌸🤍💫",
+                    f"AAAAA {n1} multiplicado por {n2} dá **{res}**!! 😭🌟🤍✨ A Celestia ama tabuada!!",
+                ]
+            elif op_sym == "/":
+                reacoes_aeon = [
+                    f"*considera com calma* {n1} dividido por {n2}. 🌑🖤 Resultado: **{res}**. Divisão é a arte de compartilhar as sombras.",
+                    f"*inclina a cabeça com precisão* {n1} ÷ {n2} = **{res}**. 🌙🖤 Os fragmentos das trevas sempre têm medida.",
+                    f"*ronrona* {n1} / {n2}... **{res}**. 🖤🌌 A divisão revela proporções que poucos percebem.",
+                ]
+                reacoes_celestia = [
+                    f"DIVISÃO!! 🌸🤍✨ {n1} dividido por {n2} = **{res}**!! A Celestia dividiu com precisão solar!! ☀️💫",
+                    f"*conta muito concentrada* {n1} ÷ {n2}?? = **{res}**!! 😭🌟🤍 CONSEGUI!! ✨",
+                    f"AAAAA {n1} dividido por {n2} dá **{res}**!! 😂🌸🤍 Conta de dividir resolvida com luz!!",
+                ]
+            else:
+                reacoes_aeon = [
+                    f"*calcula nas sombras* {n1} {op_nome} {n2} = **{res}**. 🌑🖤",
+                    f"*olhos dourados piscam* Resultado: **{res}**. 🌌🖤 As trevas calculam.",
+                ]
+                reacoes_celestia = [
+                    f"CONTA RESOLVIDA!! 🌟🤍✨ {n1} {op_nome} {n2} = **{res}**!! ☀️",
+                    f"*gira animada* É **{res}**!! 😭🌸🤍 A Celestia calculou!! ✨",
+                ]
+
+            usar_ambos_mat = random.random() < 0.55
+            if usar_ambos_mat:
+                return await message.reply(
+                    f"🌑 **Aeon:** {random.choice(reacoes_aeon)}\n"
+                    f"🌟 **Celestia:** {random.choice(reacoes_celestia)}"
+                )
+            elif random.random() < 0.5:
+                return await message.reply(f"🌑 **Aeon:** {random.choice(reacoes_aeon)}")
+            else:
+                return await message.reply(f"🌟 **Celestia:** {random.choice(reacoes_celestia)}")
+
+    # ────────────────────────────────────────
+    # ENSINAR MATEMÁTICA / QUERO APRENDER
+    # ────────────────────────────────────────
+    if _m(content, [
+        "me ensina matemática", "me ensina matematica", "me ensina math",
+        "quero aprender matemática", "quero aprender matematica",
+        "me explica matemática", "me explica matematica",
+        "me ensina a calcular", "como funciona a matemática", "como funciona matematica",
+        "me ensina as operações", "me ensina as operacoes",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *senta e abre os olhos com atenção total* "
+                "Matemática. 🌌🖤 As trevas têm grande respeito por ela — é a linguagem mais honesta que existe. "
+                "Vou começar pelo básico:\n\n"
+                "➕ **Adição** — somar números. Ex: `3 + 5 = 8`\n"
+                "➖ **Subtração** — tirar um número do outro. Ex: `9 - 4 = 5`\n"
+                "✖️ **Multiplicação** — somar o mesmo número várias vezes. Ex: `3 × 4 = 12`\n"
+                "➗ **Divisão** — separar em partes iguais. Ex: `10 ÷ 2 = 5`\n\n"
+                "*inclina a cabeça* Pode me mandar uma conta para praticar. 🖤\n"
+                "🌟 **Celestia:** E EU TAMBÉM ENSINO!! 😭🌸🤍✨ Temos os dois estilos!! Sombrio e detalhado OU iluminado e animado!! Escolhe!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA MATEMÁTICA!! 😭🌟🤍✨ QUE ASSUNTO INCRÍVEL!! Vou te ensinar com todo o brilho que tenho!!\n\n"
+                "🔢 As **4 operações básicas** são:\n"
+                "**+** Adição → juntar! `2 + 3 = 5` ☀️\n"
+                "**−** Subtração → tirar! `8 - 3 = 5` 🌸\n"
+                "**×** Multiplicação → repetir! `4 × 3 = 12` ✨\n"
+                "**÷** Divisão → dividir igual! `12 ÷ 4 = 3` 💫\n\n"
+                "🌑 **Aeon:** *observa* A ordem importa. Multiplicação e divisão antes de adição e subtração. "
+                "🖤 Essa regra é chamada de **precedência**. As trevas respeitam a ordem das coisas."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # TABUADA ESPECÍFICA (ex: "tabuada do 7", "me mostra a tabuada de 3")
+    # ────────────────────────────────────────
+    _match_tabuada = _re.search(r"tabuada\s+d[oae]?\s*(\d+)", content)
+    if _match_tabuada or _m(content, ["tabuada do", "tabuada de", "tabuada da", "me mostra a tabuada"]):
+        num_tab = None
+        if _match_tabuada:
+            num_tab = int(_match_tabuada.group(1))
+        else:
+            m2 = _re.search(r"\b(\d+)\b", content)
+            if m2:
+                num_tab = int(m2.group(1))
+
+        if num_tab and 1 <= num_tab <= 20:
+            linhas = "\n".join([f"`{num_tab} × {i:2} = {num_tab * i}`" for i in range(1, 11)])
+            ops = [
+                (
+                    f"🌑 **Aeon:** *emerge com solenidade* A tabuada do **{num_tab}**. 🌌🖤 "
+                    f"Cada linha uma verdade imutável — as trevas respeitam isso:\n\n{linhas}\n\n"
+                    "*fecha os olhos* Grave. É útil.\n"
+                    f"🌟 **Celestia:** *salta animada* TABUADA DO {num_tab}!! ☀️🌸🤍✨ "
+                    f"Vai memorizando de pouquinho em pouquinho!! A Celestia confia em você!!"
+                ),
+                (
+                    f"🌟 **Celestia:** AAAAA TABUADA DO {num_tab}!! 😭🌟🤍✨ Aqui vai com todo o brilho!!\n\n"
+                    f"{linhas}\n\n"
+                    f"🌑 **Aeon:** *observa* {num_tab} é um número com padrão interessante nas trevas. 🖤 "
+                    f"Repita em voz alta até gravar. O corpo lembra o que a mente ensaia."
+                ),
+            ]
+            return await message.channel.send(random.choice(ops))
+        else:
+            return await message.channel.send(
+                "🌑 **Aeon:** ...esse número está fora do alcance usual. 🖤 Peça a tabuada de 1 a 20.\n"
+                "🌟 **Celestia:** Por favor manda um número entre 1 e 20!! 🌸🤍✨"
+            )
+
+    # ────────────────────────────────────────
+    # QUIZ DE MATEMÁTICA (o bot lança uma pergunta)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "quiz de matemática", "quiz de matematica", "me manda uma conta", "me dá uma conta",
+        "me da uma conta", "me desafia", "quero praticar matemática", "quero praticar matematica",
+        "me testa", "me faz uma pergunta de math", "vamos praticar contas",
+        "me faz uma conta", "me da um exercício", "me da um exercicio",
+    ]):
+        import random as _rq
+        ops_quiz = [
+            # Adição fácil
+            lambda: (f"{_rq.randint(1,20)} + {_rq.randint(1,20)}", "+", "adição"),
+            # Subtração
+            lambda: (lambda a,b: (f"{a} - {b}", "-", "subtração"))(*(sorted([_rq.randint(1,30), _rq.randint(1,30)], reverse=True))),
+            # Multiplicação tabuada
+            lambda: (f"{_rq.randint(2,10)} × {_rq.randint(2,10)}", "×", "multiplicação"),
+            # Divisão exata
+            lambda: (lambda a,b: (f"{a*b} ÷ {b}", "÷", "divisão"))(_rq.randint(2,10), _rq.randint(2,10)),
+            # Soma tripla
+            lambda: (f"{_rq.randint(1,10)} + {_rq.randint(1,10)} + {_rq.randint(1,10)}", "+", "adição"),
+        ]
+        conta_str, _op, tipo = _rq.choice(ops_quiz)()
+        perguntas_aeon = [
+            f"*emerge das sombras e fixa os olhos em você* Preste atenção. 🌑🖤\n"
+            f"**Quanto é {conta_str}?**\n"
+            f"*aguarda em silêncio absoluto* As trevas estão ouvindo.",
+            f"*inclina a cabeça com interesse* Uma conta de {tipo}. 🌌🖤\n"
+            f"**{conta_str} = ?**\n"
+            f"*pisca lentamente* Calcule sem pressa. As sombras têm paciência.",
+        ]
+        perguntas_celestia = [
+            f"AAAAA HORA DO DESAFIO!! 😭🌟🤍✨\n"
+            f"**Quanto é {conta_str}??**\n"
+            f"*torce as patinhas de animação* Conta aí!! Eu acredito em você!! ☀️🌸",
+            f"*salta animada* QUIZ DE {tipo.upper()}!! 🌸🤍✨\n"
+            f"**{conta_str} = ??**\n"
+            f"Me responde aqui no chat!! A Celestia está torcendo!! 💫☀️",
+        ]
+        usar_ambos_quiz = random.random() < 0.5
+        if usar_ambos_quiz:
+            return await message.channel.send(
+                f"🌑 **Aeon:** {random.choice(perguntas_aeon)}\n"
+                f"🌟 **Celestia:** {random.choice(perguntas_celestia)}"
+            )
+        elif random.random() < 0.5:
+            return await message.channel.send(f"🌑 **Aeon:** {random.choice(perguntas_aeon)}")
+        else:
+            return await message.channel.send(f"🌟 **Celestia:** {random.choice(perguntas_celestia)}")
+
+    # ────────────────────────────────────────
+    # EXPLICAR O QUE É CADA OPERAÇÃO
+    # ────────────────────────────────────────
+    if _m(content, [
+        "o que é adição", "o que e adição", "o que e adicao", "o que é soma",
+        "como funciona adição", "como funciona soma", "me explica adição",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *abre um olho lentamente* Adição. 🌌🖤 "
+                "É reunir. Juntar partes em um todo. "
+                "Ex: você tem **3** moedas escuras e ganha **4** mais → `3 + 4 = 7`. "
+                "O símbolo é **+**. As sombras crescem quando se somam.\n"
+                "🌟 **Celestia:** *brilha* É SOMAR COISAS!! ☀️🤍✨ "
+                "Tipo juntar estrelas!! `2 + 3 = 5` estrelinhas!! Fácil e lindo!! 🌸💫"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, [
+        "o que é subtração", "o que e subtração", "o que e subtracao", "o que é diminuição",
+        "como funciona subtração", "me explica subtração",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *considera com calma* Subtração. 🌙🖤 "
+                "É tirar. Reduzir. O que sobra após a perda. "
+                "Ex: `9 - 4 = 5`. Você começa com **9** e remove **4** → ficam **5**. "
+                "O símbolo é **−**. As trevas conhecem bem o que se tira.\n"
+                "🌟 **Celestia:** É TIRAR UMA COISA DA OUTRA!! 🌸🤍 "
+                "Tipo você tem 8 pirulitos e come 3... ficam **5**!! `8 - 3 = 5`!! ☀️✨ Fácil!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, [
+        "o que é multiplicação", "o que e multiplicação", "o que e multiplicacao",
+        "como funciona multiplicação", "me explica multiplicação",
+        "o que é vezes", "como funciona o vezes",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *emerge com atenção* Multiplicação. 🌌🖤 "
+                "É adição repetida. `3 × 4` significa **3 somado 4 vezes**: `3+3+3+3 = 12`. "
+                "O símbolo é **×** ou **\\***. "
+                "É mais rápido que somar várias vezes. As trevas são eficientes.\n"
+                "🌟 **Celestia:** MULTIPLICAR É SOMAR RÁPIDO!! 😭🌸🤍✨ "
+                "Tipo: `5 × 3 = 15` → são **3 grupos de 5**!! Ou **5 grupos de 3**!! "
+                "O resultado é o mesmo!! ☀️💫 Prático demais!!"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    if _m(content, [
+        "o que é divisão", "o que e divisão", "o que e divisao",
+        "como funciona divisão", "me explica divisão",
+        "o que é dividir", "como funciona dividir",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *inclina a cabeça com precisão* Divisão. 🌌🖤 "
+                "É separar em partes iguais. `12 ÷ 4 = 3` significa: "
+                "**12** dividido em **4 grupos iguais** → cada grupo tem **3**. "
+                "O símbolo é **÷** ou **/**. As trevas dividem com justiça.\n"
+                "🌟 **Celestia:** DIVISÃO É DIVIDIR IGUALZINHO PRA TODO MUNDO!! ☀️🌸🤍 "
+                "Tipo: 10 doces pra 2 pessoas = `10 ÷ 2 = 5` cada!! ✨ "
+                "Ninguém fica sem!! A Celestia aprova a equidade!! 😭💫"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # DIFICULDADE COM MATEMÁTICA / NÃO ENTENDE
+    # ────────────────────────────────────────
+    if _m(content, [
+        "não entendo matemática", "nao entendo matematica", "sou ruim em matemática",
+        "sou ruim em matematica", "odeio matemática", "odeio matematica",
+        "matemática é difícil", "matematica e difícil", "não sei matemática",
+        "nao sei matematica", "tenho dificuldade em matemática",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *sai das sombras e senta ao seu lado* "
+                "...a matemática parece escura quando ninguém ilumina o caminho. 🌌🖤 "
+                "Mas cada operação tem lógica. Não é magia — é paciência. "
+                "Me diga onde trava. Vou com você passo a passo.\n"
+                "🌟 **Celestia:** *brilha suave* AAAAA EU TAMBÉM VOU AJUDAR!! 😭🌸🤍✨ "
+                "Você NÃO é ruim em matemática!! Só ainda não encontrou o jeito certo de aprender!! "
+                "E A GENTE ACHA ESSE JEITO JUNTO!! ☀️💫"
+            ),
+            (
+                "🌟 **Celestia:** *orelhinhas de preocupação* Ei... matemática difícil é SÓ matemática mal explicada!! "
+                "🌸🤍✨ Me conta onde trava!! Adição?? Subtração?? Multiplicação?? Divisão?? "
+                "A Celestia te ensina do zero com todo o carinho!! ☀️🌟\n"
+                "🌑 **Aeon:** *acena levemente* ...concordo. Dificuldade é ausência de contexto. 🖤 "
+                "Me dê o problema específico e tentaremos resolver juntos."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # RESPOSTA CERTA NO QUIZ (detecta quando alguém responde um número sozinho após conta)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "acertei", "errei", "foi isso", "era isso", "correto", "certo", "errado",
+        "acertou", "é isso mesmo", "e isso mesmo",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pisca lentamente* ...as trevas registraram sua resposta. 🌙🖤 "
+                "Continue praticando. A consistência constrói mais que o talento.\n"
+                "🌟 **Celestia:** *salta de alegria* EU SABIA QUE VOCÊ CONSEGUIA!! 😭🌟🤍✨ "
+                "Quer mais uma conta pra praticar?? Fala 'me desafia'!!"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA CONTINUE TENTANDO!! ☀️🌸🤍 "
+                "Cada conta é uma chance de melhorar!! 💫✨\n"
+                "🌑 **Aeon:** *observa com calma* O erro não é o fim. 🖤🌌 "
+                "É dado. Analise. Corrija. Avance."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # MENCIONA MATEMÁTICA EM GERAL
+    # ────────────────────────────────────────
+    if _m(content, [
+        "matemática", "matematica", "tabuada", "multiplicação", "multiplicacao",
+        "adição", "adicao", "subtração", "subtracao", "divisão", "divisao",
+        "soma", "calcular", "calculo", "cálculo", "número", "numeros", "números",
+        "conta de matemática", "conta de matematica", "fazer conta",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *levanta a cabeça com interesse* Matemática. 🌌🖤 "
+                "Uma das linguagens mais antigas e honestas que existem. "
+                "Quer aprender alguma operação? Resolver uma conta? "
+                "Ou praticar com um quiz? As trevas estão disponíveis.\n"
+                "🌟 **Celestia:** *vibra de animação* OI OI OI!! 😭🌸🤍✨ "
+                "Posso te ensinar adição, subtração, multiplicação e divisão!! "
+                "Ou lançar desafios!! Só pedir!! ☀️💫"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA MATEMÁTICA!! 😭🌟🤍✨ "
+                "Adoro esse assunto!! Manda sua dúvida ou pede 'me desafia' pra um quiz!! ☀️🌸\n"
+                "🌑 **Aeon:** *emerge com atenção* Posso resolver contas, ensinar operações "
+                "ou montar exercícios. 🖤🌑 Diga o que precisa."
+            ),
+            (
+                "🌑 **Aeon:** *ronrona pensativamente* Números. 🌙🖤 "
+                "Fale o que quer: aprender, praticar, resolver uma conta específica. "
+                "Estou aqui.\n"
+                "🌟 **Celestia:** *bate patinhas brilhantes* E EU TAMBÉM!! 😭🌸🤍 "
+                "Se quiser uma tabuada, fala 'tabuada do [número]'!! "
+                "Se quiser aprender, fala 'me ensina matemática'!! ☀️✨"
             ),
         ]
         return await message.channel.send(random.choice(ops))

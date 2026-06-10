@@ -4922,7 +4922,7 @@ async def _enviar_boas_vindas(guild: discord.Guild, member: discord.Member, tipo
         embed = discord.Embed(
             title="🌟 O círculo ganhou mais um...",
             description=(
-                f"🎉 {member.mention} acaba de entrar oficialmente como **membro**! 🎉\n\n"
+                f"🎉 {member.mention} acaba de entrar oficialmente como **membro**! 🎉 <@&{CARGO_MEMBRO_ID}>\n\n"
                 "🌟 **Celestia:** *explode em faíscas douradas de pura alegria* "
                 f"MEMBRO NOVO MEMBRO NOVO!! 😭🌟🤍✨ "
                 f"{member.display_name.upper()} AGORA FAZ PARTE DE VERDADE!! "

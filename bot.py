@@ -4872,9 +4872,9 @@ async def cmd_help(ctx):
 # ══════════════════════════════════════════════
 
 # IDs dos cargos
-CARGO_VISITANTE_ID  = 1514084253066072156  # cargo exclusivo de visitante
-CARGO_MEMBRO_ID     = 1514084468241993878  # cargo exclusivo de membro
-CARGO_COMUM_ID      = 1514084840088014908  # cargo recebido em ambos os casos
+CARGO_VISITANTE_ID  = 1284263365547397120  # cargo exclusivo de visitante
+CARGO_MEMBRO_ID     = 1284263397990596659  # cla member
+CARGO_COMUM_ID      = 1290029716241256600  # verificado (recebido em ambos os casos)
 
 IMAGE_ENTRADA_VISITANTE = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
 IMAGE_ENTRADA_MEMBRO    = "https://cdn.discordapp.com/attachments/926913851172204577/1514088914200297553/ChatGPT_Image_9_de_jun._de_2026_23_08_19.png?ex=6a2a18af&is=6a28c72f&hm=dbd29acf877630fe2055e78e8801d187a579076c2fd0999e5c2e823af7db63ce"
@@ -4884,12 +4884,11 @@ CANAL_BOAS_VINDAS_ID = 1284257046740602901  # canal onde o bot manda boas-vindas
 
 # Canais indicados no texto de boas-vindas
 CANAIS_INDICADOS = (
-    "<#1284257046740602901>\n"   # substitua pelos IDs reais dos canais abaixo:
-    "👘 **IDs de Skins** — confira e registre o ID da sua skin favorita\n"
-    "👔 **Traje Primordiais** — as roupas mais raras e icônicas do servidor\n"
-    "🧥 **Referências de Skins** — inspirações e referências visuais\n"
-    "📃 **Registro** — faça seu registro oficial aqui!\n"
-    "🌈 **Cores** — personalize sua identidade no servidor"
+    "👘 <#1369325512236732437> — confira e registre o ID da sua skin favorita\n"
+    "👔 <#1284259266684780645> — as roupas mais raras e icônicas do servidor\n"
+    "🧥 <#1289699941085610106> — inspirações e referências visuais\n"
+    "📃 <#1284258011560542332> — faça seu registro oficial aqui!\n"
+    "🌈 <#1296503545771720704> — personalize sua identidade no servidor"
 )
 
 

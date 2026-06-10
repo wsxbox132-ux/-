@@ -4868,6 +4868,177 @@ async def cmd_help(ctx):
 
 
 # ══════════════════════════════════════════════
+# SISTEMA DE ENTRADA — VISITANTE / MEMBRO
+# ══════════════════════════════════════════════
+
+# IDs dos cargos
+CARGO_VISITANTE_ID  = 1514084253066072156  # cargo exclusivo de visitante
+CARGO_MEMBRO_ID     = 1514084468241993878  # cargo exclusivo de membro
+CARGO_COMUM_ID      = 1514084840088014908  # cargo recebido em ambos os casos
+
+IMAGE_ENTRADA = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
+
+
+class BotaoVisitante(discord.ui.View):
+    """View com botão de confirmação para visitantes."""
+
+    def __init__(self):
+        super().__init__(timeout=None)  # persistente até reinício
+
+    @discord.ui.button(
+        label="✅ Sim, quero entrar como Visitante!",
+        style=discord.ButtonStyle.secondary,
+        custom_id="entrada_visitante"
+    )
+    async def confirmar_visitante(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        guild  = interaction.guild
+        member = interaction.user
+
+        cargo_visitante = guild.get_role(CARGO_VISITANTE_ID)
+        cargo_comum     = guild.get_role(CARGO_COMUM_ID)
+
+        cargos_adicionados = []
+        erros = []
+
+        for cargo in [cargo_visitante, cargo_comum]:
+            if cargo is None:
+                erros.append(f"Cargo `{cargo}` não encontrado.")
+                continue
+            if cargo not in member.roles:
+                try:
+                    await member.add_roles(cargo, reason="Entrada como Visitante via botão")
+                    cargos_adicionados.append(cargo.name)
+                except discord.Forbidden:
+                    erros.append(f"Sem permissão para adicionar o cargo **{cargo.name}**.")
+                except discord.HTTPException as e:
+                    erros.append(f"Erro ao adicionar **{cargo.name}**: {e}")
+
+        if erros:
+            await interaction.response.send_message(
+                "⚠️ Ocorreu um problema ao atribuir seus cargos:\n" + "\n".join(erros),
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *emerge das sombras e inclina a cabeça* "
+                "As trevas registraram sua presença, visitante. 🖤🌑 "
+                "Seja bem-vindo — explore com curiosidade.\n"
+                "🌟 **Celestia:** AAAAA BEM-VINDO BEM-VINDO BEM-VINDO!! 😭🌟🤍✨ "
+                "Que alegria ter você aqui!! Aproveite muito!! ☀️🌸",
+                ephemeral=True
+            )
+
+
+class BotaoMembro(discord.ui.View):
+    """View com botão de confirmação para membros."""
+
+    def __init__(self):
+        super().__init__(timeout=None)  # persistente até reinício
+
+    @discord.ui.button(
+        label="✅ Sim, quero entrar como Membro!",
+        style=discord.ButtonStyle.primary,
+        custom_id="entrada_membro"
+    )
+    async def confirmar_membro(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        guild  = interaction.guild
+        member = interaction.user
+
+        cargo_membro = guild.get_role(CARGO_MEMBRO_ID)
+        cargo_comum  = guild.get_role(CARGO_COMUM_ID)
+
+        cargos_adicionados = []
+        erros = []
+
+        for cargo in [cargo_membro, cargo_comum]:
+            if cargo is None:
+                erros.append(f"Cargo `{cargo}` não encontrado.")
+                continue
+            if cargo not in member.roles:
+                try:
+                    await member.add_roles(cargo, reason="Entrada como Membro via botão")
+                    cargos_adicionados.append(cargo.name)
+                except discord.Forbidden:
+                    erros.append(f"Sem permissão para adicionar o cargo **{cargo.name}**.")
+                except discord.HTTPException as e:
+                    erros.append(f"Erro ao adicionar **{cargo.name}**: {e}")
+
+        if erros:
+            await interaction.response.send_message(
+                "⚠️ Ocorreu um problema ao atribuir seus cargos:\n" + "\n".join(erros),
+                ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *sai das sombras com postura ereta* "
+                "Bem-vindo ao círculo, membro. 🖤🌑 "
+                "As trevas reconhecem quem decidiu ficar.\n"
+                "🌟 **Celestia:** MEMBRO OFICIAL MEMBRO OFICIAL!! 😭🌟🤍✨ "
+                "Você faz parte agora de verdade!! Seja muito feliz aqui!! ☀️🌸💫",
+                ephemeral=True
+            )
+
+
+@bot.command(name="visitante")
+@commands.has_permissions(manage_roles=True)
+async def cmd_visitante(ctx):
+    """Envia a mensagem de boas-vindas para visitantes com botão de confirmação."""
+    embed = discord.Embed(
+        title="🌑☀️ Bem-vindo(a) ao servidor!",
+        description=(
+            "Olá! Parece que você chegou como **visitante**. 🌙\n\n"
+            "🌑 **Aeon:** *emerge das trevas e observa você com curiosidade* "
+            "Visitante. 🖤 As sombras estão curiosas sobre quem você é. "
+            "Se quiser explorar este lugar, basta confirmar abaixo.\n\n"
+            "🌟 **Celestia:** *espalha faíscas douradas animada* "
+            "AAAAA SEJA BEM-VINDO(A)!! 😭🌟🤍✨ "
+            "Quer dar uma olhadinha no servidor?? "
+            "Clica no botão que a gente te recebe com muito brilho!! ☀️🌸\n\n"
+            "─────────────────────────────\n"
+            "Ao clicar em **\"Sim, quero entrar como Visitante!\"** você receberá "
+            "acesso de visitante ao servidor. 🌙🖤"
+        ),
+        color=0x2b2b3b
+    )
+    embed.set_image(url=IMAGE_ENTRADA)
+    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
+
+    await ctx.send(embed=embed, view=BotaoVisitante())
+
+
+@bot.command(name="membro")
+@commands.has_permissions(manage_roles=True)
+async def cmd_membro(ctx):
+    """Envia a mensagem de boas-vindas para membros com botão de confirmação."""
+    embed = discord.Embed(
+        title="🌟🖤 Quer fazer parte como Membro?",
+        description=(
+            "Você está prestes a se tornar um **membro oficial** do servidor! ✨\n\n"
+            "🌟 **Celestia:** *brilha com uma luz especial e calorosa* "
+            "OI OI OI!! 😭🌟🤍 "
+            "Ser membro significa que você decidiu ficar de verdade!! "
+            "Isso deixa meu brilho TRIPLICADO!! ☀️🌸💫\n\n"
+            "🌑 **Aeon:** *inclina a cabeça com reconhecimento silencioso* "
+            "Membro. 🖤🌑 "
+            "Quem decide ficar carrega algo que os visitantes ainda não têm: "
+            "comprometimento. As trevas respeitam isso.\n\n"
+            "─────────────────────────────\n"
+            "Ao clicar em **\"Sim, quero entrar como Membro!\"** você receberá "
+            "o cargo de membro e acesso completo ao servidor. 🌙🌟"
+        ),
+        color=0xf5c542
+    )
+    embed.set_image(url=IMAGE_ENTRADA)
+    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
+
+    await ctx.send(embed=embed, view=BotaoMembro())
+
+
+# ══════════════════════════════════════════════
 # START
 # ══════════════════════════════════════════════
 if __name__ == "__main__":

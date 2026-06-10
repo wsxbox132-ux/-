@@ -921,6 +921,11 @@ async def on_ready():
     bot.add_view(BotaoMembro())
     bot.add_view(BotaoAbrirTicketAnjo())
     bot.add_view(BotaoFecharTicketAnjo())
+    bot.add_view(BotaoReivindicarTicket(canal_ticket_id=0, dono_id=0))
+
+    # Envia o painel de anjos automaticamente em todos os servidores
+    for guild in bot.guilds:
+        await _enviar_painel_anjos(guild)
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -5123,10 +5128,52 @@ async def cmd_membro(ctx):
 # SISTEMA DE TICKET — ANJOS (ajuda, conselho...)
 # ══════════════════════════════════════════════
 
-CANAL_TICKET_ANJO_ID    = 1284276368598761573  # canal onde fica o painel de abertura
-CATEGORIA_TICKET_ID     = 1284276079401500763  # categoria onde os tickets são criados
-CARGO_ANJO_ID           = 1493402287622848522  # cargo que pode ver e fechar os tickets
-IMAGE_TICKET_ANJO       = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
+CANAL_TICKET_ANJO_ID      = 1284276368598761573  # canal do painel de abertura
+CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
+CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
+CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
+IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
+
+
+async def _enviar_painel_anjos(guild: discord.Guild):
+    """Envia (ou reenvia) o painel de abertura de tickets no canal correto.
+    Evita duplicatas: deleta mensagens antigas do bot no canal antes de postar."""
+    canal = guild.get_channel(CANAL_TICKET_ANJO_ID)
+    if canal is None:
+        return
+
+    # Remove mensagens antigas do próprio bot no canal para não acumular painéis
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author == guild.me:
+                await msg.delete()
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+    embed = discord.Embed(
+        title="🕊️ Precisa conversar? Os Anjos estão aqui.",
+        description=(
+            "🌟 **Celestia:** *brilha com uma luz suave e aconchegante* "
+            "Às vezes a vida pesa, né?? 😭🌸🤍 "
+            "Seja um conselho, um desabafo, uma dúvida ou só precisar de alguém pra ouvir — "
+            "**os Anjos estão aqui por você!!** "
+            "Não precisa carregar isso sozinho(a)!! ☀️💫\n\n"
+            "🌑 **Aeon:** *emerge das sombras com voz mais suave que o habitual* "
+            "Nem sempre as trevas são lugar de solidão. 🖤🌑 "
+            "Se algo pesa — dúvida, conselho, um momento difícil — "
+            "abra um ticket. Um Anjo virá. "
+            "As sombras guardam segredos com cuidado.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🕊️ Clique no botão abaixo para abrir seu espaço privado.\n"
+            "Só você e o Anjo que te atender poderão ver.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0xe8d5f5
+    )
+    embed.set_image(url=IMAGE_TICKET_ANJO)
+    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. 🕊️ Os Anjos cuidam de você.")
+
+    await canal.send(embed=embed, view=BotaoAbrirTicketAnjo())
 
 
 class BotaoFecharTicketAnjo(discord.ui.View):
@@ -5149,16 +5196,31 @@ class BotaoFecharTicketAnjo(discord.ui.View):
 
         cargo_anjo = guild.get_role(CARGO_ANJO_ID)
 
-        # Só anjos ou quem criou o ticket pode fechar
-        # O nome do canal é ticket-<nome_do_usuario>, então extraímos o dono pelo tópico
-        tem_permissao = (
-            cargo_anjo in member.roles
-            or (canal.topic and str(member.id) in canal.topic)
-        )
+        # Dono do ticket está no tópico: "... | ID: <id> | ANJO: <id>"
+        topic = canal.topic or ""
+        dono_id  = None
+        anjo_id  = None
+        for parte in topic.split("|"):
+            parte = parte.strip()
+            if parte.startswith("ID:"):
+                try:
+                    dono_id = int(parte.replace("ID:", "").strip())
+                except ValueError:
+                    pass
+            if parte.startswith("ANJO:"):
+                try:
+                    anjo_id = int(parte.replace("ANJO:", "").strip())
+                except ValueError:
+                    pass
 
-        if not tem_permissao:
+        eh_dono  = member.id == dono_id
+        eh_anjo_assumiu = member.id == anjo_id
+        eh_cargo_anjo   = cargo_anjo in member.roles if cargo_anjo else False
+
+        # Só o anjo que assumiu ou o dono pode fechar
+        if not (eh_dono or eh_anjo_assumiu or eh_cargo_anjo):
             return await interaction.response.send_message(
-                "🌟 **Celestia:** Ei, só os Anjos ou quem abriu o ticket podem fechá-lo! ☀️🌸",
+                "🌟 **Celestia:** Ei, só o Anjo que assumiu ou quem abriu o ticket pode fechá-lo! ☀️🌸",
                 ephemeral=True
             )
 
@@ -5166,10 +5228,89 @@ class BotaoFecharTicketAnjo(discord.ui.View):
             "🌑 **Aeon:** *inclina a cabeça lentamente* "
             "As sombras registraram o encerramento. 🖤🌑 Este espaço será fechado em instantes.\n"
             "🌟 **Celestia:** Que tudo tenha se resolvido com muito amor!! 😭🌸🤍✨ "
-            "Até a próxima, anjo!!"
+            "Até a próxima!!"
         )
         await asyncio.sleep(5)
         await canal.delete(reason=f"Ticket fechado por {member}")
+
+
+class BotaoReivindicarTicket(discord.ui.View):
+    """Botão de reivindicar ticket — aparece no canal dos anjos."""
+
+    def __init__(self, canal_ticket_id: int, dono_id: int):
+        super().__init__(timeout=None)
+        self.canal_ticket_id = canal_ticket_id
+        self.dono_id         = dono_id
+
+    @discord.ui.button(
+        label="🕊️ Reivindicar ticket",
+        style=discord.ButtonStyle.success,
+        custom_id="reivindicar_ticket_anjo"
+    )
+    async def reivindicar(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        guild  = interaction.guild
+        anjo   = interaction.user
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+
+        # Só quem tem o cargo de anjo pode reivindicar
+        if cargo_anjo not in anjo.roles:
+            return await interaction.response.send_message(
+                "🌟 **Celestia:** Só os Anjos podem reivindicar um ticket! ☀️🌸",
+                ephemeral=True
+            )
+
+        canal_ticket = guild.get_channel(self.canal_ticket_id)
+        if canal_ticket is None:
+            return await interaction.response.send_message(
+                "⚠️ O canal do ticket não foi encontrado. Pode já ter sido fechado.",
+                ephemeral=True
+            )
+
+        # Verifica se já foi reivindicado (tópico contém "ANJO:")
+        topic = canal_ticket.topic or ""
+        if "ANJO:" in topic:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** Este ticket já foi assumido por outro Anjo. 🖤",
+                ephemeral=True
+            )
+
+        # Atualiza o tópico com o ID do anjo que assumiu
+        novo_topic = f"{topic} | ANJO: {anjo.id}"
+        await canal_ticket.edit(topic=novo_topic)
+
+        # Remove permissão do cargo anjo inteiro do canal e dá só ao anjo que assumiu
+        if cargo_anjo:
+            await canal_ticket.set_permissions(cargo_anjo, overwrite=None)
+        await canal_ticket.set_permissions(
+            anjo,
+            view_channel=True,
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True
+        )
+
+        # Avisa o dono do ticket que um anjo assumiu
+        dono = guild.get_member(self.dono_id)
+        aviso_dono = f"{dono.mention} " if dono else ""
+        await canal_ticket.send(
+            f"🕊️ {aviso_dono}**{anjo.display_name}** assumiu seu ticket e já está aqui por você! 🌸🤍\n"
+            f"🌟 **Celestia:** AAAAA UM ANJO CHEGOU!! 😭✨ "
+            f"Pode falar, {dono.display_name if dono else 'anjo'}!! Você está em boas mãos!! ☀️💫"
+        )
+
+        # Desabilita o botão na mensagem de reivindicação e edita para mostrar quem assumiu
+        button.disabled = True
+        button.label = f"✅ Assumido por {anjo.display_name}"
+        button.style = discord.ButtonStyle.secondary
+        await interaction.response.edit_message(
+            content=(
+                f"🕊️ **{anjo.display_name}** assumiu o ticket de "
+                f"**{guild.get_member(self.dono_id).display_name if guild.get_member(self.dono_id) else 'usuário'}**!"
+            ),
+            view=self
+        )
 
 
 class BotaoAbrirTicketAnjo(discord.ui.View):
@@ -5189,7 +5330,7 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
         guild  = interaction.guild
         member = interaction.user
 
-        categoria = guild.get_channel(CATEGORIA_TICKET_ID)
+        categoria  = guild.get_channel(CATEGORIA_TICKET_ID)
         cargo_anjo = guild.get_role(CARGO_ANJO_ID)
 
         if categoria is None:
@@ -5206,7 +5347,8 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
                 ephemeral=True
             )
 
-        # Permissões do canal: privado por padrão, visível só para o criador e os Anjos
+        # Canal inicial: visível só para o dono e o bot
+        # Os anjos entram individualmente ao reivindicar
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             member: discord.PermissionOverwrite(
@@ -5221,13 +5363,6 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
                 read_message_history=True
             ),
         }
-        if cargo_anjo:
-            overwrites[cargo_anjo] = discord.PermissionOverwrite(
-                view_channel=True,
-                send_messages=True,
-                read_message_history=True,
-                manage_channels=True
-            )
 
         canal_ticket = await guild.create_text_channel(
             name=nome_canal,
@@ -5248,10 +5383,10 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
                 "🌑 **Aeon:** *emerge das sombras com suavidade incomum* "
                 f"{member.display_name}. 🖤🌑 "
                 "As trevas também têm ouvidos. Pode falar — "
-                "um dos nossos Anjos estará aqui em breve. "
+                "um dos nossos Anjos está a caminho. "
                 "Você não está sozinho(a) nisso.\n\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"<@&{CARGO_ANJO_ID}> será notificado(a) e virá te ajudar. 🕊️\n"
+                "🕊️ *Aguarde um Anjo assumir seu atendimento...*\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                 "🔒 *Quando tudo estiver resolvido, use o botão abaixo para fechar.*"
             ),
@@ -5262,46 +5397,34 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
 
         await canal_ticket.send(embed=embed, view=BotaoFecharTicketAnjo())
 
+        # Avisa os anjos no canal de reivindicação
+        canal_reiv = guild.get_channel(CANAL_REIVINDICAR_ANJO_ID)
+        if canal_reiv:
+            embed_reiv = discord.Embed(
+                title="🕊️ Novo ticket aguardando um Anjo!",
+                description=(
+                    f"**{member.display_name}** ({member.mention}) precisa de ajuda. 🌸\n\n"
+                    f"🌑 **Aeon:** Um novo pedido chegou às sombras. 🖤🌑 "
+                    f"Quem entre os Anjos irá atender?\n\n"
+                    f"📩 Canal: {canal_ticket.mention}\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "Clique em **Reivindicar ticket** para assumir o atendimento.\n"
+                    "Só o Anjo que reivindicar poderá ver e falar no ticket."
+                ),
+                color=0xe8d5f5
+            )
+            embed_reiv.set_footer(text="🕊️ Os Anjos cuidam de você.")
+            await canal_reiv.send(
+                content=f"<@&{CARGO_ANJO_ID}>",
+                embed=embed_reiv,
+                view=BotaoReivindicarTicket(canal_ticket.id, member.id)
+            )
+
         await interaction.response.send_message(
-            f"🌸 Seu ticket foi criado! {canal_ticket.mention} — um Anjo já foi avisado. 🕊️✨",
+            f"🌸 Seu ticket foi criado! {canal_ticket.mention}\n"
+            "Um Anjo vai assumir seu atendimento em breve. 🕊️✨",
             ephemeral=True
         )
-
-
-@bot.command(name="anjos")
-@commands.has_permissions(manage_channels=True)
-async def cmd_anjos(ctx):
-    """Envia o painel de abertura de tickets de anjos no canal configurado."""
-    canal = ctx.guild.get_channel(CANAL_TICKET_ANJO_ID)
-    if canal is None:
-        return await ctx.send("⚠️ Canal de tickets de anjos não encontrado.")
-
-    embed = discord.Embed(
-        title="🕊️ Precisa conversar? Os Anjos estão aqui.",
-        description=(
-            "🌟 **Celestia:** *brilha com uma luz suave e aconchegante* "
-            "Às vezes a vida pesa, né?? 😭🌸🤍 "
-            "Seja um conselho, um desabafo, uma dúvida ou só precisar de alguém pra ouvir — "
-            "**os Anjos estão aqui por você!!** "
-            "Não precisa carregar isso sozinho(a)!! ☀️💫\n\n"
-            "🌑 **Aeon:** *emerge das sombras com voz mais suave que o habitual* "
-            "Nem sempre as trevas são lugar de solidão. 🖤🌑 "
-            "Se algo pesa — dúvida, conselho, um momento difícil — "
-            "abra um ticket. Um Anjo virá. "
-            "As sombras guardam segredos com cuidado.\n\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🕊️ Clique no botão abaixo para abrir seu espaço privado.\n"
-            "Só você e os Anjos poderão ver.\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        ),
-        color=0xe8d5f5
-    )
-    embed.set_image(url=IMAGE_TICKET_ANJO)
-    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. 🕊️ Os Anjos cuidam de você.")
-
-    await canal.send(embed=embed, view=BotaoAbrirTicketAnjo())
-    if canal != ctx.channel:
-        await ctx.message.delete()
 
 
 # ══════════════════════════════════════════════

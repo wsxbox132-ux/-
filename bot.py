@@ -27,6 +27,7 @@ TOKEN        = os.getenv("TOKEN")
 
 # IDs dos bots (preencha com o ID real do bot depois de criar)
 BOT_ID = None  # preencha depois
+TICKET_BOT_ID = 710034409214181396  # 01TicketKing — bot de tickets
 
 # IDs de usuários especiais
 CRIADOR_ID = 769951556388257812   # quem criou o bot
@@ -938,6 +939,15 @@ async def on_member_join(member: discord.Member):
 
 @bot.event
 async def on_message(message: discord.Message):
+    # ── Detecção de ticket do 01TicketKing ────────────────────────────────────
+    if message.author.id == TICKET_BOT_ID and message.embeds:
+        for embed in message.embeds:
+            titulo = (embed.title or "").lower()
+            if "ticket aberto" in titulo or "ticket" in titulo:
+                await message.channel.send(IMAGE_TICKET)
+                break
+    # ─────────────────────────────────────────────────────────────────────────
+
     if message.author.bot:
         return
 
@@ -4876,6 +4886,7 @@ CARGO_VISITANTE_ID  = 1284263365547397120  # cargo exclusivo de visitante
 CARGO_MEMBRO_ID     = 1284263397990596659  # cla member
 CARGO_COMUM_ID      = 1290029716241256600  # verificado (recebido em ambos os casos)
 
+IMAGE_TICKET            = "https://cdn.discordapp.com/attachments/926913851172204577/1514098200661983412/ChatGPT_Image_9_de_jun._de_2026_23_45_25.png?ex=6a2a2155&is=6a28cfd5&hm=1676da56b11b0efc33e422f78cee000cdb0b57bdeb14e30514b4ac18e535bd1d"
 IMAGE_ENTRADA_VISITANTE = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
 IMAGE_ENTRADA_MEMBRO    = "https://cdn.discordapp.com/attachments/926913851172204577/1514088914200297553/ChatGPT_Image_9_de_jun._de_2026_23_08_19.png?ex=6a2a18af&is=6a28c72f&hm=dbd29acf877630fe2055e78e8801d187a579076c2fd0999e5c2e823af7db63ce"
 IMAGE_BOAS_VINDAS       = "https://cdn.discordapp.com/attachments/926913851172204577/1514091940331651176/ChatGPT_Image_9_de_jun._de_2026_23_20_29.png?ex=6a2a1b81&is=6a28ca01&hm=99bf1e32f9039f292be06ef506310e4a2aaba6c8fd677aebe09a770b62634a3a"

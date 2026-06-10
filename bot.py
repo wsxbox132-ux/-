@@ -4876,7 +4876,74 @@ CARGO_VISITANTE_ID  = 1514084253066072156  # cargo exclusivo de visitante
 CARGO_MEMBRO_ID     = 1514084468241993878  # cargo exclusivo de membro
 CARGO_COMUM_ID      = 1514084840088014908  # cargo recebido em ambos os casos
 
-IMAGE_ENTRADA = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
+IMAGE_ENTRADA_VISITANTE = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
+IMAGE_ENTRADA_MEMBRO    = "https://cdn.discordapp.com/attachments/926913851172204577/1514088914200297553/ChatGPT_Image_9_de_jun._de_2026_23_08_19.png?ex=6a2a18af&is=6a28c72f&hm=dbd29acf877630fe2055e78e8801d187a579076c2fd0999e5c2e823af7db63ce"
+IMAGE_BOAS_VINDAS       = "https://cdn.discordapp.com/attachments/926913851172204577/1514091940331651176/ChatGPT_Image_9_de_jun._de_2026_23_20_29.png?ex=6a2a1b81&is=6a28ca01&hm=99bf1e32f9039f292be06ef506310e4a2aaba6c8fd677aebe09a770b62634a3a"
+
+CANAL_BOAS_VINDAS_ID = 1284257046740602901  # canal onde o bot manda boas-vindas
+
+# Canais indicados no texto de boas-vindas
+CANAIS_INDICADOS = (
+    "<#1284257046740602901>\n"   # substitua pelos IDs reais dos canais abaixo:
+    "👘 **IDs de Skins** — confira e registre o ID da sua skin favorita\n"
+    "👔 **Traje Primordiais** — as roupas mais raras e icônicas do servidor\n"
+    "🧥 **Referências de Skins** — inspirações e referências visuais\n"
+    "📃 **Registro** — faça seu registro oficial aqui!\n"
+    "🌈 **Cores** — personalize sua identidade no servidor"
+)
+
+
+async def _enviar_boas_vindas(guild: discord.Guild, member: discord.Member, tipo: str):
+    """Envia uma mensagem de boas-vindas no canal definido."""
+    canal = guild.get_channel(CANAL_BOAS_VINDAS_ID)
+    if canal is None:
+        return  # canal não encontrado, ignora silenciosamente
+
+    if tipo == "visitante":
+        embed = discord.Embed(
+            title="🌙 Um novo rosto nas sombras...",
+            description=(
+                f"✨ {member.mention} acabou de chegar como **visitante**! ✨\n\n"
+                "🌑 **Aeon:** *emerge lentamente das trevas e fixa os olhos dourados* "
+                f"As sombras registraram sua chegada, {member.display_name}. 🖤🌑 "
+                "Explore com calma. As trevas não mordem... na maioria das vezes.\n\n"
+                "🌟 **Celestia:** AAAAA UM VISITANTE NOVO!! 😭🌟🤍✨ "
+                f"BEM-VINDO(A) {member.display_name.upper()}!! "
+                "Que alegria enorme te ver aqui!! "
+                "Fique à vontade e aproveite cada cantinho!! ☀️🌸💫\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🗺️ **Por onde começar? Dá uma olhada nesses canais:**\n\n"
+                f"{CANAIS_INDICADOS}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🌙 *Fique à vontade, visitante. As portas estão abertas.*"
+            ),
+            color=0x2b2b3b
+        )
+    else:  # membro
+        embed = discord.Embed(
+            title="🌟 O círculo ganhou mais um...",
+            description=(
+                f"🎉 {member.mention} acaba de entrar oficialmente como **membro**! 🎉\n\n"
+                "🌟 **Celestia:** *explode em faíscas douradas de pura alegria* "
+                f"MEMBRO NOVO MEMBRO NOVO!! 😭🌟🤍✨ "
+                f"{member.display_name.upper()} AGORA FAZ PARTE DE VERDADE!! "
+                "Meu brilho nunca foi tão intenso!! ☀️🌸💫\n\n"
+                "🌑 **Aeon:** *sai das sombras com postura ereta e ronrona grave* "
+                f"Bem-vindo ao círculo, {member.display_name}. 🖤🌑 "
+                "Quem decide ficar carrega algo que poucos têm: comprometimento. "
+                "As trevas reconhecem isso — e respeitam.\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🗺️ **Agora que você é membro, explore esses canais:**\n\n"
+                f"{CANAIS_INDICADOS}\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🌑☀️ *Seja muito feliz aqui. Você já é um dos nossos.*"
+            ),
+            color=0xf5c542
+        )
+
+    embed.set_image(url=IMAGE_BOAS_VINDAS)
+    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
+    await canal.send(embed=embed)
 
 
 class BotaoVisitante(discord.ui.View):
@@ -4899,7 +4966,6 @@ class BotaoVisitante(discord.ui.View):
         cargo_visitante = guild.get_role(CARGO_VISITANTE_ID)
         cargo_comum     = guild.get_role(CARGO_COMUM_ID)
 
-        cargos_adicionados = []
         erros = []
 
         for cargo in [cargo_visitante, cargo_comum]:
@@ -4909,7 +4975,6 @@ class BotaoVisitante(discord.ui.View):
             if cargo not in member.roles:
                 try:
                     await member.add_roles(cargo, reason="Entrada como Visitante via botão")
-                    cargos_adicionados.append(cargo.name)
                 except discord.Forbidden:
                     erros.append(f"Sem permissão para adicionar o cargo **{cargo.name}**.")
                 except discord.HTTPException as e:
@@ -4929,6 +4994,7 @@ class BotaoVisitante(discord.ui.View):
                 "Que alegria ter você aqui!! Aproveite muito!! ☀️🌸",
                 ephemeral=True
             )
+            await _enviar_boas_vindas(guild, member, "visitante")
 
 
 class BotaoMembro(discord.ui.View):
@@ -4951,7 +5017,6 @@ class BotaoMembro(discord.ui.View):
         cargo_membro = guild.get_role(CARGO_MEMBRO_ID)
         cargo_comum  = guild.get_role(CARGO_COMUM_ID)
 
-        cargos_adicionados = []
         erros = []
 
         for cargo in [cargo_membro, cargo_comum]:
@@ -4961,7 +5026,6 @@ class BotaoMembro(discord.ui.View):
             if cargo not in member.roles:
                 try:
                     await member.add_roles(cargo, reason="Entrada como Membro via botão")
-                    cargos_adicionados.append(cargo.name)
                 except discord.Forbidden:
                     erros.append(f"Sem permissão para adicionar o cargo **{cargo.name}**.")
                 except discord.HTTPException as e:
@@ -4981,6 +5045,7 @@ class BotaoMembro(discord.ui.View):
                 "Você faz parte agora de verdade!! Seja muito feliz aqui!! ☀️🌸💫",
                 ephemeral=True
             )
+            await _enviar_boas_vindas(guild, member, "membro")
 
 
 @bot.command(name="visitante")
@@ -5004,7 +5069,7 @@ async def cmd_visitante(ctx):
         ),
         color=0x2b2b3b
     )
-    embed.set_image(url=IMAGE_ENTRADA)
+    embed.set_image(url=IMAGE_ENTRADA_VISITANTE)
     embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
 
     await ctx.send(embed=embed, view=BotaoVisitante())
@@ -5032,7 +5097,7 @@ async def cmd_membro(ctx):
         ),
         color=0xf5c542
     )
-    embed.set_image(url=IMAGE_ENTRADA)
+    embed.set_image(url=IMAGE_ENTRADA_MEMBRO)
     embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
 
     await ctx.send(embed=embed, view=BotaoMembro())

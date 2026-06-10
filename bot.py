@@ -940,7 +940,8 @@ async def on_member_join(member: discord.Member):
 @bot.event
 async def on_message(message: discord.Message):
     # ── Detecção de ticket do 01TicketKing ────────────────────────────────────
-    if message.author.id == TICKET_BOT_ID and message.embeds:
+    CANAL_LOGS_TICKET_ID = 1290058994794106881  # canal de logs — sem imagem aqui
+    if message.author.id == TICKET_BOT_ID and message.channel.id != CANAL_LOGS_TICKET_ID and message.embeds:
         for embed in message.embeds:
             titulo = (embed.title or "").lower()
             if "ticket aberto" in titulo or "ticket" in titulo:

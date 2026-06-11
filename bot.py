@@ -329,6 +329,9 @@ _COOLDOWN_MENCAO_SEGUNDOS = 300
 CANAL_GERAL_ID    = None
 CANAL_SAUDACOES_ID = None
 
+# ── Canal de logs de verificação Roblox ───────────────────────────────────────
+CANAL_LOGS_ROBLOX_ID = 1514429052176564254
+
 # Cooldowns
 _cooldown_custom  = {}
 _COOLDOWN_SEGUNDOS = 600
@@ -929,7 +932,9 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    """Boas-vindas quando alguém entra no servidor."""
+    """Boas-vindas e log de verificação Roblox quando alguém entra no servidor."""
+
+    # ── Boas-vindas no canal do sistema ───────────────────────────────────────
     canal = member.guild.system_channel
     if canal:
         frases = [
@@ -946,6 +951,108 @@ async def on_member_join(member: discord.Member):
             ),
         ]
         await canal.send(random.choice(frases))
+
+    # ── Log de verificação Roblox ─────────────────────────────────────────────
+    canal_logs = member.guild.get_channel(CANAL_LOGS_ROBLOX_ID)
+    if canal_logs is None:
+        return
+
+    # Verifica se o membro tem conta Roblox vinculada nas conexões do Discord
+    tem_roblox = False
+    try:
+        perfil = await member.fetch_profile()
+        if hasattr(perfil, "connections"):
+            tem_roblox = any(conn.type == "roblox" for conn in perfil.connections)
+    except Exception:
+        tem_roblox = False  # se não conseguir checar, marca como não vinculado por segurança
+
+    agora = datetime.now(timezone.utc)
+    data_formatada = agora.strftime("%d/%m/%Y às %H:%M UTC")
+    conta_criada = member.created_at.strftime("%d/%m/%Y")
+    avatar_url = member.display_avatar.url
+
+    if tem_roblox:
+        # ── Membro JÁ tem Roblox vinculado ───────────────────────────────────
+        embed = discord.Embed(
+            title="✅  Entrada com verificação OK",
+            description=(
+                f"{member.mention} entrou no servidor com a conta Roblox já vinculada.\n"
+                "Nenhuma ação necessária."
+            ),
+            color=0x57F287,
+            timestamp=agora,
+        )
+        embed.set_author(
+            name=f"{member.display_name} ({member.name})",
+            icon_url=avatar_url,
+        )
+        embed.add_field(name="🆔 ID do usuário",  value=str(member.id),  inline=True)
+        embed.add_field(name="📅 Conta criada em", value=conta_criada,    inline=True)
+        embed.add_field(name="🎮 Roblox",          value="🟢 Vinculado",  inline=True)
+        embed.set_thumbnail(url=avatar_url)
+        embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
+        await canal_logs.send(embed=embed)
+
+    else:
+        # ── Membro NÃO tem Roblox vinculado ──────────────────────────────────
+        embed = discord.Embed(
+            title="⚠️  Entrada sem verificação Roblox",
+            description=(
+                f"{member.mention} entrou no servidor **sem** a conta Roblox vinculada ao Discord.\n\n"
+                "**Ação necessária:**\n"
+                "> O membro precisa vincular sua conta Roblox nas **Conexões** do Discord.\n"
+                "> `Configurações → Conexões → Roblox`"
+            ),
+            color=0xFEE75C,
+            timestamp=agora,
+        )
+        embed.set_author(
+            name=f"{member.display_name} ({member.name})",
+            icon_url=avatar_url,
+        )
+        embed.add_field(name="🆔 ID do usuário",  value=str(member.id),       inline=True)
+        embed.add_field(name="📅 Conta criada em", value=conta_criada,         inline=True)
+        embed.add_field(name="🎮 Roblox",          value="🔴 Não vinculado",   inline=True)
+        embed.set_thumbnail(url=avatar_url)
+        embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
+        await canal_logs.send(embed=embed)
+
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    """Log quando alguém sai ou é removido do servidor."""
+    canal_logs = member.guild.get_channel(CANAL_LOGS_ROBLOX_ID)
+    if canal_logs is None:
+        return
+
+    agora = datetime.now(timezone.utc)
+    data_formatada = agora.strftime("%d/%m/%Y às %H:%M UTC")
+    avatar_url = member.display_avatar.url
+
+    cargos = [r.name for r in member.roles if r.name != "@everyone"]
+    cargos_str = ", ".join(cargos) if cargos else "Nenhum"
+
+    embed = discord.Embed(
+        title="📤  Membro saiu / foi removido",
+        description=f"**{member.display_name}** (`{member.name}`) deixou o servidor.",
+        color=0xED4245,
+        timestamp=agora,
+    )
+    embed.set_author(
+        name=f"{member.display_name} ({member.name})",
+        icon_url=avatar_url,
+    )
+    embed.add_field(name="🆔 ID do usuário", value=str(member.id), inline=True)
+    embed.add_field(
+        name="📅 Entrou em",
+        value=member.joined_at.strftime("%d/%m/%Y") if member.joined_at else "Desconhecido",
+        inline=True,
+    )
+    embed.add_field(name="🎭 Cargos que tinha", value=cargos_str, inline=False)
+    embed.set_thumbnail(url=avatar_url)
+    embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
+    await canal_logs.send(embed=embed)
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -5128,7 +5235,7 @@ async def cmd_membro(ctx):
 # SISTEMA DE TICKET — ANJOS (ajuda, conselho...)
 # ══════════════════════════════════════════════
 
-CANAL_TICKET_ANJO_ID      = 1514427068589543565  # canal do painel de abertura
+CANAL_TICKET_ANJO_ID      = 1284276368598761573  # canal do painel de abertura
 CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
 CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos

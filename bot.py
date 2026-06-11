@@ -5235,7 +5235,7 @@ async def cmd_membro(ctx):
 # SISTEMA DE TICKET — ANJOS (ajuda, conselho...)
 # ══════════════════════════════════════════════
 
-CANAL_TICKET_ANJO_ID      = 1284276368598761573  # canal do painel de abertura
+CANAL_TICKET_ANJO_ID      = 1514427068589543565  # canal do painel de abertura
 CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
 CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos

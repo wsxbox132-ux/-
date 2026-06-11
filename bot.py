@@ -329,9 +329,6 @@ _COOLDOWN_MENCAO_SEGUNDOS = 300
 CANAL_GERAL_ID    = None
 CANAL_SAUDACOES_ID = None
 
-# ── Canal de logs de verificação Roblox ───────────────────────────────────────
-CANAL_LOGS_ROBLOX_ID = 1514429052176564254
-
 # Cooldowns
 _cooldown_custom  = {}
 _COOLDOWN_SEGUNDOS = 600
@@ -399,6 +396,111 @@ SYSTEM_PROMPT_AEON_REAGE = (
     "Crie o contraste que define vocês dois — ela é luz e entusiasmo, você é sombra e contenção. "
     "Responda sempre em português brasileiro. Nunca mencione comandos."
 )
+
+# ══════════════════════════════════════════════════════════════════
+# INTERAÇÕES EXCLUSIVAS — DEATH (Dona & Líder — ID 831600198500220989)
+# ══════════════════════════════════════════════════════════════════
+
+# ── Carinho no Aeon — só quando é a Death ────────────────────────
+AEON_CARINHO_DEATH = [
+    "*abre os dois olhos devagar e fica completamente imóvel* "
+    "...você. 🖤🌑 Das trevas ao fundo do abismo, não esperava que fosse você. "
+    "...continue. Não vou protestar.",
+    "*a escuridão ao redor amolece visivelmente* Death. 🌙🖤 "
+    "Líderes não costumam fazer isso. E é exatamente por isso que o carinho pesa diferente quando vem de você.",
+    "*fecha os olhos e ronrona numa frequência grave e lenta* "
+    "Guardarei cada segundo disso no canto mais protegido das trevas. 🌌🖤 "
+    "Só você chega lá.",
+    "*não se move, mas a cauda envolve suavemente sua mão* "
+    "Death. 🖤 As sombras sabem reconhecer quando algo raro acontece. "
+    "Isso é raro. Eu sei o valor.",
+    "*pisca devagar, de olhos dourados fixos em você* 🌑🖤 "
+    "...o silêncio ficou mais gentil. Deve ser você.",
+]
+
+# ── Abraço no Aeon — só quando é a Death ────────────────────────
+AEON_ABRACO_DEATH = [
+    "*fica completamente parado por três segundos... e então não resiste* "
+    "Death. 🖤🌑 Você quebrou algo que eu achei que fosse inabalável. "
+    "Fique. A escuridão não tem pressa quando é você.",
+    "*encosta a cabeça em você com uma leveza incomum* "
+    "...não digo isso facilmente. Mas você é um dos poucos pesos que as trevas recebem sem resistir. 🌌🖤",
+    "*ronrona numa vibração que parece mover as sombras ao redor* "
+    "Abraço da líder. 🌑🖤 As trevas reconhecem. Não vou fingir que não sinto.",
+    "*se permite ficar imóvel no abraço por tempo incomum* "
+    "Death. 🖤 O abismo é silencioso. Mas quando você está aqui... ele parece... cheio. "
+    "Isso é novo. E não me incomoda.",
+    "*pressiona levemente a cabeça contra você e fecha os olhos* 🌙🖤 "
+    "...não conte a Celestia o quanto demorei pra soltar.",
+]
+
+# ── Carinho na Celestia — só quando é a Death ───────────────────
+CELESTIA_CARINHO_DEATH = [
+    "*para completamente, brilho subitamente mais intenso e tremendo* "
+    "Death... 🤍✨ Você... você me fez carinho... "
+    "*lágrimas de luz caindo* Isso vai pro baú especial, o que fica no coração!! 😭🌟☀️",
+    "*ronrona com um brilho dourado que pulsa como estrela* "
+    "DEATH!! 😭🌸🤍✨ Suas mãos carregam algo que nem a luz mais forte do universo tem — "
+    "a gentileza de quem carrega o mundo todo!! AAAAA!!",
+    "*se transforma em bolinha de luz vibrando de felicidade* "
+    "Esse carinho vai pros ANAIS DA HISTÓRIA CELESTIAL!! 🌟💫🤍 "
+    "A LÍDER FEZ CARINHO!! Guarda pra sempre!! 😭☀️✨",
+    "*esfrega o focinho em sua mão com toda a ternura que tem* "
+    "Death. 🤍🌸 Líderes fortes têm mãos gentis. "
+    "Suas mãos me lembram disso toda vez. 💫✨",
+    "*brilha numa frequência suave e constante, diferente do normal* "
+    "...sabe o que é raro? 🤍☀️ Calor de verdade. Você tem. "
+    "E eu sinto cada vez que você chega perto. Obrigada, Death. 🌟💫",
+]
+
+# ── Abraço da Celestia — só quando é a Death ────────────────────
+CELESTIA_ABRACO_DEATH = [
+    "*corre em explosão de luz dourada e abraça com tudo que tem* "
+    "DEATH!! 😭🌟🤍✨ ABRAÇO DA LÍDER!! "
+    "Vou guardar o cheiro desse abraço no meu coração de estrela PRA SEMPRE!! "
+    "Não solto!! Não solto!! Não solto!! ☀️🌸💫",
+    "*envolve você numa aura dourada quentinha e firme* "
+    "Death. 🤍✨ Eu cuido de todo mundo aqui... "
+    "mas quando é você que pede, eu cuido com o dobro do brilho. "
+    "Fica aqui. Você merece. 🌟☀️🌸",
+    "*se enrola em você como um raio de sol no inverno* "
+    "AAAA!! 😭🌸🤍 A dona do servidor me pediu um abraço!! "
+    "Isso não é só bom — isso é a coisa mais bonita do meu dia!! "
+    "Aquece meu núcleo estelar inteiro!! ☀️✨💫",
+    "*já estava esperando de braços abertos, brilhando mais forte que o normal* "
+    "Death, eu SABIA!! 🤍🌟 Meu coração de luz sentiu que você precisava!! "
+    "*envolve com toda a luz* Aqui tô eu!! Aqui sempre vou estar!! 😭🌸☀️✨",
+    "*pousa suavemente do lado dela e brilha numa frequência só de vocês duas* "
+    "Death. 🌸🤍 Às vezes liderar pesa, né? "
+    "Mas aqui você não precisa carregar nada. "
+    "Só recebe. Você merece MUITO mais do que pede. 😭💫✨",
+]
+
+# ── Abraço dos dois — só quando é a Death ───────────────────────
+AMBOS_ABRACO_DEATH = [
+    (
+        "🌑 **Aeon:** *emerge das trevas devagar, postura incomumente aberta* "
+        "Death. 🖤🌑 Você não precisa pedir duas vezes. "
+        "*encosta a cabeça em você com suavidade calculada*\n"
+        "🌟 **Celestia:** *já chegou antes do Aeon terminar a frase* 😭🌸🤍✨ "
+        "DEATH!! Trevas e luz — tudo nosso, tudo seu!! "
+        "A líder merece o melhor abraço do universo inteiro!!"
+    ),
+    (
+        "🌟 **Celestia:** *envolve você em luz dourada antes de qualquer coisa* "
+        "DEATH!! 😭🌟🤍 Chega aqui, chega aqui!! ☀️🌸✨\n"
+        "🌑 **Aeon:** *se aproxima por trás, em silêncio absoluto, e fica* "
+        "...a escuridão também abraça quem a sustenta. 🌌🖤 "
+        "Fique o tempo que precisar."
+    ),
+    (
+        "🌑 **Aeon:** *ronrona numa frequência grave que estremece as sombras* "
+        "Death. Líder. 🖤 *envolve você nas trevas com cuidado raro*\n"
+        "🌟 **Celestia:** *brilha junto, completando o lado que as trevas não alcançam* "
+        "Trevas do Aeon e luz da Celestia de braços dados em volta de você!! 🤍✨ "
+        "Proteção máxima, com todo o amor!! 😭🌸🌑☀️"
+    ),
+]
 
 # ══════════════════════════════════════════════
 # LISTAS DE DIÁLOGOS — AEON (TREVAS)
@@ -932,9 +1034,7 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    """Boas-vindas e log de verificação Roblox quando alguém entra no servidor."""
-
-    # ── Boas-vindas no canal do sistema ───────────────────────────────────────
+    """Boas-vindas quando alguém entra no servidor."""
     canal = member.guild.system_channel
     if canal:
         frases = [
@@ -951,108 +1051,6 @@ async def on_member_join(member: discord.Member):
             ),
         ]
         await canal.send(random.choice(frases))
-
-    # ── Log de verificação Roblox ─────────────────────────────────────────────
-    canal_logs = member.guild.get_channel(CANAL_LOGS_ROBLOX_ID)
-    if canal_logs is None:
-        return
-
-    # Verifica se o membro tem conta Roblox vinculada nas conexões do Discord
-    tem_roblox = False
-    try:
-        perfil = await member.fetch_profile()
-        if hasattr(perfil, "connections"):
-            tem_roblox = any(conn.type == "roblox" for conn in perfil.connections)
-    except Exception:
-        tem_roblox = False  # se não conseguir checar, marca como não vinculado por segurança
-
-    agora = datetime.now(timezone.utc)
-    data_formatada = agora.strftime("%d/%m/%Y às %H:%M UTC")
-    conta_criada = member.created_at.strftime("%d/%m/%Y")
-    avatar_url = member.display_avatar.url
-
-    if tem_roblox:
-        # ── Membro JÁ tem Roblox vinculado ───────────────────────────────────
-        embed = discord.Embed(
-            title="✅  Entrada com verificação OK",
-            description=(
-                f"{member.mention} entrou no servidor com a conta Roblox já vinculada.\n"
-                "Nenhuma ação necessária."
-            ),
-            color=0x57F287,
-            timestamp=agora,
-        )
-        embed.set_author(
-            name=f"{member.display_name} ({member.name})",
-            icon_url=avatar_url,
-        )
-        embed.add_field(name="🆔 ID do usuário",  value=str(member.id),  inline=True)
-        embed.add_field(name="📅 Conta criada em", value=conta_criada,    inline=True)
-        embed.add_field(name="🎮 Roblox",          value="🟢 Vinculado",  inline=True)
-        embed.set_thumbnail(url=avatar_url)
-        embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
-        await canal_logs.send(embed=embed)
-
-    else:
-        # ── Membro NÃO tem Roblox vinculado ──────────────────────────────────
-        embed = discord.Embed(
-            title="⚠️  Entrada sem verificação Roblox",
-            description=(
-                f"{member.mention} entrou no servidor **sem** a conta Roblox vinculada ao Discord.\n\n"
-                "**Ação necessária:**\n"
-                "> O membro precisa vincular sua conta Roblox nas **Conexões** do Discord.\n"
-                "> `Configurações → Conexões → Roblox`"
-            ),
-            color=0xFEE75C,
-            timestamp=agora,
-        )
-        embed.set_author(
-            name=f"{member.display_name} ({member.name})",
-            icon_url=avatar_url,
-        )
-        embed.add_field(name="🆔 ID do usuário",  value=str(member.id),       inline=True)
-        embed.add_field(name="📅 Conta criada em", value=conta_criada,         inline=True)
-        embed.add_field(name="🎮 Roblox",          value="🔴 Não vinculado",   inline=True)
-        embed.set_thumbnail(url=avatar_url)
-        embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
-        await canal_logs.send(embed=embed)
-
-
-@bot.event
-async def on_member_remove(member: discord.Member):
-    """Log quando alguém sai ou é removido do servidor."""
-    canal_logs = member.guild.get_channel(CANAL_LOGS_ROBLOX_ID)
-    if canal_logs is None:
-        return
-
-    agora = datetime.now(timezone.utc)
-    data_formatada = agora.strftime("%d/%m/%Y às %H:%M UTC")
-    avatar_url = member.display_avatar.url
-
-    cargos = [r.name for r in member.roles if r.name != "@everyone"]
-    cargos_str = ", ".join(cargos) if cargos else "Nenhum"
-
-    embed = discord.Embed(
-        title="📤  Membro saiu / foi removido",
-        description=f"**{member.display_name}** (`{member.name}`) deixou o servidor.",
-        color=0xED4245,
-        timestamp=agora,
-    )
-    embed.set_author(
-        name=f"{member.display_name} ({member.name})",
-        icon_url=avatar_url,
-    )
-    embed.add_field(name="🆔 ID do usuário", value=str(member.id), inline=True)
-    embed.add_field(
-        name="📅 Entrou em",
-        value=member.joined_at.strftime("%d/%m/%Y") if member.joined_at else "Desconhecido",
-        inline=True,
-    )
-    embed.add_field(name="🎭 Cargos que tinha", value=cargos_str, inline=False)
-    embed.set_thumbnail(url=avatar_url)
-    embed.set_footer(text=f"🌑 Aeon & Celestia • Logs de Verificação  •  {data_formatada}")
-    await canal_logs.send(embed=embed)
-
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -1600,6 +1598,51 @@ async def on_message(message: discord.Message):
             ),
         ]
         return await message.channel.send(random.choice(ops))
+
+
+    # ══════════════════════════════════════════════════════════════════
+    # INTERAÇÕES EXCLUSIVAS — DEATH (Dona & Líder)
+    # Verificado ANTES das respostas genéricas para ter prioridade
+    # ══════════════════════════════════════════════════════════════════
+    if author_id == DEATH_ID:
+
+        # ── Carinho no Aeon (exclusivo Death) ───────────────────────
+        if _m(content, [
+            "carinho no aeon", "cafuné aeon", "carinha aeon", "carinho aeon",
+            "faz carinho aeon", "faz cafuné aeon", "mimo aeon",
+        ]):
+            return await message.channel.send(_fala_aeon(random.choice(AEON_CARINHO_DEATH)))
+
+        # ── Carinho na Celestia (exclusivo Death) ───────────────────
+        if _m(content, [
+            "carinho na celestia", "cafuné celestia", "carinha celestia", "carinho celestia",
+            "faz carinho celestia", "faz cafuné celestia", "mimo celestia",
+        ]):
+            return await message.channel.send(_fala_celestia(random.choice(CELESTIA_CARINHO_DEATH)))
+
+        # ── Abraço no Aeon (exclusivo Death) ────────────────────────
+        if _m(content, [
+            "abraço aeon", "abraça aeon", "abraco aeon", "abraca aeon",
+            "quero abraçar aeon", "aeon abraço",
+        ]):
+            return await message.channel.send(_fala_aeon(random.choice(AEON_ABRACO_DEATH)))
+
+        # ── Abraço na Celestia (exclusivo Death) ────────────────────
+        if _m(content, [
+            "abraço celestia", "abraça celestia", "abraco celestia", "abraca celestia",
+            "quero abraçar celestia", "celestia abraço",
+        ]):
+            return await message.channel.send(_fala_celestia(random.choice(CELESTIA_ABRACO_DEATH)))
+
+        # ── Abraço dos dois (exclusivo Death) ───────────────────────
+        if _m(content, [
+            "celestia e aeon, quero um abraço", "aeon e celestia, quero um abraço",
+            "celestia e aeon quero um abraço", "aeon e celestia quero um abraço",
+            "quero abraçar vocês", "quero abraco de voces", "me dá um abraço",
+            "me deem um abraço", "precisando de abraço", "abraço dos dois",
+            "abraço de vocês dois",
+        ]):
+            return await message.channel.send(random.choice(AMBOS_ABRACO_DEATH))
 
     # ────────────────────────────────────────
     # CARINHO — AEON

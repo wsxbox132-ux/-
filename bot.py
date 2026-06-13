@@ -1622,15 +1622,28 @@ async def on_message(message: discord.Message):
 
         # ── Abraço no Aeon (exclusivo Death) ────────────────────────
         if _m(content, [
+            # padrões reais da Death
+            "aeon, abraço", "aeon abraço", "me dê um abraço, aeon", "me de um abraco, aeon",
+            "me dê um abraço aeon", "me de um abraco aeon",
+            "aeon me dê um abraço", "aeon me de um abraco",
+            "aeon, me dê um abraço", "aeon, me de um abraco",
+            # variações genéricas de abraço no Aeon
             "abraço aeon", "abraça aeon", "abraco aeon", "abraca aeon",
-            "quero abraçar aeon", "aeon abraço",
+            "quero abraçar aeon", "quero abracar aeon",
         ]):
             return await message.channel.send(_fala_aeon(random.choice(AEON_ABRACO_DEATH)))
 
         # ── Abraço na Celestia (exclusivo Death) ────────────────────
         if _m(content, [
+            # padrões reais da Death
+            "celestia me dê um abraço", "celestia me de um abraco",
+            "me dê um abraço, celestia", "me de um abraco, celestia",
+            "me dê um abraço celestia", "me de um abraco celestia",
+            "celestia, me dê um abraço", "celestia, me de um abraco",
+            "celestia me dê abraço", "celestia, abraço",
+            # variações genéricas de abraço na Celestia
             "abraço celestia", "abraça celestia", "abraco celestia", "abraca celestia",
-            "quero abraçar celestia", "celestia abraço",
+            "quero abraçar celestia", "quero abracar celestia",
         ]):
             return await message.channel.send(_fala_celestia(random.choice(CELESTIA_ABRACO_DEATH)))
 
@@ -1666,8 +1679,11 @@ async def on_message(message: discord.Message):
     # ABRAÇO — AEON
     # ────────────────────────────────────────
     if _m(content, [
+        "aeon, abraço", "aeon abraço", "me dê um abraço, aeon", "me de um abraco, aeon",
+        "me dê um abraço aeon", "me de um abraco aeon",
+        "aeon me dê um abraço", "aeon, me dê um abraço",
         "abraço aeon", "abraça aeon", "abraco aeon", "abraca aeon",
-        "quero abraçar aeon", "aeon abraço",
+        "quero abraçar aeon", "quero abracar aeon",
     ]):
         return await message.channel.send(_fala_aeon(random.choice(AEON_REACOES_ABRACO)))
 
@@ -1675,8 +1691,11 @@ async def on_message(message: discord.Message):
     # ABRAÇO — CELESTIA
     # ────────────────────────────────────────
     if _m(content, [
+        "celestia me dê um abraço", "celestia me de um abraco",
+        "me dê um abraço, celestia", "me de um abraco, celestia",
+        "me dê um abraço celestia", "celestia, abraço",
         "abraço celestia", "abraça celestia", "abraco celestia", "abraca celestia",
-        "quero abraçar celestia", "celestia abraço",
+        "quero abraçar celestia", "quero abracar celestia",
     ]):
         return await message.channel.send(_fala_celestia(random.choice(CELESTIA_REACOES_ABRACO)))
 

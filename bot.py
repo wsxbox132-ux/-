@@ -1034,23 +1034,8 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    """Boas-vindas quando alguém entra no servidor."""
-    canal = member.guild.system_channel
-    if canal:
-        frases = [
-            (
-                f"🌑 **Aeon:** *olha da escuridão* ...chegou alguém. {member.mention}. 🖤\n"
-                f"🌟 **Celestia:** AAAAA BEM-VINDO(A), {member.mention}!! 🌟🤍✨ "
-                f"Que alegria enorme!! Você entrou num lugar muito especial hoje!!\n"
-                f"🌑 **Aeon:** ...o servidor ficou mais completo. 🖤 Seja bem-vindo(a)."
-            ),
-            (
-                f"🌟 **Celestia:** *explode em faíscas de alegria* {member.mention} CHEGOUUU!! 🌸🤍✨\n"
-                f"🌑 **Aeon:** *emerge das sombras* A escuridão também te dá as boas-vindas. 🖤🌑\n"
-                f"🌟 **Celestia:** Trevas e luz juntos te recebem aqui!! 🌑☀️🤍 Fica, tá??"
-            ),
-        ]
-        await canal.send(random.choice(frases))
+    """Boas-vindas desativadas."""
+    pass
 
 @bot.event
 async def on_message(message: discord.Message):

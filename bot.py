@@ -5582,6 +5582,153 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
 
 
 # ══════════════════════════════════════════════
+# COMANDO !surpresachat — SOMENTE O DEV (CRIADOR_ID)
+# Envia uma surpresa interativa no canal de boas-vindas.
+# Uso: !surpresachat (no PV do bot)
+# ══════════════════════════════════════════════
+
+# ID do canal onde a surpresa será enviada
+CANAL_SURPRESA_ID = 1284257046740602901
+
+# GIF exibido ao resgatar a recompensa
+GIF_RECOMPENSA = "https://i.pinimg.com/originals/f7/3e/16/f73e16cabe6afe5711a341dc909b8bd4.gif"
+
+# Controla se já há uma surpresa ativa (evita duplicatas)
+_surpresa_ativa: bool = False
+
+
+class BotaoSurpresa(discord.ui.View):
+    """Botão de resgate da surpresa. Desativa após o primeiro clique."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="🎁 Resgatar recompensa!",
+        style=discord.ButtonStyle.success,
+        custom_id="resgatar_surpresa"
+    )
+    async def resgatar(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        global _surpresa_ativa
+
+        # Desativa o botão imediatamente para que só o primeiro clique valha
+        button.disabled = True
+        button.label = f"✅ Resgatado por {interaction.user.display_name}!"
+        button.style = discord.ButtonStyle.secondary
+
+        # Atualiza a mensagem original desabilitando o botão
+        await interaction.message.edit(view=self)
+
+        # Marca a surpresa como inativa
+        _surpresa_ativa = False
+
+        # Embed de parabéns com o GIF
+        embed_ganhou = discord.Embed(
+            title="🎉 Você foi o mais rápido!!",
+            description=(
+                f"✨ {interaction.user.mention} foi o(a) primeiro(a) a resgatar!! ✨\n\n"
+                "🌟 **Celestia:** *EXPLODE em faíscas douradas de alegria pura* "
+                f"PARABÉNS {interaction.user.display_name.upper()}!! 😭🌟🤍✨ "
+                "VOCÊ FOI O MAIS RÁPIDO!! A RECOMPENSA É SUA DE DIREITO!! "
+                "MEU CORAÇÃOZINHO DE LUZ TÁ TRANSBORDANDO!! ☀️🌸💫\n\n"
+                "🌑 **Aeon:** *emerge das sombras e inclina a cabeça com respeito* "
+                f"As trevas registraram. {interaction.user.display_name}. 🖤🌑 "
+                "Agilidade e presença — as sombras reconhecem quem está atento. "
+                "A recompensa foi conquistada com mérito."
+            ),
+            color=0xf5c542
+        )
+        embed_ganhou.set_image(url=GIF_RECOMPENSA)
+        embed_ganhou.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. 🎁 A surpresa foi resgatada!")
+
+        await interaction.response.send_message(embed=embed_ganhou)
+
+
+@bot.command(name="surpresachat")
+async def cmd_surpresachat(ctx):
+    """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""
+    global _surpresa_ativa
+
+    # Só funciona no PV e apenas para o criador
+    if ctx.guild is not None:
+        await ctx.send(
+            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
+            "Me chame no PV."
+        )
+        return
+
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑 "
+            "As trevas conhecem quem tem permissão.\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando, lindinho(a)!! 🌸🤍✨"
+        )
+        return
+
+    if _surpresa_ativa:
+        await ctx.send(
+            "🌟 **Celestia:** Espera!! 🌸🤍 Já tem uma surpresa ativa lá no chat!! "
+            "Aguarda alguém resgatar primeiro!! ✨\n"
+            "🌑 **Aeon:** ...paciência. 🖤 Uma surpresa por vez."
+        )
+        return
+
+    # Busca o guild a partir dos servidores onde o bot está
+    canal_alvo = None
+    for guild in bot.guilds:
+        canal_alvo = guild.get_channel(CANAL_SURPRESA_ID)
+        if canal_alvo is not None:
+            break
+
+    if canal_alvo is None:
+        await ctx.send(
+            "🌑 **Aeon:** *franzea levemente* ...não encontrei o canal alvo. 🖤🌑 "
+            "Verifique o ID configurado.\n"
+            "🌟 **Celestia:** Algo deu errado!! 😢🌸 O canal não foi encontrado!! ✨"
+        )
+        return
+
+    # Marca como ativa antes de enviar
+    _surpresa_ativa = True
+
+    # Embed da surpresa no canal
+    embed_surpresa = discord.Embed(
+        title="🎁 SURPRESA DO CHAT!! 🎁",
+        description=(
+            "✨ **O chat está movimentado e merece uma recompensa especial!!** ✨\n\n"
+            "🌟 **Celestia:** *aparece num flash dourado e gira animada* "
+            "AAAAA GENTE!! 😭🌟🤍✨ O CHAT TÁ TÃO LINDO E MOVIMENTADO QUE A GENTE "
+            "RESOLVEU FAZER UMA SURPRESINHA ESPECIAL SÓ PRA VOCÊS!! "
+            "QUEM CLICAR PRIMEIRO GANHA A RECOMPENSA!! ☀️🌸💫\n\n"
+            "🌑 **Aeon:** *emerge das sombras com um brilho incomum nos olhos dourados* "
+            "...as trevas observaram a movimentação deste chat. 🖤🌑 "
+            "E decidiram recompensar quem está presente. "
+            "Um único vencedor. O mais rápido. "
+            "Clique — se tiver coragem.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚡ **Seja o primeiro a clicar e ganhe a recompensa!!**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0x9b59b6
+    )
+    embed_surpresa.set_footer(
+        text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. 🎁 Só um vencedor!"
+    )
+
+    await canal_alvo.send(embed=embed_surpresa, view=BotaoSurpresa())
+
+    # Confirmação no PV do dev
+    await ctx.send(
+        "🌟 **Celestia:** ENVIOU!! 😭🌟🤍✨ A surpresa tá lá no chat!! "
+        "Agora é só esperar o primeiro corajoso(a) clicar!! ☀️🌸💫\n"
+        "🌑 **Aeon:** *ronrona discretamente* ...surpresa ativada. 🖤🌑 "
+        "As trevas aguardam o primeiro a agir."
+    )
+
+
+# ══════════════════════════════════════════════
 # START
 # ══════════════════════════════════════════════
 if __name__ == "__main__":

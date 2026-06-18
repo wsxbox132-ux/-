@@ -5,6 +5,7 @@ import os
 import aiohttp
 import time
 import asyncio
+from collections import defaultdict
 from datetime import datetime, timezone
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -45,6 +46,89 @@ KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
 RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
 SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da 01
 MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da 01
+
+# ══════════════════════════════════════════════════════════════════════
+# ANTI-SPAM — Aeon & Celestia
+# Detecta quando alguém manda a mesma mensagem 5+ vezes seguidas,
+# apaga as repetidas e manda um castigo fofinho.
+# ══════════════════════════════════════════════════════════════════════
+
+# Limite de repetições antes de agir
+SPAM_LIMITE = 5
+
+# Histórico por usuário: { user_id: { channel_id: {"texto": str, "ids": [msg_id, ...]} } }
+_spam_tracker: dict = defaultdict(lambda: defaultdict(lambda: {"texto": None, "ids": []}))
+
+# Frases de castigo — Aeon (sério mas fofo do jeitinho dele)
+_CASTIGO_AEON = [
+    "*emerge das sombras e olha fixamente* {user}. 🖤🌑 As trevas contaram. Foram {count} vezes a mesma coisa. ...as sombras pedem silêncio agora.",
+    "*pisca lentamente em direção a {user}* 🌙🖤 O eco das trevas já ouviu. Não precisa repetir. As sombras têm memória.",
+    "*senta na frente de {user} e não desvia o olhar* 🌑🖤 ...{count} vezes. As trevas registraram. Uma foi suficiente.",
+    "*a névoa ao redor engrossa levemente* {user}. 🖤🔮 Repetição não adiciona peso às palavras. As sombras já ouviram.",
+    "*ronrona numa frequência de aviso* 🌌🖤 {user}... as trevas têm paciência. Mas {count} vezes é onde eu apareço.",
+]
+
+# Frases de castigo — Celestia (exagerada e adorável)
+_CASTIGO_CELESTIA = [
+    "AAAAA {user}!! 😤🌸🤍✨ EU CONTEI!! FORAM {count} VEZES A MESMA COISA!! *coloca as patinhas na cintura* Mamãe dá castigo, hein!! 💫☀️",
+    "*para de girar e fita {user} com olhinhos sérios* 🌟🤍 {count} mensagens iguais, {user}?? A Celestia TÁ DE OLHO e vai chamar a atenção sim!! 🌸😤✨",
+    "Ei ei ei!! {user}!! 😭🌟🤍 Eu te amo MAS EU APAGUEI AS REPETIDAS!! *brilho firme de mãe* Vamos combinar: uma vez basta!! ☀️🌸💫",
+    "*aparece num flash dourado bem na frente de {user}* 🌟🤍✨ OIIII?? {count} VEZES A MESMA COISA?? A Celestia viu, a Celestia apagou, e a Celestia VAI CONTAR PRO AEON!! 😤🌸",
+    "SOCORRO {user} POR FAVOR!! 😭🌟🌸 {count} mensagens iguais e o canal quase explodiu!! *solta faísca de preocupação* Vai de castigo e pensa no que fez!! 🤍✨☀️",
+]
+
+
+async def checar_spam(message: discord.Message) -> None:
+    """
+    Verifica se o autor mandou a mesma mensagem 5+ vezes seguidas.
+    Se sim: apaga todas as repetidas e manda a resposta fofinha de castigo.
+    """
+    uid = message.author.id
+    cid = message.channel.id
+    texto_novo = message.content.strip().lower()
+
+    if not texto_novo:
+        return
+
+    registro = _spam_tracker[uid][cid]
+
+    if texto_novo == registro["texto"]:
+        registro["ids"].append(message.id)
+    else:
+        registro["texto"] = texto_novo
+        registro["ids"] = [message.id]
+        return
+
+    if len(registro["ids"]) < SPAM_LIMITE:
+        return
+
+    # Limite atingido: apagar repetidas e mandar castigo
+    ids_para_apagar = registro["ids"].copy()
+    registro["texto"] = None
+    registro["ids"] = []
+
+    try:
+        await message.channel.delete_messages(
+            [discord.Object(id=mid) for mid in ids_para_apagar]
+        )
+    except discord.HTTPException:
+        for mid in ids_para_apagar:
+            try:
+                msg_obj = await message.channel.fetch_message(mid)
+                await msg_obj.delete()
+            except discord.NotFound:
+                pass
+
+    count = len(ids_para_apagar)
+    user_mention = message.author.mention
+
+    frase_aeon     = random.choice(_CASTIGO_AEON).format(user=user_mention, count=count)
+    frase_celestia = random.choice(_CASTIGO_CELESTIA).format(user=user_mention, count=count)
+
+    await message.channel.send(
+        f"🌑 **Aeon:** {frase_aeon}\n"
+        f"🌟 **Celestia:** {frase_celestia}"
+    )
 
 # ── Frases personalizadas — AEON ──────────────────────────────────────────────
 _FRASES_AEON: dict[int, list[str]] = {
@@ -1051,6 +1135,10 @@ async def on_message(message: discord.Message):
 
     if message.author.bot:
         return
+
+    # ── Anti-spam ─────────────────────────────────────────────────────────────
+    await checar_spam(message)
+    # ─────────────────────────────────────────────────────────────────────────
 
     await bot.process_commands(message)
 

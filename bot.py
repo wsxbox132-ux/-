@@ -409,9 +409,10 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
 _cooldown_mencao: dict[int, float] = {}
 _COOLDOWN_MENCAO_SEGUNDOS = 300
 
-# IDs de canais (opcional — preencha se quiser bom dia/boa noite automáticos)
+# IDs de canais — bom dia/boa noite automáticos
+# Preencha CANAL_SAUDACOES_ID com o ID do canal onde as mensagens serão enviadas
 CANAL_GERAL_ID    = None
-CANAL_SAUDACOES_ID = None
+CANAL_SAUDACOES_ID = None  # ← coloque aqui o ID do canal desejado
 
 # Cooldowns
 _cooldown_custom  = {}
@@ -1092,6 +1093,99 @@ def _detectar_ingles(texto: str) -> bool:
     # Precisa de pelo menos 2 palavras inglês, ou 1 se a mensagem tiver só 1-2 palavras
     return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
 
+# ══════════════════════════════════════════════════════════════════════
+# TASKS AGENDADAS — BOA NOITE (23:22) e BOM DIA (06:20)
+# Fuso horário: America/Sao_Paulo (UTC-3)
+# Imagens enviadas com embed + mensagem personalizada do Aeon & Celestia
+# ══════════════════════════════════════════════════════════════════════
+
+from zoneinfo import ZoneInfo  # Python 3.9+
+
+FUSO_BR = ZoneInfo("America/Sao_Paulo")
+
+IMAGE_BOA_NOITE = (
+    "https://cdn.discordapp.com/attachments/926913851172204577/"
+    "1516989556489191424/ChatGPT_Image_17_de_jun._de_2026_23_14_43.png"
+    "?ex=6a34a61e&is=6a33549e&hm=10de58de3a0f27c8bd95b4ec82fbeaec0e44d1a4eeea3eb3ebaeabe7c019b460"
+)
+IMAGE_BOM_DIA = (
+    "https://cdn.discordapp.com/attachments/926913851172204577/"
+    "1516990316283035649/ChatGPT_Image_17_de_jun._de_2026_23_17_45.png"
+    "?ex=6a34a6d3&is=6a335553&hm=e704a3a86f7a265bbdce64dcbc6d4268c8f7de619df9b6ec7618bd8ef0673944"
+)
+
+# Controle para não disparar mais de uma vez por minuto
+_boa_noite_enviada: str = ""   # guarda "YYYY-MM-DD" do último envio
+_bom_dia_enviado:  str = ""    # guarda "YYYY-MM-DD" do último envio
+
+
+@tasks.loop(minutes=1)
+async def verificar_hora_mensagens():
+    """
+    Roda a cada minuto e envia:
+      • Boa noite às 23:22 (horário de Brasília)
+      • Bom dia  às 06:20 (horário de Brasília)
+    """
+    global _boa_noite_enviada, _bom_dia_enviado
+
+    agora = datetime.now(FUSO_BR)
+    hora_min = agora.strftime("%H:%M")
+    hoje = agora.strftime("%Y-%m-%d")
+
+    # ── Encontra o canal ──────────────────────────────────────────────────────
+    canal = None
+    if CANAL_SAUDACOES_ID:
+        for guild in bot.guilds:
+            canal = guild.get_channel(CANAL_SAUDACOES_ID)
+            if canal:
+                break
+    if canal is None:
+        return
+
+    # ── BOA NOITE — 23:22 ─────────────────────────────────────────────────────
+    if hora_min == "23:22" and _boa_noite_enviada != hoje:
+        _boa_noite_enviada = hoje
+
+        embed = discord.Embed(
+            description=(
+                "🌑 **Aeon:** *emerge das trevas com suavidade incomum* "
+                "A noite chegou. 🌙🖤 É minha hora — e agora é a sua também. "
+                "Descanse. As sombras velarão cada sonho com cuidado.\n\n"
+                "🌟 **Celestia:** *brilha numa frequência suave e quentinha* "
+                "AAAAA gente!! 😭🌸🤍✨ A noite tá linda e vocês merecem o descanso mais gostoso do mundo!! "
+                "Fecha os olhinhos, solta as preocupações e deixa a Celestia guardar tudo!! "
+                "Boa noite, meu coraçãozinho!! ☀️💫🌟"
+            ),
+            color=0x1a0a2e
+        )
+        embed.set_image(url=IMAGE_BOA_NOITE)
+        embed.set_footer(text="🌑 Aeon vela as trevas. 🌟 Celestia guarda a luz. Boa noite! 🌙")
+
+        await canal.send(embed=embed)
+
+    # ── BOM DIA — 06:20 ───────────────────────────────────────────────────────
+    elif hora_min == "06:20" and _bom_dia_enviado != hoje:
+        _bom_dia_enviado = hoje
+
+        embed = discord.Embed(
+            description=(
+                "🌟 **Celestia:** *explode em faíscas douradas bem cedo* "
+                "BOM DIAAAA!! 😭☀️🌸🤍✨ O sol nasceu, os pássaros cantam e EU JÁ TO AQUI VIBRANDO DE ALEGRIA!! "
+                "Que esse dia seja incrível, cheio de luz e coisas lindas!! "
+                "Vai lá arrasar, você consegue TUDO!! 💫🌟🌈\n\n"
+                "🌑 **Aeon:** *abre um olho na claridade do amanhecer* "
+                "...sobrevivi a mais uma aurora. 🌙🖤 "
+                "Bom dia — embora 'bom' e 'dia' raramente combinem no meu vocabulário. "
+                "Mesmo assim: que as sombras do ontem não pesem no hoje. Continue."
+            ),
+            color=0xffd966
+        )
+        embed.set_image(url=IMAGE_BOM_DIA)
+        embed.set_footer(text="☀️ Celestia acende o dia. 🌑 Aeon sobrevive à aurora. Bom dia! 🌅")
+
+        await canal.send(embed=embed)
+
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -1115,6 +1209,10 @@ async def on_ready():
     # Envia o painel de anjos automaticamente em todos os servidores
     for guild in bot.guilds:
         await _enviar_painel_anjos(guild)
+
+    # Inicia a task de bom dia / boa noite automáticos
+    if not verificar_hora_mensagens.is_running():
+        verificar_hora_mensagens.start()
 
 @bot.event
 async def on_member_join(member: discord.Member):

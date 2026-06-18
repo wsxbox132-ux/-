@@ -412,7 +412,7 @@ _COOLDOWN_MENCAO_SEGUNDOS = 300
 # IDs de canais — bom dia/boa noite automáticos
 # Preencha CANAL_SAUDACOES_ID com o ID do canal onde as mensagens serão enviadas
 CANAL_GERAL_ID    = None
-CANAL_SAUDACOES_ID = None  # ← coloque aqui o ID do canal desejado
+CANAL_SAUDACOES_ID = 1284257046740602901
 
 # Cooldowns
 _cooldown_custom  = {}
@@ -1143,7 +1143,7 @@ async def verificar_hora_mensagens():
         return
 
     # ── BOA NOITE — 23:22 ─────────────────────────────────────────────────────
-    if hora_min == "23:22" and _boa_noite_enviada != hoje:
+    if hora_min == "23:25" and _boa_noite_enviada != hoje:
         _boa_noite_enviada = hoje
 
         embed = discord.Embed(

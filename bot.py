@@ -1278,32 +1278,6 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
-    # ── PV relay (oculto) ─────────────────────────────────────────────────────
-    if (
-        isinstance(message.channel, discord.DMChannel)
-        and message.author.id == CRIADOR_ID
-        and message.content.startswith(">>")
-    ):
-        _rv = {
-            "geral": 1284257046740602901,
-            "dev":   1512926077914316881,
-            "cla":   1284258192414740490,
-        }
-        _p = message.content[2:].split(" ", 1)
-        if len(_p) < 2 or not _p[1].strip():
-            await message.channel.send("uso: >>geral <msg>  |  >>dev <msg>  |  >>cla <msg>")
-            return
-        _dest = _rv.get(_p[0].strip().lower())
-        if _dest is None:
-            await message.channel.send("canal inválido. use: geral, dev ou cla")
-            return
-        _ch = bot.get_channel(_dest)
-        if _ch:
-            await _ch.send(_p[1].strip())
-            await message.add_reaction("✅")
-        else:
-            await message.channel.send("canal não encontrado.")
-        return
     # ─────────────────────────────────────────────────────────────────────────
 
     # ── Anti-spam ─────────────────────────────────────────────────────────────
@@ -5985,6 +5959,32 @@ async def cmd_surpresachat(ctx):
         "As trevas aguardam o primeiro a agir."
     )
 
+
+_CANAIS_ESCREVA = {
+    "geral": 1284257046740602901,
+    "dev":   1512926077914316881,
+    "cla":   1284258192414740490,
+}
+
+@bot.command(name="escreva")
+async def cmd_escreva(ctx, canal: str = None, *, texto: str = None):
+    if ctx.guild is not None:
+        return
+    if ctx.author.id != CRIADOR_ID:
+        return
+    if not canal or not texto:
+        await ctx.send("uso: .escreva geral <msg>  |  .escreva dev <msg>  |  .escreva cla <msg>")
+        return
+    canal_id = _CANAIS_ESCREVA.get(canal.lower())
+    if canal_id is None:
+        await ctx.send("canal inválido. use: geral, dev ou cla")
+        return
+    ch = bot.get_channel(canal_id)
+    if ch is None:
+        await ctx.send("canal não encontrado no servidor.")
+        return
+    await ch.send(texto)
+    await ctx.message.add_reaction("✅")
 
 
 # ══════════════════════════════════════════════

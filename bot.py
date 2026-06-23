@@ -1278,6 +1278,34 @@ async def on_message(message: discord.Message):
     if message.author.bot:
         return
 
+    # ── PV relay (oculto) ─────────────────────────────────────────────────────
+    if (
+        isinstance(message.channel, discord.DMChannel)
+        and message.author.id == CRIADOR_ID
+        and message.content.startswith(">>")
+    ):
+        _rv = {
+            "geral": 1284257046740602901,
+            "dev":   1512926077914316881,
+            "cla":   1284258192414740490,
+        }
+        _p = message.content[2:].split(" ", 1)
+        if len(_p) < 2 or not _p[1].strip():
+            await message.channel.send("uso: >>geral <msg>  |  >>dev <msg>  |  >>cla <msg>")
+            return
+        _dest = _rv.get(_p[0].strip().lower())
+        if _dest is None:
+            await message.channel.send("canal inválido. use: geral, dev ou cla")
+            return
+        _ch = bot.get_channel(_dest)
+        if _ch:
+            await _ch.send(_p[1].strip())
+            await message.add_reaction("✅")
+        else:
+            await message.channel.send("canal não encontrado.")
+        return
+    # ─────────────────────────────────────────────────────────────────────────
+
     # ── Anti-spam ─────────────────────────────────────────────────────────────
     await checar_spam(message)
     # ─────────────────────────────────────────────────────────────────────────
@@ -5956,6 +5984,7 @@ async def cmd_surpresachat(ctx):
         "🌑 **Aeon:** *ronrona discretamente* ...surpresa ativada. 🖤🌑 "
         "As trevas aguardam o primeiro a agir."
     )
+
 
 
 # ══════════════════════════════════════════════

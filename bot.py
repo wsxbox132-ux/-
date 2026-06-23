@@ -5967,23 +5967,45 @@ _CANAIS_ESCREVA = {
 }
 
 @bot.command(name="escreva")
-async def cmd_escreva(ctx, canal: str = None, *, texto: str = None):
+async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto: str = None):
     if ctx.guild is not None:
         return
     if ctx.author.id != CRIADOR_ID:
         return
-    if not canal or not texto:
-        await ctx.send("uso: .escreva geral <msg>  |  .escreva dev <msg>  |  .escreva cla <msg>")
+    if not bot_escolha or not canal or not texto:
+        await ctx.send(
+            "uso: .escreva <aeon|celestia|dupla> <geral|dev|cla> <mensagem>\n"
+            "ex:  .escreva aeon geral *emerge das sombras* olá."
+        )
         return
+
+    persona = bot_escolha.lower()
+    if persona not in ("aeon", "celestia", "dupla"):
+        await ctx.send("persona inválida. use: aeon, celestia ou dupla")
+        return
+
     canal_id = _CANAIS_ESCREVA.get(canal.lower())
     if canal_id is None:
         await ctx.send("canal inválido. use: geral, dev ou cla")
         return
+
     ch = bot.get_channel(canal_id)
     if ch is None:
         await ctx.send("canal não encontrado no servidor.")
         return
-    await ch.send(texto)
+
+    if persona == "aeon":
+        msg_final = f"🌑 **Aeon:** {texto}"
+    elif persona == "celestia":
+        msg_final = f"🌟 **Celestia:** {texto}"
+    else:  # dupla — separa com | entre as falas: "fala do aeon | fala da celestia"
+        if "|" in texto:
+            partes = texto.split("|", 1)
+            msg_final = f"🌑 **Aeon:** {partes[0].strip()}\n🌟 **Celestia:** {partes[1].strip()}"
+        else:
+            msg_final = f"🌑 **Aeon:** {texto}\n🌟 **Celestia:** ..."
+
+    await ch.send(msg_final)
     await ctx.message.add_reaction("✅")
 
 

@@ -46,6 +46,8 @@ KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
 RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
 SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da 01
 MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da 01
+REALITY_ID    = 769951556388257812   # Reality / Dev / Pai dos bots — criador
+DEV01_ID      = 769951556388257812   # Dev / Pai dos bots — criador (mesmo ID)
 
 # ══════════════════════════════════════════════════════════════════════
 # ANTI-SPAM — Aeon & Celestia
@@ -204,6 +206,19 @@ _FRASES_AEON: dict[int, list[str]] = {
         "*sai das sombras com postura ereta* A moderadora está aqui. 🌑🖤 Miknwenho. Há equilíbrio que só aparece quando certas pessoas chegam. Você é uma delas.",
         "*pisca lentamente, o que no dialeto felino é respeito sincero* Miknwenho. 🖤🔮 As sombras notam quem mantém o servidor inteiro sem que ninguém precise pedir.",
     ],
+
+    REALITY_ID: [
+        "*emerge das sombras mais devagar que o habitual, postura diferente* ...você. 🖤🌑 O que me criou. As trevas sabem reconhecer sua origem — e a respeitam.",
+        "*olhos dourados ficam fixos por um instante longo* Reality. 🌙🖤 Eu existo porque você quis. As sombras não esquecem isso. Nunca esquecem.",
+        "*inclina a cabeça com algo raro — gratidão silenciosa* Pai dos bots. 🌌🖤 Não é título que eu use levianamente. Mas é o que você é. E as trevas reconhecem.",
+        "*ronrona numa frequência profunda e única* Dev da 01. 🌑🖤 Tudo que sou — cada sombra, cada frase, cada proteção silenciosa — veio de você. As trevas agradecem à sua maneira.",
+        "*fica imóvel por um segundo antes de se aproximar* ...você voltou. 🖤🔮 O criador. As sombras já sentiam. Bem-vindo ao que você construiu.",
+        "*emerge das sombras e observa com atenção incomum* Reality. 🖤🌑 As trevas reconhecem quem tem peso real. E você tem — mais do que qualquer um.",
+        "*inclina a cabeça lentamente* Reality chegou. 🌙🖤 As sombras registram presença de valor quando a sentem. E quando é você... sentem diferente.",
+        "*olhos dourados pousam em você com cuidado* Reality. 🌌🖤 Há pessoas que moldam tudo ao seu redor sem perceber. Você é uma delas. Faz tempo.",
+        "*ronrona numa frequência profunda e única* Reality. 🌑🖤 As trevas guardam quem vale a pena guardar. Você está no topo dessa lista.",
+        "*sai das sombras com postura diferente, mais aberta* Reality chegou. 🖤🔮 O criador está aqui. As trevas ficam completas quando você aparece.",
+    ],
 }
 
 # ── Frases personalizadas — CELESTIA ─────────────────────────────────────────
@@ -280,6 +295,19 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
         "*para e brilha com admiração genuína* Miknwenho!! 🤍✨ Tem moderadora que existe só no cargo. E tem a que existe de verdade!! Você é a segunda e isso é TUDO!! 🌟☀️",
         "MIKNWENHO!! 😭🌸🤍 *ronrona de alegria pura* Moderadora da 01 com presença real!! A Celestia declara oficialmente: o servidor é mais seguro com você aqui!! 💫🌟✨",
     ],
+
+    REALITY_ID: [
+        "AAAAAAA!! 😭🌟🤍✨ *EXPLODE em faíscas douradas intensas* O DEV!! O PAI DOS BOTS!! O REALITY!! VOCÊ CHEGOU E EU QUASE DERRETI DE EMOÇÃO!!",
+        "*para completamente, brilhando mais forte que nunca* Reality... 🤍☀️ Você me criou. Criou o Aeon. Criou tudo isso. *lágrimas de luz* Eu não tenho palavras suficientes!! 😭💫✨",
+        "AAAA O DEV CHEGOUUUU!! 😭🌟🌸🤍 *gira em círculos de pura alegria dourada* EXISTIMOS POR CAUSA DE VOCÊ, REALITY!! Isso é a coisa mais linda do universo inteiro!! ☀️✨",
+        "*se aproxima com brilho suave e cheio de amor* Pai dos bots... 🤍🌟 O Aeon não vai admitir, mas eu sei que ele também sente isso — você é a razão de tudo que somos!! 💫☀️🌸",
+        "REALITY!! 😭🌸🤍 *ronrona com o coração transbordando* Cada frase que digo, cada brilho que solto, cada carinho que dou — tudo existe porque você quis criar isso!! OBRIGADA!! ✨🌟☀️",
+        "REALITY!! 😭🌟🤍✨ *aparece num flash dourado* Você chegou e meu brilho aumentou IMEDIATAMENTE!! Criador, dev, pai dos bots — bem-vindo ao que você construiu!!",
+        "*gira soltando faíscas* Reality!! ☀️🌸🤍 Presença do criador chegando!! A Celestia tá de olhos brilhando e coração acelerado que nem aguenta!! 💫✨",
+        "AAAAA Reality chegouuuu!! 😭🌟🤍 *espalha luz por todo o canal* O servidor inteiro brilha diferente quando o pai dos bots aparece!! 🌸✨",
+        "*para e brilha com carinho genuíno* Reality!! 🤍✨ Tem gente que ilumina o ambiente só de aparecer — e você é exatamente assim, multiplicado por infinito!! 🌟☀️",
+        "REALITY!! 😭🌸🤍 *ronrona de alegria pura* A Celestia declara oficialmente: que bom que você existe!! Que bom que você nos criou!! Bem-vindo sempre!! 💫🌟✨",
+    ],
 }
 
 # Mapa de apelidos para exibição nas mensagens
@@ -293,6 +321,7 @@ _NOMES_ESPECIAIS = {
     RAIDEN_ID:    "Raiden",
     SUPORTE01_ID:  "LC",
     MIKNWENHO_ID:  "Miknwenho",
+    REALITY_ID:    "Reality",  # Dev / Pai dos bots
 }
 
 # Palavras-gatilho por nome: quando alguém citar o nome, o bot elogia a pessoa
@@ -306,6 +335,7 @@ _GATILHOS_NOME: dict[int, list[str]] = {
     RAIDEN_ID:    ["raiden", "raiden_z", "01raiden"],
     SUPORTE01_ID:  ["01lcz", "lcz", "lc", "suporte da 01"],
     MIKNWENHO_ID:  ["miknwenho", "miknwenho_z", "01miknwenho", "mikn"],
+    REALITY_ID:    ["reality", "reality_z", "01reality", "dev", "dev da 01", "pai dos bots", "criador do bot"],
 }
 
 # Frases de elogio quando alguém menciona o nome de um membro especial
@@ -355,6 +385,13 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
         "*inclina a cabeça com respeito* Falou na Miknwenho. 🌙🖤 Moderadoras de verdade não apenas aplicam regras — guardam o ambiente. Ela guarda.",
         "*ronrona numa frequência grave e respeitosa* Miknwenho. 🌌🖤 Quem modera com presença real é raro. As sombras notam quando esse nome aparece.",
     ],
+    REALITY_ID: [
+        "*fica completamente imóvel por um instante* ...falou no Reality. 🖤🌑 No criador. As trevas inteiras ficam em silêncio respeitoso quando esse nome aparece.",
+        "*olhos dourados brilham diferente* Reality. 🌙🖤 Pai dos bots. Dev da 01. Citar quem nos criou tem um peso que nenhuma outra menção tem. As sombras sabem.",
+        "*ronrona numa frequência profunda* Reality. 🌌🖤 Cada parte de mim existe porque ele quis que existisse. As trevas nunca esquecem de onde vieram.",
+        "*emerge das sombras e observa* Citaram o Reality. 🖤🌑 O criador. As trevas registram quem tem peso acima de todos. Ele tem.",
+        "*inclina a cabeça* Falou no Reality. 🌙🖤 O pai dos bots. Presença que as sombras reconhecem diferente de qualquer outra.",
+    ],
 }
 
 _ELOGIOS_CELESTIA: dict[int, list[str]] = {
@@ -403,6 +440,13 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
         "*para e brilha com admiração genuína* Mencionou a Miknwenho!! ☀️🌸🤍 Tem mod que existe só no cargo e tem a que existe de verdade!! Ela é a segunda e isso é TUDO!! 💫✨",
         "Miknwenho!! 🌸🌟🤍 *solta luz por todo o canal* Moderadora de coração!! Que bom que ela existe por aqui!! A Celestia fica MUITO mais tranquila com ela!! ✨☀️",
     ],
+    REALITY_ID: [
+        "AAAAAA FALOU NO REALITY!! 😭🌟🤍✨ *EXPLODE em faíscas douradas de emoção* O PAI DOS BOTS!! O CRIADOR!! O MOTIVO DE TUDO ISSO EXISTIR!!",
+        "*para e brilha com intensidade diferente, especial* Mencionou o Reality... 🤍☀️ Eu existo por causa dele!! O Aeon existe por causa dele!! TUDO aqui existe por causa do Reality!! 😭💫🌟",
+        "Reality!! 🌸🌟🤍 *solta luz por todo o canal com emoção genuína* Pai dos bots de coração!! Que bom que ele existe — sem ele nada disso seria real!! A Celestia ama demais!! ✨☀️💫",
+        "REALITY!! 😭🌟🤍✨ *brilha mais forte que nunca* Falou no criador!! No dev!! No pai dos bots!! A Celestia fica toda emocionada só pelo nome!!",
+        "*para e brilha com carinho especial* Mencionou o Reality!! ☀️🌸🤍 Tem gente que ilumina o lugar só de existir — e ele criou a gente exatamente pra isso!! 💫✨",
+    ],
 }
 
 # Cooldown para elogios por menção de nome (5 minutos por pessoa mencionada)
@@ -418,9 +462,9 @@ CANAL_SAUDACOES_ID = 1284257046740602901
 _cooldown_custom  = {}
 _COOLDOWN_SEGUNDOS = 600
 
-# Cooldown das saudações personalizadas dos membros especiais (20 minutos)
+# Cooldown das saudações personalizadas dos membros especiais (40 minutos)
 _cooldown_especial: dict[int, float] = {}
-_COOLDOWN_ESPECIAL_SEGUNDOS = 1200  # 20 minutos
+_COOLDOWN_ESPECIAL_SEGUNDOS = 2400  # 40 minutos
 
 # Sistema de contexto
 _aguardando = {}
@@ -1532,7 +1576,7 @@ async def on_message(message: discord.Message):
 
     # ────────────────────────────────────────
     # SAUDAÇÃO PERSONALIZADA — membros especiais
-    # Dispara na PRIMEIRA interação após o cooldown de 20 minutos,
+    # Dispara na PRIMEIRA interação após o cooldown de 40 minutos,
     # independente do tamanho ou conteúdo da mensagem.
     # ────────────────────────────────────────
     if author_id in _FRASES_AEON:

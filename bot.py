@@ -5901,6 +5901,43 @@ class BotaoAbrirTicketAnjo(discord.ui.View):
             ephemeral=True
         )
 
+        # ── Log de abertura no canal de logs ────────────────────────────────
+        canal_logs = guild.get_channel(CANAL_LOGS_ANJO_ID)
+        if canal_logs:
+            from datetime import timezone, timedelta
+            BR = timezone(timedelta(hours=-3))
+            data_abertura = canal_ticket.created_at.astimezone(BR).strftime("%d/%m/%Y %H:%M")
+
+            embed_log_aberto = discord.Embed(
+                title="🕊️ Ticket de Anjo Aberto",
+                color=0x9b59b6
+            )
+            embed_log_aberto.add_field(
+                name="Nome do Ticket",
+                value=f"`{canal_ticket.name}`",
+                inline=True
+            )
+            embed_log_aberto.add_field(
+                name="Criado por",
+                value=f"{member.mention}\n*({member.display_name})*",
+                inline=True
+            )
+            embed_log_aberto.add_field(
+                name="Data de Abertura",
+                value=data_abertura,
+                inline=True
+            )
+            embed_log_aberto.add_field(
+                name="Canal",
+                value=canal_ticket.mention,
+                inline=False
+            )
+            embed_log_aberto.set_footer(
+                text="🕊️ Sistema de Tickets — Anjos  |  🌑 Aeon & ☀️ Celestia"
+            )
+            await canal_logs.send(embed=embed_log_aberto)
+        # ────────────────────────────────────────────────────────────────────
+
 
 # ══════════════════════════════════════════════
 # COMANDO !surpresachat — SOMENTE O DEV (CRIADOR_ID)

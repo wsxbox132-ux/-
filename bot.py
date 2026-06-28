@@ -5516,6 +5516,7 @@ async def cmd_membro(ctx):
 
 CANAL_TICKET_ANJO_ID      = 1514427068589543565  # canal do painel de abertura
 CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
+CANAL_LOGS_ANJO_ID        = 1290058994794106881  # canal de logs dos tickets de anjo
 CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
 IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
@@ -5599,14 +5600,15 @@ class BotaoFecharTicketAnjo(discord.ui.View):
                 except ValueError:
                     pass
 
-        eh_dono  = member.id == dono_id
         eh_anjo_assumiu = member.id == anjo_id
         eh_cargo_anjo   = cargo_anjo in member.roles if cargo_anjo else False
 
-        # Só o anjo que assumiu ou o dono pode fechar
-        if not (eh_dono or eh_anjo_assumiu or eh_cargo_anjo):
+        # ⚠️ Apenas quem tem cargo ANJO pode fechar — o criador do ticket NÃO pode
+        if not (eh_anjo_assumiu or eh_cargo_anjo):
             return await interaction.response.send_message(
-                "🌟 **Celestia:** Ei, só o Anjo que assumiu ou quem abriu o ticket pode fechá-lo! ☀️🌸",
+                "🕊️ Apenas **Anjos** podem fechar este ticket.\n"
+                "🌟 **Celestia:** Só um Anjo pode encerrar esse espaço! ☀️🌸\n"
+                "🌑 **Aeon:** ...as trevas só se abrem para quem tem asas. 🖤",
                 ephemeral=True
             )
 
@@ -5616,6 +5618,93 @@ class BotaoFecharTicketAnjo(discord.ui.View):
             "🌟 **Celestia:** Que tudo tenha se resolvido com muito amor!! 😭🌸🤍✨ "
             "Até a próxima!!"
         )
+
+        # ── Gerar log no canal de logs antes de apagar o canal ───────────────
+        canal_logs = guild.get_channel(CANAL_LOGS_ANJO_ID)
+        if canal_logs:
+            # Conta mensagens por membro com cargo Anjo (ignora bots)
+            contagem_anjos: dict[int, int] = {}
+            try:
+                async for msg in canal.history(limit=None, oldest_first=True):
+                    if msg.author.bot:
+                        continue
+                    membro_msg = guild.get_member(msg.author.id)
+                    if membro_msg and cargo_anjo and cargo_anjo in membro_msg.roles:
+                        contagem_anjos[membro_msg.id] = contagem_anjos.get(membro_msg.id, 0) + 1
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+
+            # Obtém o dono do ticket
+            dono_member  = guild.get_member(dono_id) if dono_id else None
+            dono_mention = dono_member.mention if dono_member else (f"<@{dono_id}>" if dono_id else "Desconhecido")
+            dono_nome    = dono_member.display_name if dono_member else str(dono_id or "Desconhecido")
+
+            # Formata datas (UTC-3 Brasil)
+            from datetime import timezone, timedelta
+            BR = timezone(timedelta(hours=-3))
+            data_abertura   = canal.created_at.astimezone(BR).strftime("%d/%m/%Y %H:%M")
+            data_fechamento = discord.utils.utcnow().astimezone(BR).strftime("%d/%m/%Y %H:%M")
+
+            # Monta texto de contagem de mensagens dos Anjos
+            if contagem_anjos:
+                linhas = []
+                for uid, count in sorted(contagem_anjos.items(), key=lambda x: x[1], reverse=True):
+                    m = guild.get_member(uid)
+                    linhas.append(f"[ {count:>3} ] — {m.mention if m else f'<@{uid}>'}")
+                contagem_texto = "\n".join(linhas)
+            else:
+                contagem_texto = "*Nenhuma mensagem de Anjo registrada.*"
+
+            embed_log = discord.Embed(
+                title="🕊️ Ticket de Anjo Fechado",
+                color=0xe8d5f5
+            )
+            embed_log.add_field(
+                name="Nome do Ticket",
+                value=f"`{canal.name}`",
+                inline=True
+            )
+            embed_log.add_field(
+                name="Criado por",
+                value=f"{dono_mention}\n*({dono_nome})*",
+                inline=True
+            )
+            embed_log.add_field(
+                name="Fechado por",
+                value=member.mention,
+                inline=True
+            )
+            embed_log.add_field(
+                name="Data de Abertura",
+                value=data_abertura,
+                inline=True
+            )
+            embed_log.add_field(
+                name="Data de Encerramento",
+                value=data_fechamento,
+                inline=True
+            )
+            embed_log.add_field(
+                name="\u200b",
+                value="\u200b",
+                inline=True
+            )
+            embed_log.add_field(
+                name="Motivo para fechar o Ticket",
+                value="Sem motivo fornecido",
+                inline=False
+            )
+            embed_log.add_field(
+                name="Contagem de Mensagens Anjo",
+                value=contagem_texto,
+                inline=False
+            )
+            embed_log.set_footer(
+                text="🕊️ Sistema de Tickets — Anjos  |  🌑 Aeon & ☀️ Celestia"
+            )
+            await canal_logs.send(embed=embed_log)
+        # ─────────────────────────────────────────────────────────────────────
+
         await asyncio.sleep(5)
         await canal.delete(reason=f"Ticket fechado por {member}")
 

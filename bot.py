@@ -1413,9 +1413,11 @@ async def on_message(message: discord.Message):
 
     autor_tem_translate = _tem_cargo_translate(_member_completo)
 
+    # Ignora comandos do bot (começa com ".") — nunca traduzir comandos
+    _e_comando = message.content.startswith(bot.command_prefix)
 
     # Caso 1 — autor TEM cargo translate e escreveu em inglês
-    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
+    if autor_tem_translate and not _e_comando and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
         traducao = await _chamar_traducao(message.content, "en_to_pt")
         if traducao:
             embed = discord.Embed(color=0x2b2b3b)

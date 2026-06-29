@@ -7,7 +7,12 @@ import time
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-import yt_dlp
+try:
+    import yt_dlp
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    import yt_dlp
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║          AEON & CELESTIA — DOIS GATOS, UMA ALMA             ║

@@ -7,6 +7,7 @@ import time
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+import yt_dlp
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║          AEON & CELESTIA — DOIS GATOS, UMA ALMA             ║
@@ -6357,6 +6358,100 @@ async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
     embed_preview.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
 
     await ctx.send(embed=embed_preview, view=CastigoView(alvo_id, razao, alvo_nome))
+
+
+# ══════════════════════════════════════════════════════════════════
+# COMANDO .play — Entra na call, toca áudio do YouTube por 5s e sai
+# Uso: .play (em qualquer canal de texto, estando em uma call)
+# ══════════════════════════════════════════════════════════════════
+
+# URL fixa do YouTube Shorts
+URL_PLAY = "https://www.youtube.com/shorts/yt1pFGBMDT0"
+
+# Opções do yt-dlp: apenas extrai URL do stream, sem baixar
+_YDL_OPTS = {
+    "format": "bestaudio/best",
+    "quiet": True,
+    "no_warnings": True,
+}
+
+# Opções do FFmpeg para stream remoto
+_FFMPEG_OPTS = {
+    "before_options": (
+        "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+    ),
+    "options": "-vn",
+}
+
+
+@bot.command(name="play")
+async def cmd_play(ctx):
+    """Entra na call do autor, toca o áudio do YouTube por 5s e desconecta."""
+
+    # Só funciona no servidor
+    if ctx.guild is None:
+        return
+
+    # Verifica se o usuário está em uma call
+    if ctx.author.voice is None or ctx.author.voice.channel is None:
+        await ctx.send(
+            "🌑 **Aeon:** *emerge das sombras e olha em volta* "
+            "...não há ninguém numa call por aqui. 🖤🌑 Entre em uma call primeiro."
+        )
+        return
+
+    canal_voz = ctx.author.voice.channel
+
+    # Conecta ou move para o canal do usuário
+    try:
+        if ctx.voice_client is not None:
+            await ctx.voice_client.move_to(canal_voz)
+            vc = ctx.voice_client
+        else:
+            vc = await canal_voz.connect()
+    except discord.ClientException:
+        await ctx.send("⚠️ Não foi possível entrar na call.")
+        return
+
+    if vc.is_playing():
+        vc.stop()
+
+    # Extrai a URL de stream via yt-dlp (sem baixar o arquivo)
+    try:
+        loop = asyncio.get_event_loop()
+        with yt_dlp.YoutubeDL(_YDL_OPTS) as ydl:
+            info = await loop.run_in_executor(
+                None, lambda: ydl.extract_info(URL_PLAY, download=False)
+            )
+
+        # Pega a URL do melhor formato de áudio disponível
+        if "url" in info:
+            stream_url = info["url"]
+        else:
+            formatos = [
+                f for f in info.get("formats", [])
+                if f.get("acodec") != "none"
+            ]
+            stream_url = formatos[-1]["url"] if formatos else info["formats"][-1]["url"]
+
+        source = discord.FFmpegPCMAudio(stream_url, **_FFMPEG_OPTS)
+        vc.play(source)
+
+        # Toca por 5 segundos e sai
+        await asyncio.sleep(5)
+
+        if vc.is_playing():
+            vc.stop()
+
+        await vc.disconnect()
+
+    except Exception as e:
+        await ctx.send(f"⚠️ Erro ao reproduzir o áudio: `{e}`")
+        try:
+            await vc.disconnect()
+        except Exception:
+            pass
+
 
 # ══════════════════════════════════════════════
 # START

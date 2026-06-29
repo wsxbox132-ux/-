@@ -6,7 +6,7 @@ import aiohttp
 import time
 import asyncio
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║          AEON & CELESTIA — DOIS GATOS, UMA ALMA             ║
@@ -6134,6 +6134,229 @@ async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto:
     await ch.send(msg_final)
     await ctx.message.add_reaction("✅")
 
+
+
+# ══════════════════════════════════════════════════════════════════
+# COMANDO .castigo — SOMENTE O DEV NO PV
+# Aplica timeout a um membro com razão e duração customizável.
+# Uso no PV: .castigo <user_id> <razão>
+# ══════════════════════════════════════════════════════════════════
+
+CANAL_CASTIGO_ID = 1284257046740602901  # canal onde o anúncio do castigo aparece
+
+
+class CastigoView(discord.ui.View):
+    """Painel interativo de castigo — enviado no PV do dev."""
+
+    def __init__(self, alvo_id: int, razao: str, alvo_nome: str):
+        super().__init__(timeout=180)
+        self.alvo_id         = alvo_id
+        self.razao           = razao
+        self.alvo_nome       = alvo_nome
+        self.notificar_death = False
+        self.aplicado        = False
+
+    # ── Toggle: Notificar Death ──────────────────────────────────────────────
+    @discord.ui.button(
+        label="👑 Notificar Death: OFF",
+        style=discord.ButtonStyle.secondary,
+        custom_id="castigo_toggle_death",
+        row=0
+    )
+    async def toggle_death(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.notificar_death = not self.notificar_death
+        button.label = f"👑 Notificar Death: {'ON ✅' if self.notificar_death else 'OFF'}"
+        button.style = (
+            discord.ButtonStyle.success if self.notificar_death
+            else discord.ButtonStyle.secondary
+        )
+        await interaction.response.edit_message(view=self)
+
+    # ── Helper: aplica o castigo ─────────────────────────────────────────────
+    async def _aplicar(self, interaction: discord.Interaction, minutos: int):
+        if self.aplicado:
+            await interaction.response.send_message("⚠️ Castigo já foi aplicado.")
+            return
+        self.aplicado = True
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        guild = bot.guilds[0] if bot.guilds else None
+        if guild is None:
+            await interaction.followup.send("❌ Servidor não encontrado.")
+            return
+
+        alvo = guild.get_member(self.alvo_id)
+        if alvo is None:
+            try:
+                alvo = await guild.fetch_member(self.alvo_id)
+            except discord.NotFound:
+                await interaction.followup.send(
+                    f"❌ Membro `{self.alvo_id}` não encontrado no servidor."
+                )
+                return
+
+        until = discord.utils.utcnow() + timedelta(minutes=minutos)
+        try:
+            await alvo.timeout(until, reason=self.razao)
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "❌ Sem permissão para castigar esse membro. "
+                "(O bot precisa de `Moderar Membros`)"
+            )
+            return
+
+        if minutos < 60:
+            duracao_txt = f"{minutos} minuto{'s' if minutos > 1 else ''}"
+        else:
+            h = minutos // 60
+            duracao_txt = f"{h} hora{'s' if h > 1 else ''}"
+
+        canal_pub = guild.get_channel(CANAL_CASTIGO_ID)
+        if canal_pub:
+            BR = timezone(timedelta(hours=-3))
+            agora = discord.utils.utcnow().astimezone(BR).strftime("%d/%m/%Y %H:%M")
+
+            embed_pub = discord.Embed(
+                title="⚠️ Chamada de Atenção",
+                color=0xff4444
+            )
+            embed_pub.add_field(
+                name="Membro",
+                value=f"{alvo.mention}\n`{alvo.display_name}`",
+                inline=True
+            )
+            embed_pub.add_field(
+                name="Punição",
+                value=f"🔇 {duracao_txt}\n*(sem texto e sem calls)*",
+                inline=True
+            )
+            embed_pub.add_field(name="\u200b", value="\u200b", inline=True)
+            embed_pub.add_field(name="Motivo", value=self.razao, inline=False)
+            embed_pub.set_footer(
+                text=f"🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. ⚠️ Moderação • {agora}"
+            )
+
+            conteudo = f"<@{DEATH_ID}>" if self.notificar_death else None
+            await canal_pub.send(content=conteudo, embed=embed_pub)
+
+        confirmacao = (
+            f"✅ **Castigo aplicado!**\n"
+            f"👤 **{alvo.display_name}** (`{alvo.id}`)\n"
+            f"🔇 Duração: **{duracao_txt}**\n"
+            f"📝 Motivo: {self.razao}\n"
+        )
+        if self.notificar_death:
+            confirmacao += "👑 **Death foi notificada no canal!**"
+        await interaction.followup.send(confirmacao)
+        self.stop()
+
+    # ── Botões de duração ────────────────────────────────────────────────────
+    @discord.ui.button(
+        label="🕐 5 min",
+        style=discord.ButtonStyle.danger,
+        custom_id="castigo_dur_5",
+        row=1
+    )
+    async def cinco_min(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._aplicar(interaction, 5)
+
+    @discord.ui.button(
+        label="🕐 10 min",
+        style=discord.ButtonStyle.danger,
+        custom_id="castigo_dur_10",
+        row=1
+    )
+    async def dez_min(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._aplicar(interaction, 10)
+
+    @discord.ui.button(
+        label="🕐 30 min",
+        style=discord.ButtonStyle.danger,
+        custom_id="castigo_dur_30",
+        row=1
+    )
+    async def trinta_min(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._aplicar(interaction, 30)
+
+    @discord.ui.button(
+        label="🕑 1 hora",
+        style=discord.ButtonStyle.danger,
+        custom_id="castigo_dur_60",
+        row=2
+    )
+    async def uma_hora(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._aplicar(interaction, 60)
+
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.secondary,
+        custom_id="castigo_cancelar",
+        row=2
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.aplicado = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ Castigo cancelado.", view=self)
+        self.stop()
+
+
+@bot.command(name="castigo")
+async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
+    """Aplica castigo a um membro. Uso no PV: .castigo <user_id> <razão>"""
+
+    if ctx.guild is not None:
+        await ctx.send(
+            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
+            "Me chame no PV."
+        )
+        return
+
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    if alvo_id is None or razao is None:
+        await ctx.send(
+            "⚠️ **Uso correto:** `.castigo <ID do membro> <razão>`\n"
+            "Exemplo: `.castigo 123456789 Spam repetido no chat geral`"
+        )
+        return
+
+    guild = bot.guilds[0] if bot.guilds else None
+    alvo  = guild.get_member(alvo_id) if guild else None
+    if alvo is None and guild:
+        try:
+            alvo = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            await ctx.send(f"❌ Membro com ID `{alvo_id}` não encontrado no servidor.")
+            return
+
+    alvo_nome = alvo.display_name if alvo else str(alvo_id)
+
+    embed_preview = discord.Embed(
+        title="⚠️ Painel de Castigo",
+        description=(
+            f"👤 **Membro:** {alvo.mention if alvo else f'`{alvo_id}`'} — `{alvo_nome}`\n"
+            f"📝 **Razão:** {razao}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Escolha a duração — o membro ficará **sem texto e sem call**.\n"
+            "Ative **👑 Notificar Death** para ela ser pingada no anúncio.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0xff4444
+    )
+    embed_preview.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
+
+    await ctx.send(embed=embed_preview, view=CastigoView(alvo_id, razao, alvo_nome))
 
 # ══════════════════════════════════════════════
 # START

@@ -1046,12 +1046,17 @@ def _cooldown_ok(user_id: int) -> bool:
 
 async def _chamar_traducao(texto: str, direcao: str) -> str:
     """Tradução via MyMemory (API gratuita, sem chave necessária).
-    direcao: 'en_to_pt' ou 'pt_to_en'
+    direcao: 'en_to_pt', 'pt_to_en', 'es_to_pt' ou 'pt_to_es'
     """
-    if direcao == "en_to_pt":
-        lang_pair = "en|pt-BR"
-    else:
-        lang_pair = "pt-BR|en"
+    lang_pairs = {
+        "en_to_pt": "en|pt-BR",
+        "pt_to_en": "pt-BR|en",
+        "es_to_pt": "es|pt-BR",
+        "pt_to_es": "pt-BR|es",
+    }
+    lang_pair = lang_pairs.get(direcao)
+    if lang_pair is None:
+        return None
 
     url = "https://api.mymemory.translated.net/get"
     params = {
@@ -1142,6 +1147,49 @@ def _detectar_ingles(texto: str) -> bool:
     total = len(words_clean)
     ratio = matches / total
     # Precisa de pelo menos 2 palavras inglês, ou 1 se a mensagem tiver só 1-2 palavras
+    return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
+
+def _detectar_espanhol(texto: str) -> bool:
+    """
+    Detecta espanhol por vocabulário.
+    Usa apenas palavras que NÃO existem (ou têm grafia bem diferente) em português,
+    para evitar falsos positivos com o idioma nativo do servidor.
+    Exige pelo menos 2 palavras exclusivas do espanhol (ou 1 se a mensagem for muito curta).
+    """
+    import re
+    import unicodedata
+
+    def _sem_acento(s: str) -> str:
+        return "".join(
+            c for c in unicodedata.normalize("NFD", s)
+            if unicodedata.category(c) != "Mn"
+        )
+
+    # Palavras que são exclusivas (ou bem diferentes) do espanhol frente ao português
+    palavras_es = {
+        "el","los","las","yo","pero","muy","asi","ahora",
+        "hola","gracias","adios","bien","eso","esto","esos","esas",
+        "quiero","quieres","quiere","puedo","puedes","puede",
+        "tengo","tienes","tiene","hacer","decir","tiempo","trabajo",
+        "mujer","hombre","nosotros","vosotros","ustedes","ellos","ellas",
+        "con","sin","tambien","donde","cuando","cual","cuales","aunque",
+        "entonces","despues","ademas","siempre","mucho","mucha","muchos","muchas",
+        "poco","poca","pocos","pocas","buenos","noches",
+        "soy","estoy","voy","hago","vengo","salgo","hasta","luego","ahi","cosas",
+    }
+
+    texto_sa = _sem_acento(texto.lower())
+    words = texto_sa.split()
+    if not words:
+        return False
+    words_clean = [re.sub(r"[^a-z]", "", w) for w in words]
+    words_clean = [w for w in words_clean if w]
+    if not words_clean:
+        return False
+    matches = sum(1 for w in words_clean if w in palavras_es)
+    total = len(words_clean)
+    ratio = matches / total
+    # Precisa de pelo menos 2 palavras exclusivas do espanhol, ou 1 se a mensagem for bem curta
     return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1396,8 +1444,8 @@ async def on_message(message: discord.Message):
 
     # ════════════════════════════════════════════════════════════════
     # SISTEMA DE TRADUÇÃO — Cargo Translate
-    # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
-    # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
+    # 1) Membro com cargo Translate fala em inglês ou espanhol → traduz para PT
+    # 2) Alguém responde em PT a msg em inglês/espanhol → traduz PT→idioma original
     # ════════════════════════════════════════════════════════════════
 
     # Garante que temos o Member completo com cargos (não apenas User do cache)
@@ -1415,49 +1463,79 @@ async def on_message(message: discord.Message):
     autor_tem_translate = _tem_cargo_translate(_member_completo)
 
 
-    # Caso 1 — autor TEM cargo translate e escreveu em inglês
-    if autor_tem_translate and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
-        traducao = await _chamar_traducao(message.content, "en_to_pt")
-        if traducao:
-            embed = discord.Embed(color=0x2b2b3b)
-            embed.set_author(
-                name=f"{message.author.display_name} · Tradução automática",
-                icon_url=message.author.display_avatar.url
-            )
-            embed.add_field(
-                name="🌐 Inglês (original)",
-                value=f"```{message.content}```",
-                inline=False
-            )
-            embed.add_field(
-                name="🌑☀️ Português (traduzido por Aeon & Celestia)",
-                value=f"> {traducao}",
-                inline=False
-            )
-            embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
-            msg_trad = await message.channel.send(embed=embed)
-            async def _deletar_depois(m):
-                await asyncio.sleep(120)
-                try:
-                    await m.delete()
-                except Exception:
-                    pass
-            asyncio.create_task(_deletar_depois(msg_trad))
-        return
+    # Caso 1 — autor TEM cargo translate e escreveu em inglês ou espanhol
+    if autor_tem_translate and len(message.content.strip()) >= 2:
+        _idioma_origem = None
+        if _detectar_ingles(message.content):
+            _idioma_origem = "en"
+        elif _detectar_espanhol(message.content):
+            _idioma_origem = "es"
 
-    # Caso 2 — alguém responde em PT a uma mensagem em inglês — traduz PT→EN
+        if _idioma_origem is not None:
+            direcao = "en_to_pt" if _idioma_origem == "en" else "es_to_pt"
+            label_origem = "🌐 Inglês (original)" if _idioma_origem == "en" else "🇪🇸 Espanhol (original)"
+
+            traducao = await _chamar_traducao(message.content, direcao)
+            if traducao:
+                embed = discord.Embed(color=0x2b2b3b)
+                embed.set_author(
+                    name=f"{message.author.display_name} · Tradução automática",
+                    icon_url=message.author.display_avatar.url
+                )
+                embed.add_field(
+                    name=label_origem,
+                    value=f"```{message.content}```",
+                    inline=False
+                )
+                embed.add_field(
+                    name="🌑☀️ Português (traduzido por Aeon & Celestia)",
+                    value=f"> {traducao}",
+                    inline=False
+                )
+                embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
+                msg_trad = await message.channel.send(embed=embed)
+                async def _deletar_depois(m):
+                    await asyncio.sleep(120)
+                    try:
+                        await m.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(_deletar_depois(msg_trad))
+            return
+
+    # Caso 2 — alguém responde em PT a uma mensagem em inglês ou espanhol — traduz PT→idioma original
     if (
         message.reference is not None
         and message.reference.resolved is not None
         and isinstance(message.reference.resolved, discord.Message)
         and not _detectar_ingles(message.content)
+        and not _detectar_espanhol(message.content)
         and len(message.content.strip()) >= 2
     ):
         ref_msg = message.reference.resolved
         ref_autor = ref_msg.author
-        # Traduz se a mensagem respondida estava em inglês e não é do próprio bot
+
+        _idioma_resposta = None
         if not ref_autor.bot and _detectar_ingles(ref_msg.content):
-            traducao = await _chamar_traducao(message.content, "pt_to_en")
+            _idioma_resposta = "en"
+        elif not ref_autor.bot and _detectar_espanhol(ref_msg.content):
+            _idioma_resposta = "es"
+
+        # Traduz se a mensagem respondida estava em inglês/espanhol e não é do próprio bot
+        if _idioma_resposta is not None:
+            direcao = "pt_to_en" if _idioma_resposta == "en" else "pt_to_es"
+            label_traduzido = (
+                "🌐 English (translated by Aeon & Celestia)"
+                if _idioma_resposta == "en"
+                else "🇪🇸 Español (traducido por Aeon & Celestia)"
+            )
+            rodape = (
+                "🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation"
+                if _idioma_resposta == "en"
+                else "🌑 Aeon guarda las sombras • ☀️ Celestia trae la luz • traducción automática"
+            )
+
+            traducao = await _chamar_traducao(message.content, direcao)
             if traducao:
                 embed = discord.Embed(color=0x1a1a2e)
                 embed.set_author(
@@ -1470,7 +1548,7 @@ async def on_message(message: discord.Message):
                     inline=False
                 )
                 embed.add_field(
-                    name="🌐 English (translated by Aeon & Celestia)",
+                    name=label_traduzido,
                     value=f"> {traducao}",
                     inline=False
                 )
@@ -1479,7 +1557,7 @@ async def on_message(message: discord.Message):
                     value=f"{ref_autor.mention}",
                     inline=True
                 )
-                embed.set_footer(text="🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation")
+                embed.set_footer(text=rodape)
                 msg_trad = await message.channel.send(embed=embed)
                 async def _deletar_depois_pt(m):
                     await asyncio.sleep(120)

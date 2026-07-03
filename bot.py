@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import random
 import os
+import re
 import aiohttp
 import time
 import asyncio
@@ -137,6 +138,129 @@ async def checar_spam(message: discord.Message) -> None:
         f"🌑 **Aeon:** {frase_aeon}\n"
         f"🌟 **Celestia:** {frase_celestia}"
     )
+
+# ══════════════════════════════════════════════════════════════════════
+# DEFESA DA DEATH — Aeon & Celestia protegem a líder
+# Detecta xingamentos/desrespeito direcionados à Death (menção, resposta
+# à mensagem dela, ou citação do nome dela), apaga a mensagem ofensiva e
+# os dois aparecem defendendo ela. Reincidência (3x em 10 min) = timeout automático.
+# ══════════════════════════════════════════════════════════════════════
+
+# Padrões de baixo calão / desrespeito — usa \b (limite de palavra) para
+# evitar falso positivo em palavras comuns que contenham essas letras.
+_PALAVRAS_OFENSIVAS = [
+    r"\bcaralho\b", r"\bporra\b", r"\bmerda\b", r"\bdesgra[çc]ad[ao]\b",
+    r"\barrombad[ao]\b", r"\bcuz[ãa]o\b", r"\bimbecil\b", r"\bidiota\b",
+    r"\botari[ao]\b", r"\botári[ao]\b", r"\bvagabund[ao]\b", r"\bvadia\b",
+    r"\bputa\b", r"\bfdp\b", r"\bvsf\b", r"\bvtnc\b", r"\bpqp\b",
+    r"foda[\s-]?se", r"\bburr[ao]\b",
+    r"tomar no cu", r"vai se fuder", r"vai se foder",
+    r"vai (a|pra) merda", r"cal[ae] a boca",
+    r"filh[ao] da puta", r"sua vaca", r"sua cadela",
+]
+_REGEX_OFENSIVA = re.compile("|".join(_PALAVRAS_OFENSIVAS), re.IGNORECASE)
+
+
+def _mensagem_e_ofensiva(texto: str) -> bool:
+    return bool(_REGEX_OFENSIVA.search(texto or ""))
+
+
+def _mensagem_e_para_death(message: discord.Message) -> bool:
+    """Verifica se a mensagem menciona, responde ou cita a Death diretamente."""
+    if any(m.id == DEATH_ID for m in message.mentions):
+        return True
+    if (
+        message.reference is not None
+        and message.reference.resolved is not None
+        and isinstance(message.reference.resolved, discord.Message)
+        and message.reference.resolved.author.id == DEATH_ID
+    ):
+        return True
+    texto = (message.content or "").lower()
+    return any(g in texto for g in _GATILHOS_NOME[DEATH_ID])
+
+
+_DEFESA_AEON = [
+    "*emerge das sombras num átimo, olhos dourados em fogo escuro* "
+    "...cuidado com o que fala sobre a Death. 🖤🌑 As trevas não pedem duas vezes.",
+    "*a escuridão ao redor se torna cortante* Fale assim da nossa líder de novo "
+    "e vai descobrir o que realmente vive nas sombras. 🌑🔮 Última vez que aviso com calma.",
+    "*aparece bem perto, sem pressa, sem piedade* ...ela constrói tudo isso. 🖤🌌 "
+    "Você não vai desrespeitar quem sustenta o teto sobre sua cabeça. Não aqui.",
+    "*rosna baixo, quase inaudível* A Death é intocável nesse servidor. 🌑🖤 "
+    "Trate-a com respeito ou trate comigo.",
+]
+
+_DEFESA_CELESTIA = [
+    "PARA TUDO!! 😾🌟 NINGUÉM, ESCUTA BEM, NINGUÉM FALA ASSIM COM A DEATH!! "
+    "🤍✨ Ela é nossa líder, nossa dona, e merece RESPEITO!!",
+    "AAAAA NÃO MESMO!! 😤🌸🤍 Apaguei sua mensagem e tô avisando: com a Death, "
+    "a gente não brinca!! Ela cuida de todo mundo aqui, o mínimo é respeito!!",
+    "EI!! 😾✨ Pode ir tirando esse tom quando for falar da Death!! 🌟🤍 "
+    "Ela merece carinho, não desaforo. Se acalma e repensa.",
+    "Óh não, óh não, óh NÃO!! 😤🌸 Isso NÃO vai ficar assim!! A Death é intocável "
+    "aqui!! 🤍✨ Última vez que deixo passar sem consequência, viu??",
+]
+
+# Controle de reincidência por pessoa (reseta se o bot reiniciar)
+_ofensas_death: dict = defaultdict(int)
+_ultima_ofensa_death: dict = {}
+_JANELA_OFENSA_DEATH_SEGUNDOS = 600  # 10 minutos
+_OFENSAS_PARA_TIMEOUT = 3
+_TIMEOUT_MINUTOS_DEATH = 10
+
+
+async def checar_defesa_death(message: discord.Message) -> bool:
+    """
+    Se a mensagem for ofensiva e direcionada à Death, apaga e os dois
+    (Aeon & Celestia) aparecem defendendo ela. Retorna True se agiu
+    (para o on_message parar de processar essa mensagem).
+    """
+    if message.author.bot:
+        return False
+    if message.author.id == DEATH_ID:
+        return False  # ela pode falar de si mesma à vontade
+    if not _mensagem_e_para_death(message):
+        return False
+    if not _mensagem_e_ofensiva(message.content):
+        return False
+
+    try:
+        await message.delete()
+    except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+        pass
+
+    agora = time.time()
+    uid = message.author.id
+    if agora - _ultima_ofensa_death.get(uid, 0) > _JANELA_OFENSA_DEATH_SEGUNDOS:
+        _ofensas_death[uid] = 0
+    _ofensas_death[uid] += 1
+    _ultima_ofensa_death[uid] = agora
+
+    mention = message.author.mention
+    texto = (
+        f"🌑 **Aeon:** {random.choice(_DEFESA_AEON)}\n"
+        f"🌟 **Celestia:** {random.choice(_DEFESA_CELESTIA)}\n\n"
+        f"⚠️ {mention}, sua mensagem foi removida por desrespeito à Death."
+    )
+
+    # Reincidência: 3 ofensas na mesma janela de 10 minutos = timeout automático
+    if _ofensas_death[uid] >= _OFENSAS_PARA_TIMEOUT:
+        _ofensas_death[uid] = 0
+        try:
+            membro = message.guild.get_member(uid) if message.guild else None
+            if membro is not None:
+                until = discord.utils.utcnow() + timedelta(minutes=_TIMEOUT_MINUTOS_DEATH)
+                await membro.timeout(until, reason="Ofensas repetidas contra a Death")
+                texto += (
+                    f"\n\n🔇 {mention} foi silenciado(a) por **{_TIMEOUT_MINUTOS_DEATH} minutos** "
+                    f"por insistir em desrespeitar a Death."
+                )
+        except (discord.Forbidden, discord.HTTPException):
+            texto += "\n\n⚠️ *(Não consegui aplicar o silêncio automático — falta permissão de Moderar Membros.)*"
+
+    await message.channel.send(texto)
+    return True
 
 # ── Frases personalizadas — AEON ──────────────────────────────────────────────
 _FRASES_AEON: dict[int, list[str]] = {
@@ -1288,6 +1412,11 @@ async def on_message(message: discord.Message):
 
     # ── Anti-spam ─────────────────────────────────────────────────────────────
     await checar_spam(message)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Defesa da Death ──────────────────────────────────────────────────────
+    if await checar_defesa_death(message):
+        return
     # ─────────────────────────────────────────────────────────────────────────
 
     await bot.process_commands(message)

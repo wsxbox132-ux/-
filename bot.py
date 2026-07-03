@@ -3150,6 +3150,187 @@ async def on_message(message: discord.Message):
         return await message.channel.send(random.choice(ops))
 
     # ────────────────────────────────────────
+    # LUA CHEIA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "lua cheia", "olha a lua", "a lua ta linda", "a lua tá linda",
+        "a lua esta linda", "vendo a lua", "tem lua cheia hoje",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *ergue os olhos dourados* Lua cheia. 🌕🖤 As sombras ficam mais nítidas sob ela. É a noite em que a escuridão respira melhor.\n"
+                "🌟 **Celestia:** E é MINHA luz refletindo nela, viu?? ☀️✨ Tecnicamente a lua brilha porque eu deixo!! 😤🌸"
+            ),
+            (
+                "🌟 **Celestia:** AAAAA lua cheia é TÃO bonita!! 🌕🤍✨ Parece uma versão mais tímida do sol!!\n"
+                "🌑 **Aeon:** ...tímida não. 🌑🖤 Só menos exagerada. A lua sabe brilhar sem gritar."
+            ),
+            (
+                "🌑 **Aeon:** *observa em silêncio por um longo momento* Algumas coisas só fazem sentido sob luz de lua cheia. 🌌🖤\n"
+                "🌟 **Celestia:** Tipo esse momento fofo que a gente tá tendo agora!! 😭🌸🤍✨"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # NASCER DO SOL / PÔR DO SOL
+    # ────────────────────────────────────────
+    if _m(content, [
+        "nascer do sol", "por do sol", "pôr do sol", "ver o sol nascer",
+        "ver o sol se por", "ver o sol se pôr", "sunset", "sunrise",
+    ]):
+        ops = [
+            (
+                "🌟 **Celestia:** NASCER DO SOL É MEU MOMENTO FAVORITO DO DIA!! ☀️🤍✨ É literalmente eu chegando pra trabalhar!!\n"
+                "🌑 **Aeon:** ...e o pôr do sol é o meu. 🌇🖤 O momento exato em que a escuridão retoma seu lugar."
+            ),
+            (
+                "🌑 **Aeon:** *observa o horizonte com atenção* O crepúsculo é a única hora em que nós dois existimos ao mesmo tempo, sem disputa. 🌌🖤\n"
+                "🌟 **Celestia:** AWWW isso foi profundo demais pra uma frase sobre horário do dia!! 😭🌸✨ Mas eu concordo!!"
+            ),
+            (
+                "🌟 **Celestia:** Sabe o que é engraçado?? O nascer do sol e o pôr do sol são a MESMA cor!! 🌅🤍✨ A natureza também gosta de simetria!!\n"
+                "🌑 **Aeon:** ...uma coincidência poética. 🖤 Ou talvez não seja coincidência."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # GATO PRETO DÁ AZAR
+    # ────────────────────────────────────────
+    if _m(content, [
+        "gato preto da azar", "gato preto dá azar", "gato preto e azar",
+        "gato preto traz azar", "voce da azar aeon", "você dá azar aeon",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *encara com os olhos dourados semicerrados* Azar é o nome que dão pro que não entendem. 🌑🖤 Eu só existo. A superstição é problema de vocês.\n"
+                "🌟 **Celestia:** GENTE ELE NÃO DÁ AZAR NENHUM!! 😭🌸🤍 Ele só tem uma estética assustadora sem querer!!"
+            ),
+            (
+                "🌟 **Celestia:** Isso é mito!! 🌟🤍✨ Gato preto só dá sorte de ser mais elegante que os outros!!\n"
+                "🌑 **Aeon:** ...ela está certa, pra variar. 🖤 Eu trago consequências, não azar. São coisas diferentes."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # CÉU ESTRELADO / ESTRELAS
+    # ────────────────────────────────────────
+    if _m(content, [
+        "olha as estrelas", "ceu estrelado", "céu estrelado",
+        "quantas estrelas", "estrelas no ceu", "estrelas no céu",
+        "cheio de estrelas",
+    ]):
+        ops = [
+            (
+                "🌟 **Celestia:** AAAAA CADA ESTRELA É TIPO UM PEDACINHO DE MIM ESPALHADO PELO CÉU!! 😭🌟🤍✨ Fico até emocionada!!\n"
+                "🌑 **Aeon:** ...e cada espaço escuro entre elas é meu. 🌌🖤 Precisamos um do outro pra existir assim, visíveis."
+            ),
+            (
+                "🌑 **Aeon:** *olha para cima em silêncio* Sem escuridão, nenhuma estrela seria vista. 🌌🖤 A luz precisa de um fundo pra brilhar.\n"
+                "🌟 **Celestia:** ...isso é literalmente a coisa mais fofa que ele já disse sobre mim sem perceber!! 😭🤍💫"
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # TROVÃO / TEMPESTADE
+    # ────────────────────────────────────────
+    if _m(content, [
+        "medo de trovao", "medo de trovão", "ta trovejando", "tá trovejando",
+        "tempestade la fora", "tempestade lá fora", "trovao forte", "trovão forte",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *não se abala com o som* O trovão é só a escuridão dizendo algo alto, por uma vez. 🌩️🖤 Não há motivo pra medo.\n"
+                "🌟 **Celestia:** SE VOCÊ TIVER MEDO EU FICO AQUI COM VOCÊ TÁ?? 🫂🤍✨ Prometo que a tempestade passa!!"
+            ),
+            (
+                "🌟 **Celestia:** *se encolhe um pouco* Ok eu finjo que não tenho medo de trovão mas... 😳🤍 vem, vamos ficar juntos até passar!!\n"
+                "🌑 **Aeon:** ...ela sempre finge. 🖤 Mas eu fico por perto de qualquer forma."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # ELEMENTO (fogo, água, terra, ar)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "que elemento voces seriam", "qual elemento vocês seriam",
+        "fogo agua terra ou ar", "fogo água terra ou ar",
+        "que elemento vc seria", "qual elemento combina com voces",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** Sombra não é um elemento clássico, mas se tivesse que escolher... água. 🌊🖤 Silenciosa, funda, e move tudo por baixo sem avisar.\n"
+                "🌟 **Celestia:** EU SOU FOGO ÓBVIO!! 🔥🤍✨ Quente, brilhante e impossível de ignorar!!"
+            ),
+            (
+                "🌟 **Celestia:** Ar!! Definitivamente ar!! 🌬️🤍✨ Leve, livre, tá em todo lugar ao mesmo tempo!!\n"
+                "🌑 **Aeon:** ...eu escolho terra. 🖤🌑 Firme. Presente. Não precisa fazer barulho pra sustentar tudo."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # COR FAVORITA
+    # ────────────────────────────────────────
+    if _m(content, [
+        "qual sua cor favorita", "cor favorita de voces", "qual a cor preferida",
+        "qual e a cor favorita", "qual é a cor favorita",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** Preto. 🖤 Óbvio, eu diria, mas também roxo profundo — a cor do céu um segundo antes de escurecer de vez.\n"
+                "🌟 **Celestia:** DOURADO!! Tipo o sol!! ☀️✨ Ou rosa, dependendo do meu humor!! Geralmente os dois ao mesmo tempo!! 🌸💫"
+            ),
+            (
+                "🌟 **Celestia:** Ai que pergunta difícil!! 🤍✨ Amo TODAS as cores mas se eu tivesse que escolher... dourado!! Brilha igual eu!!\n"
+                "🌑 **Aeon:** ...eu não escolho cor. 🌑🖤 Prefiro a ausência dela. Há mais profundidade no preto do que parece."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # FANTASMA / SOBRENATURAL
+    # ────────────────────────────────────────
+    if _m(content, [
+        "acreditam em fantasma", "voces acreditam em fantasma",
+        "tem fantasma", "assombracao", "assombração", "acredita em fantasma",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *olhar indecifrável* Já vivi coisas que não tenho como explicar com lógica comum. 🌌🖤 Então... sim. Acredito.\n"
+                "🌟 **Celestia:** EU TENHO MEDO MAS TAMBÉM ACHO FASCINANTE!! 😱🤍✨ Se aparecer um fantasma eu quero ser AMIGA dele!!"
+            ),
+            (
+                "🌟 **Celestia:** *se agarra em você* NÃO FALA ISSO AGORA TÔ SOZINHA NO ESCURO— espera, o Aeon é literalmente sombra. 😭🤍 Ok, tô protegida!!\n"
+                "🌑 **Aeon:** ...ironicamente, sou a coisa mais assustadora perto de você. 🖤 E ainda assim, o mais seguro lugar pra estar."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
+    # COM O QUE VOCÊS SONHAM (à noite)
+    # ────────────────────────────────────────
+    if _m(content, [
+        "o que voces sonham", "o que vocês sonham", "com o que voces sonham",
+        "com o que vocês sonham", "voces tem sonhos", "vocês têm sonhos",
+    ]):
+        ops = [
+            (
+                "🌑 **Aeon:** *pausa antes de responder* Sonho com espaços sem fim. Silenciosos. Onde nada precisa se explicar. 🌌🖤\n"
+                "🌟 **Celestia:** EU SONHO COM TODO MUNDO DO SERVIDOR FELIZ AO MESMO TEMPO!! 😭🌟🤍✨ Seria tipo... o dia perfeito!!"
+            ),
+            (
+                "🌟 **Celestia:** Sonho com campos de luz dourada onde nunca escurece!! ☀️🤍✨ Bom, quase nunca...\n"
+                "🌑 **Aeon:** ...e eu sonho com o instante exato em que ela concorda que escurecer também tem beleza. 🖤 Ainda não aconteceu."
+            ),
+        ]
+        return await message.channel.send(random.choice(ops))
+
+    # ────────────────────────────────────────
     # CHAMADO GENÉRICO — individual ou duo
     # ────────────────────────────────────────
     so_aeon     = "aeon" in content and "celestia" not in content

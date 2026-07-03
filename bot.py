@@ -157,6 +157,12 @@ _PALAVRAS_OFENSIVAS = [
     r"tomar no cu", r"vai se fuder", r"vai se foder",
     r"vai (a|pra) merda", r"cal[ae] a boca",
     r"filh[ao] da puta", r"sua vaca", r"sua cadela",
+    # Xingamentos de aparência / estado mental
+    r"\blouc[ao]\b", r"\bmaluc[ao]\b", r"\bdoid[ao]\b", r"\bbiruta\b",
+    r"\bcareca\b", r"\bgord[ao]\b", r"\bfei[ao]\b", r"\bescrot[ao]\b",
+    r"\bpiranha\b", r"\bfolgad[ao]\b", r"\bsem[\s-]vergonha\b",
+    r"\bcachorra\b", r"\bmal[\s-]amad[ao]\b", r"\binvejos[ao]\b",
+    r"\bfracassad[ao]\b", r"\bretardad[ao]\b", r"\bnojent[ao]\b",
 ]
 _REGEX_OFENSIVA = re.compile("|".join(_PALAVRAS_OFENSIVAS), re.IGNORECASE)
 

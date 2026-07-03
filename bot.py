@@ -6810,14 +6810,15 @@ async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto:
         return
     if not bot_escolha or not canal or not texto:
         await ctx.send(
-            "uso: .escreva <aeon|celestia|dupla> <geral|dev|cla> <mensagem>\n"
-            "ex:  .escreva aeon geral *emerge das sombras* olá."
+            "uso: .escreva <aeon|celestia|kitsura|dupla> <geral|dev|cla> <mensagem>\n"
+            "ex:  .escreva aeon geral *emerge das sombras* olá.\n"
+            "ex:  .escreva kitsura geral *aparece de repente* 🦊"
         )
         return
 
     persona = bot_escolha.lower()
-    if persona not in ("aeon", "celestia", "dupla"):
-        await ctx.send("persona inválida. use: aeon, celestia ou dupla")
+    if persona not in ("aeon", "celestia", "kitsura", "dupla"):
+        await ctx.send("persona inválida. use: aeon, celestia, kitsura ou dupla")
         return
 
     canal_id = _CANAIS_ESCREVA.get(canal.lower())
@@ -6834,6 +6835,8 @@ async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto:
         msg_final = f"🌑 **Aeon:** {texto}"
     elif persona == "celestia":
         msg_final = f"🌟 **Celestia:** {texto}"
+    elif persona == "kitsura":
+        msg_final = f"🦊 **Kitsura:** {texto}"
     else:  # dupla — separa com | entre as falas: "fala do aeon | fala da celestia"
         if "|" in texto:
             partes = texto.split("|", 1)

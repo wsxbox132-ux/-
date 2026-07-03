@@ -1495,6 +1495,26 @@ async def on_message(message: discord.Message):
         return
 
     # ════════════════════════════════════════════════════════════════
+    # JOGUINHOS — "vamos brincar aeon" / "vamos brincar celestia"
+    # Fica logo no topo da cadeia para não ser interceptado por
+    # saudações personalizadas, chamados genéricos ou qualquer outro
+    # gatilho que também contenha "aeon"/"celestia" na frase.
+    # ════════════════════════════════════════════════════════════════
+    if _m(content, [
+        "vamos brincar aeon", "bora brincar aeon", "quero brincar com o aeon",
+        "quero brincar com aeon", "jogar com aeon", "jogar com o aeon",
+        "brincadeira aeon", "brincar de aeon", "brincar com aeon",
+    ]):
+        return await iniciar_jogo_aeon(message.channel, message.author)
+
+    if _m(content, [
+        "vamos brincar celestia", "bora brincar celestia", "quero brincar com a celestia",
+        "quero brincar com celestia", "jogar com celestia", "jogar com a celestia",
+        "brincadeira celestia", "brincar de celestia", "brincar com celestia",
+    ]):
+        return await iniciar_jogo_celestia(message.channel, message.author)
+
+    # ════════════════════════════════════════════════════════════════
     # APRESENTAÇÃO FORMAL — acionada SOMENTE quando a mensagem é
     # exclusivamente o @ (nada mais, nenhum texto junto).
     # ════════════════════════════════════════════════════════════════
@@ -4143,23 +4163,6 @@ async def on_message(message: discord.Message):
             ),
         ]
         return await message.channel.send(random.choice(ops))
-
-    # ────────────────────────────────────────
-    # JOGUINHOS — "vamos brincar aeon" / "vamos brincar celestia"
-    # ────────────────────────────────────────
-    if _m(content, [
-        "vamos brincar aeon", "bora brincar aeon", "quero brincar com o aeon",
-        "quero brincar com aeon", "jogar com aeon", "jogar com o aeon",
-        "brincadeira aeon", "brincar de aeon", "brincar com aeon",
-    ]):
-        return await iniciar_jogo_aeon(message.channel, message.author)
-
-    if _m(content, [
-        "vamos brincar celestia", "bora brincar celestia", "quero brincar com a celestia",
-        "quero brincar com celestia", "jogar com celestia", "jogar com a celestia",
-        "brincadeira celestia", "brincar de celestia", "brincar com celestia",
-    ]):
-        return await iniciar_jogo_celestia(message.channel, message.author)
 
     # ────────────────────────────────────────
     # JOGOS / GAMES

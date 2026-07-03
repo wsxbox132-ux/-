@@ -1360,6 +1360,52 @@ async def verificar_hora_mensagens():
         await canal.send(embed=embed)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# CONVITE ESPONTÂNEO PARA BRINCAR — a cada 4 horas
+# Aeon ou Celestia aparecem do nada chamando pra brincar. Só ensinam a
+# frase natural ("vamos brincar aeon" / "vamos brincar celestia") — nunca
+# o comando com ponto (.brincar).
+# ══════════════════════════════════════════════════════════════════════
+
+_CONVITES_BRINCAR = [
+    (
+        "🌑 **Aeon:** *emerge devagar das sombras, sem motivo aparente* "
+        "...vamos brincar? 🖤🌌 É só dizer **\"vamos brincar aeon\"** aqui no chat. "
+        "As sombras guardam um joguinho pra quem tiver coragem."
+    ),
+    (
+        "🌟 **Celestia:** AAAAA gente!! 😆🌸🤍✨ Do NADA bateu vontade de brincar!! "
+        "É só falar **\"vamos brincar celestia\"** bem aqui no chat que eu apareço na hora!! 💫☀️"
+    ),
+    (
+        "🌑 **Aeon:** *pausa, observa o chat em silêncio* ...alguém quer brincar? 🌑🖤 "
+        "Basta dizer **\"vamos brincar aeon\"**. Sem pressa. As trevas esperam.\n"
+        "🌟 **Celestia:** OU comigo!! 🌟🤍 É só falar **\"vamos brincar celestia\"**!! Super fácil!! ✨"
+    ),
+    (
+        "🌟 **Celestia:** Psiu, psiu!! 🌸✨ Vocês sabiam que é só escrever "
+        "**\"vamos brincar aeon\"** ou **\"vamos brincar celestia\"** que a gente entra pra jogar?? 💫🤍\n"
+        "🌑 **Aeon:** ...ela tem razão. 🖤🌑 Nada de comando complicado. Só isso."
+    ),
+]
+
+
+@tasks.loop(hours=4)
+async def convite_brincar_periodico():
+    """A cada 4 horas, Aeon ou Celestia surgem do nada convidando para o joguinho."""
+    canal = None
+    if CANAL_SAUDACOES_ID:
+        for guild in bot.guilds:
+            canal = guild.get_channel(CANAL_SAUDACOES_ID)
+            if canal:
+                break
+    if canal is None:
+        return
+
+    mensagem = random.choice(_CONVITES_BRINCAR)
+    await canal.send(mensagem)
+
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -1387,6 +1433,10 @@ async def on_ready():
     # Inicia a task de bom dia / boa noite automáticos
     if not verificar_hora_mensagens.is_running():
         verificar_hora_mensagens.start()
+
+    # Inicia a task de convite espontâneo para brincar (a cada 4h)
+    if not convite_brincar_periodico.is_running():
+        convite_brincar_periodico.start()
 
 @bot.event
 async def on_member_join(member: discord.Member):

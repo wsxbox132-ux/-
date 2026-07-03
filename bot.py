@@ -5792,6 +5792,7 @@ async def cmd_help(ctx):
 CARGO_VISITANTE_ID  = 1284263365547397120  # cargo exclusivo de visitante
 CARGO_MEMBRO_ID     = 1284263397990596659  # cla member
 CARGO_COMUM_ID      = 1290029716241256600  # verificado (recebido em ambos os casos)
+CARGO_REMOVER_AO_CONFIRMAR_ID = 1290029492856815696  # removido automaticamente ao clicar no botão
 
 IMAGE_TICKET            = "https://cdn.discordapp.com/attachments/926913851172204577/1514098200661983412/ChatGPT_Image_9_de_jun._de_2026_23_45_25.png?ex=6a2a2155&is=6a28cfd5&hm=1676da56b11b0efc33e422f78cee000cdb0b57bdeb14e30514b4ac18e535bd1d"
 IMAGE_ENTRADA_VISITANTE = "https://cdn.discordapp.com/attachments/926913851172204577/1514086350603685948/ChatGPT_Image_9_de_jun._de_2026_22_46_43.png?ex=6a2a164c&is=6a28c4cc&hm=f4051c0619c741fd0fb72aa941c82d67290d1e4cbfbb7fe5cfa76d362660c3d2&"
@@ -5897,6 +5898,15 @@ class BotaoVisitante(discord.ui.View):
                 except discord.HTTPException as e:
                     erros.append(f"Erro ao adicionar **{cargo.name}**: {e}")
 
+        cargo_remover = guild.get_role(CARGO_REMOVER_AO_CONFIRMAR_ID)
+        if cargo_remover is not None and cargo_remover in member.roles:
+            try:
+                await member.remove_roles(cargo_remover, reason="Confirmou entrada como Visitante via botão")
+            except discord.Forbidden:
+                erros.append(f"Sem permissão para remover o cargo **{cargo_remover.name}**.")
+            except discord.HTTPException as e:
+                erros.append(f"Erro ao remover **{cargo_remover.name}**: {e}")
+
         if erros:
             await interaction.response.send_message(
                 "⚠️ Ocorreu um problema ao atribuir seus cargos:\n" + "\n".join(erros),
@@ -5947,6 +5957,15 @@ class BotaoMembro(discord.ui.View):
                     erros.append(f"Sem permissão para adicionar o cargo **{cargo.name}**.")
                 except discord.HTTPException as e:
                     erros.append(f"Erro ao adicionar **{cargo.name}**: {e}")
+
+        cargo_remover = guild.get_role(CARGO_REMOVER_AO_CONFIRMAR_ID)
+        if cargo_remover is not None and cargo_remover in member.roles:
+            try:
+                await member.remove_roles(cargo_remover, reason="Confirmou entrada como Membro via botão")
+            except discord.Forbidden:
+                erros.append(f"Sem permissão para remover o cargo **{cargo_remover.name}**.")
+            except discord.HTTPException as e:
+                erros.append(f"Erro ao remover **{cargo_remover.name}**: {e}")
 
         if erros:
             await interaction.response.send_message(

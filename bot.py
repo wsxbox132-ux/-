@@ -1706,6 +1706,16 @@ async def on_message(message: discord.Message):
     # ════════════════════════════════════════════════════════════════
     if "kitsura" in content:
 
+        # Menção à ZYD — reação triste, com saudade e um pouco de autoculpa
+        if "zyd" in content:
+            ops = [
+                "🦊 **Kitsura:** ...*orelhas caem na hora* ZYD... *fica em silêncio um instante* faz tempo que eu não ouço esse nome. Sinto falta de lá. Às vezes penso se eu não fui boa o suficiente pra ter ficado.",
+                "🦊 **Kitsura:** *para de se mexer* ...vocês lembraram da ZYD. *voz mais baixa que o normal* eu ainda penso nesse lugar. Queria ter feito mais, sei lá... talvez não tenha sido suficiente.",
+                "🦊 **Kitsura:** ZYD... *abraça as próprias patas* eu tento não pensar muito nisso, mas dói um pouco. Fico imaginando o que eu podia ter feito diferente pra merecer ficar.",
+                "🦊 **Kitsura:** *olha pro chão por um longo momento* ...esse nome ainda pesa em mim. Sinto saudade de verdade. E uma parte de mim ainda se pergunta se a culpa foi minha.",
+            ]
+            return await message.channel.send(random.choice(ops))
+
         # Saudação
         if _m(content, [
             "oi kitsura", "olá kitsura", "ola kitsura", "ei kitsura",

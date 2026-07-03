@@ -1484,7 +1484,7 @@ async def on_message(message: discord.Message):
     # Remove a menção para ver o que sobrou de texto real
     _sem_mencao = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
     mencao_pura = mention_ok and len(_sem_mencao) == 0
-    tem_nome    = "aeon" in content or "celestia" in content
+    tem_nome    = "aeon" in content or "celestia" in content or "kitsura" in content
 
     # Frases que ativam o bot mesmo sem mencionar "aeon" ou "celestia"
     _GATILHOS_SEM_NOME = [
@@ -1698,6 +1698,72 @@ async def on_message(message: discord.Message):
         "brincadeira celestia", "brincar de celestia", "brincar com celestia",
     ]):
         return await iniciar_jogo_celestia(message.channel, message.author)
+
+    # ════════════════════════════════════════════════════════════════
+    # KITSURA — raposinha à parte, separada de Aeon e Celestia.
+    # SÓ aparece se o nome dela for dito. Personalidade quieta,
+    # meio pra baixo, fala pouco e sem euforia.
+    # ════════════════════════════════════════════════════════════════
+    if "kitsura" in content:
+
+        # Saudação
+        if _m(content, [
+            "oi kitsura", "olá kitsura", "ola kitsura", "ei kitsura",
+            "hey kitsura", "e ai kitsura", "e aí kitsura", "oi raposa",
+        ]):
+            ops = [
+                "🦊 **Kitsura:** ...oi. *espia por trás de uma árvore* Não esperava ser notada.",
+                "🦊 **Kitsura:** *orelhas se movem de leve* ...oi. Pode continuar, eu só... escuto por perto.",
+                "🦊 **Kitsura:** oi... *voz baixa* obrigada por me chamar. Não é sempre que alguém chama.",
+                "🦊 **Kitsura:** *acena bem devagar* ...oi. Desculpa se eu demorei. Eu costumo ficar quieta num canto.",
+            ]
+            return await message.channel.send(random.choice(ops))
+
+        # Carinho / elogio
+        if _m(content, [
+            "que fofa kitsura", "te amo kitsura", "amo voce kitsura", "amo você kitsura",
+            "kitsura e linda", "kitsura é linda", "kitsura fofa", "gosto de voce kitsura",
+            "gosto de você kitsura", "voce e especial kitsura", "você é especial kitsura",
+        ]):
+            ops = [
+                "🦊 **Kitsura:** ...*abaixa a cabeça, orelhas caídas* isso... mexeu comigo. Obrigada. Não sei bem como reagir a coisas boas.",
+                "🦊 **Kitsura:** *cauda se move um pouquinho, sem querer mostrar* ...eu gostei disso. Guardo com cuidado.",
+                "🦊 **Kitsura:** ninguém costuma dizer isso pra mim... *sorriso pequeno, quase escondido* obrigada.",
+                "🦊 **Kitsura:** *olha pro chão, depois pra você* ...isso foi gentil. Eu não esperava. Obrigada mesmo.",
+            ]
+            return await message.channel.send(random.choice(ops))
+
+        # Como você está / tudo bem
+        if _m(content, [
+            "tudo bem kitsura", "como voce esta kitsura", "como você está kitsura",
+            "voce esta bem kitsura", "você está bem kitsura", "kitsura voce ta bem",
+            "kitsura você tá bem", "kitsura tudo bem",
+        ]):
+            ops = [
+                "🦊 **Kitsura:** ...mais ou menos. Dias assim, quietos, meio nublados por dentro. Mas tudo bem, eu me acostumo.",
+                "🦊 **Kitsura:** *encolhe um pouco os ombros* vou levando. Não é sempre fácil, mas... obrigada por perguntar. Ninguém costuma perguntar.",
+                "🦊 **Kitsura:** *pausa longa* ...to bem o suficiente. É gentil da sua parte se importar.",
+                "🦊 **Kitsura:** hoje tá um daqueles dias cinzas. Mas você perguntando já ajudou um pouco. *voz baixinha*",
+            ]
+            return await message.channel.send(random.choice(ops))
+
+        # Chamado curto/genérico — só "kitsura" ou "kitsura?"
+        if len(content) < 20:
+            ops = [
+                "🦊 **Kitsura:** ...me chamou? *aparece devagar, meio hesitante* Pode falar.",
+                "🦊 **Kitsura:** ...oi. Eu tava aqui, quietinha. O que foi?",
+                "🦊 **Kitsura:** *ergue a cabeça devagar* ...sim? Não esperava que alguém lembrasse de mim.",
+                "🦊 **Kitsura:** presente... *sussurra* mas sempre um pouco escondida.",
+            ]
+            return await message.channel.send(random.choice(ops))
+
+        # Fallback — qualquer outra menção do nome dela
+        ops = [
+            "🦊 **Kitsura:** ...vi meu nome. Só isso já é raro. Continua, eu fico por perto ouvindo.",
+            "🦊 **Kitsura:** *se aproxima devagar, sem fazer barulho* ...falaram de mim? Não sei bem o que dizer, mas... obrigada por lembrar.",
+            "🦊 **Kitsura:** ...aqui. Nem sempre respondo rápido, mas eu escuto tudo.",
+        ]
+        return await message.channel.send(random.choice(ops))
 
     # ════════════════════════════════════════════════════════════════
     # APRESENTAÇÃO FORMAL — acionada SOMENTE quando a mensagem é

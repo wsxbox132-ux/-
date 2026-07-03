@@ -1151,10 +1151,9 @@ def _detectar_ingles(texto: str) -> bool:
 
 def _detectar_espanhol(texto: str) -> bool:
     """
-    Detecta espanhol por vocabulário.
-    Usa apenas palavras que NÃO existem (ou têm grafia bem diferente) em português,
-    para evitar falsos positivos com o idioma nativo do servidor.
-    Exige pelo menos 2 palavras exclusivas do espanhol (ou 1 se a mensagem for muito curta).
+    Detecta espanhol por vocabulário + sinais ortográficos exclusivos.
+    Evita falsos positivos com português, mas cobre frases casuais de chat
+    (com gírias, letras repetidas tipo "siii"/"bienn"/"clarooo", etc).
     """
     import re
     import unicodedata
@@ -1164,6 +1163,14 @@ def _detectar_espanhol(texto: str) -> bool:
             c for c in unicodedata.normalize("NFD", s)
             if unicodedata.category(c) != "Mn"
         )
+
+    def _sem_alongamento(w: str) -> str:
+        # colapsa letras repetidas em sequência: "siii" -> "si", "bienn" -> "bien"
+        return re.sub(r"(.)\1+", r"\1", w)
+
+    # Sinais ortográficos 100% exclusivos do espanhol — nunca aparecem em português
+    if "¿" in texto or "¡" in texto or "ñ" in texto.lower():
+        return True
 
     # Palavras que são exclusivas (ou bem diferentes) do espanhol frente ao português
     palavras_es = {
@@ -1176,6 +1183,15 @@ def _detectar_espanhol(texto: str) -> bool:
         "entonces","despues","ademas","siempre","mucho","mucha","muchos","muchas",
         "poco","poca","pocos","pocas","buenos","noches",
         "soy","estoy","voy","hago","vengo","salgo","hasta","luego","ahi","cosas",
+        # expressões e palavras comuns em chat casual
+        "si","mi","lo","le","les","y","novio","novia","otro","otra","otros","otras",
+        "creo","dijo","dije","dijiste","puse","pusiste","preocupes","preocupa",
+        "vale","chevere","chido","perdon","disculpa",
+        "verdad","ratito","ahorita","bueno","buena",
+        "necesito","necesitas","quisiera","podria","tampoco","alguien","nadie",
+        "hoy","manana","noche","chico","chica","joven","viejo",
+        "trabajar","hablar","escuchar","mirar","llamar","llegar",
+        "cerca","lejos","fuera","arriba","abajo","adelante","detras",
     }
 
     texto_sa = _sem_acento(texto.lower())
@@ -1186,7 +1202,20 @@ def _detectar_espanhol(texto: str) -> bool:
     words_clean = [w for w in words_clean if w]
     if not words_clean:
         return False
-    matches = sum(1 for w in words_clean if w in palavras_es)
+
+    matches = 0
+    for w in words_clean:
+        if w in palavras_es:
+            matches += 1
+            continue
+        w_norm = _sem_alongamento(w)
+        if w_norm != w and w_norm in palavras_es:
+            matches += 1
+            continue
+        # sufixos "-cion"/"-sion" (espanhol) vs "-cao"/"-sao" (português)
+        if len(w) >= 6 and (w.endswith("cion") or w.endswith("sion")):
+            matches += 1
+
     total = len(words_clean)
     ratio = matches / total
     # Precisa de pelo menos 2 palavras exclusivas do espanhol, ou 1 se a mensagem for bem curta

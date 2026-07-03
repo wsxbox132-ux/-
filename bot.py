@@ -7,7 +7,12 @@ import time
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-import yt_dlp
+try:
+    import yt_dlp
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    import yt_dlp
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║          AEON & CELESTIA — DOIS GATOS, UMA ALMA             ║
@@ -59,9 +64,6 @@ DEV01_ID      = 769951556388257812   # Dev / Pai dos bots — criador (mesmo ID)
 # Limite de repetições antes de agir
 SPAM_LIMITE = 5
 
-# Canais onde o anti-spam NÃO deve apagar mensagens repetidas
-SPAM_CANAIS_IGNORADOS = {1285696126334271631}
-
 # Histórico por usuário: { user_id: { channel_id: {"texto": str, "ids": [msg_id, ...]} } }
 _spam_tracker: dict = defaultdict(lambda: defaultdict(lambda: {"texto": None, "ids": []}))
 
@@ -92,9 +94,6 @@ async def checar_spam(message: discord.Message) -> None:
     uid = message.author.id
     cid = message.channel.id
     texto_novo = message.content.strip().lower()
-
-    if cid in SPAM_CANAIS_IGNORADOS:
-        return
 
     if not texto_novo:
         return
@@ -1046,17 +1045,12 @@ def _cooldown_ok(user_id: int) -> bool:
 
 async def _chamar_traducao(texto: str, direcao: str) -> str:
     """Tradução via MyMemory (API gratuita, sem chave necessária).
-    direcao: 'en_to_pt', 'pt_to_en', 'es_to_pt' ou 'pt_to_es'
+    direcao: 'en_to_pt' ou 'pt_to_en'
     """
-    lang_pairs = {
-        "en_to_pt": "en|pt-BR",
-        "pt_to_en": "pt-BR|en",
-        "es_to_pt": "es|pt-BR",
-        "pt_to_es": "pt-BR|es",
-    }
-    lang_pair = lang_pairs.get(direcao)
-    if lang_pair is None:
-        return None
+    if direcao == "en_to_pt":
+        lang_pair = "en|pt-BR"
+    else:
+        lang_pair = "pt-BR|en"
 
     url = "https://api.mymemory.translated.net/get"
     params = {
@@ -1147,78 +1141,6 @@ def _detectar_ingles(texto: str) -> bool:
     total = len(words_clean)
     ratio = matches / total
     # Precisa de pelo menos 2 palavras inglês, ou 1 se a mensagem tiver só 1-2 palavras
-    return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
-
-def _detectar_espanhol(texto: str) -> bool:
-    """
-    Detecta espanhol por vocabulário + sinais ortográficos exclusivos.
-    Evita falsos positivos com português, mas cobre frases casuais de chat
-    (com gírias, letras repetidas tipo "siii"/"bienn"/"clarooo", etc).
-    """
-    import re
-    import unicodedata
-
-    def _sem_acento(s: str) -> str:
-        return "".join(
-            c for c in unicodedata.normalize("NFD", s)
-            if unicodedata.category(c) != "Mn"
-        )
-
-    def _sem_alongamento(w: str) -> str:
-        # colapsa letras repetidas em sequência: "siii" -> "si", "bienn" -> "bien"
-        return re.sub(r"(.)\1+", r"\1", w)
-
-    # Sinais ortográficos 100% exclusivos do espanhol — nunca aparecem em português
-    if "¿" in texto or "¡" in texto or "ñ" in texto.lower():
-        return True
-
-    # Palavras que são exclusivas (ou bem diferentes) do espanhol frente ao português
-    palavras_es = {
-        "el","los","las","yo","pero","muy","asi","ahora",
-        "hola","gracias","adios","bien","eso","esto","esos","esas",
-        "quiero","quieres","quiere","puedo","puedes","puede",
-        "tengo","tienes","tiene","hacer","decir","tiempo","trabajo",
-        "mujer","hombre","nosotros","vosotros","ustedes","ellos","ellas",
-        "con","sin","tambien","donde","cuando","cual","cuales","aunque",
-        "entonces","despues","ademas","siempre","mucho","mucha","muchos","muchas",
-        "poco","poca","pocos","pocas","buenos","noches",
-        "soy","estoy","voy","hago","vengo","salgo","hasta","luego","ahi","cosas",
-        # expressões e palavras comuns em chat casual
-        "si","mi","lo","le","les","y","novio","novia","otro","otra","otros","otras",
-        "creo","dijo","dije","dijiste","puse","pusiste","preocupes","preocupa",
-        "vale","chevere","chido","perdon","disculpa",
-        "verdad","ratito","ahorita","bueno","buena",
-        "necesito","necesitas","quisiera","podria","tampoco","alguien","nadie",
-        "hoy","manana","noche","chico","chica","joven","viejo",
-        "trabajar","hablar","escuchar","mirar","llamar","llegar",
-        "cerca","lejos","fuera","arriba","abajo","adelante","detras",
-    }
-
-    texto_sa = _sem_acento(texto.lower())
-    words = texto_sa.split()
-    if not words:
-        return False
-    words_clean = [re.sub(r"[^a-z]", "", w) for w in words]
-    words_clean = [w for w in words_clean if w]
-    if not words_clean:
-        return False
-
-    matches = 0
-    for w in words_clean:
-        if w in palavras_es:
-            matches += 1
-            continue
-        w_norm = _sem_alongamento(w)
-        if w_norm != w and w_norm in palavras_es:
-            matches += 1
-            continue
-        # sufixos "-cion"/"-sion" (espanhol) vs "-cao"/"-sao" (português)
-        if len(w) >= 6 and (w.endswith("cion") or w.endswith("sion")):
-            matches += 1
-
-    total = len(words_clean)
-    ratio = matches / total
-    # Precisa de pelo menos 2 palavras exclusivas do espanhol, ou 1 se a mensagem for bem curta
     return matches >= 1 and (total <= 2 or matches >= 2 or ratio >= 0.4)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1473,8 +1395,8 @@ async def on_message(message: discord.Message):
 
     # ════════════════════════════════════════════════════════════════
     # SISTEMA DE TRADUÇÃO — Cargo Translate
-    # 1) Membro com cargo Translate fala em inglês ou espanhol → traduz para PT
-    # 2) Alguém responde em PT a msg em inglês/espanhol → traduz PT→idioma original
+    # 1) Membro com cargo Translate fala em inglês  → traduz EN→PT
+    # 2) Alguém responde em PT a msg de membro Translate → traduz PT→EN
     # ════════════════════════════════════════════════════════════════
 
     # Garante que temos o Member completo com cargos (não apenas User do cache)
@@ -1491,80 +1413,52 @@ async def on_message(message: discord.Message):
 
     autor_tem_translate = _tem_cargo_translate(_member_completo)
 
+    # Ignora comandos do bot (começa com ".") — nunca traduzir comandos
+    _e_comando = message.content.startswith(bot.command_prefix)
 
-    # Caso 1 — autor TEM cargo translate e escreveu em inglês ou espanhol
-    if autor_tem_translate and len(message.content.strip()) >= 2:
-        _idioma_origem = None
-        if _detectar_ingles(message.content):
-            _idioma_origem = "en"
-        elif _detectar_espanhol(message.content):
-            _idioma_origem = "es"
+    # Caso 1 — autor TEM cargo translate e escreveu em inglês
+    if autor_tem_translate and not _e_comando and _detectar_ingles(message.content) and len(message.content.strip()) >= 2:
+        traducao = await _chamar_traducao(message.content, "en_to_pt")
+        if traducao:
+            embed = discord.Embed(color=0x2b2b3b)
+            embed.set_author(
+                name=f"{message.author.display_name} · Tradução automática",
+                icon_url=message.author.display_avatar.url
+            )
+            embed.add_field(
+                name="🌐 Inglês (original)",
+                value=f"```{message.content}```",
+                inline=False
+            )
+            embed.add_field(
+                name="🌑☀️ Português (traduzido por Aeon & Celestia)",
+                value=f"> {traducao}",
+                inline=False
+            )
+            embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
+            msg_trad = await message.channel.send(embed=embed)
+            async def _deletar_depois(m):
+                await asyncio.sleep(120)
+                try:
+                    await m.delete()
+                except Exception:
+                    pass
+            asyncio.create_task(_deletar_depois(msg_trad))
+        return
 
-        if _idioma_origem is not None:
-            direcao = "en_to_pt" if _idioma_origem == "en" else "es_to_pt"
-            label_origem = "🌐 Inglês (original)" if _idioma_origem == "en" else "🇪🇸 Espanhol (original)"
-
-            traducao = await _chamar_traducao(message.content, direcao)
-            if traducao:
-                embed = discord.Embed(color=0x2b2b3b)
-                embed.set_author(
-                    name=f"{message.author.display_name} · Tradução automática",
-                    icon_url=message.author.display_avatar.url
-                )
-                embed.add_field(
-                    name=label_origem,
-                    value=f"```{message.content}```",
-                    inline=False
-                )
-                embed.add_field(
-                    name="🌑☀️ Português (traduzido por Aeon & Celestia)",
-                    value=f"> {traducao}",
-                    inline=False
-                )
-                embed.set_footer(text="🌑 Aeon guarda as trevas • ☀️ Celestia traz a luz • tradução automática")
-                msg_trad = await message.channel.send(embed=embed)
-                async def _deletar_depois(m):
-                    await asyncio.sleep(120)
-                    try:
-                        await m.delete()
-                    except Exception:
-                        pass
-                asyncio.create_task(_deletar_depois(msg_trad))
-            return
-
-    # Caso 2 — alguém responde em PT a uma mensagem em inglês ou espanhol — traduz PT→idioma original
+    # Caso 2 — alguém responde em PT a uma mensagem em inglês — traduz PT→EN
     if (
         message.reference is not None
         and message.reference.resolved is not None
         and isinstance(message.reference.resolved, discord.Message)
         and not _detectar_ingles(message.content)
-        and not _detectar_espanhol(message.content)
         and len(message.content.strip()) >= 2
     ):
         ref_msg = message.reference.resolved
         ref_autor = ref_msg.author
-
-        _idioma_resposta = None
+        # Traduz se a mensagem respondida estava em inglês e não é do próprio bot
         if not ref_autor.bot and _detectar_ingles(ref_msg.content):
-            _idioma_resposta = "en"
-        elif not ref_autor.bot and _detectar_espanhol(ref_msg.content):
-            _idioma_resposta = "es"
-
-        # Traduz se a mensagem respondida estava em inglês/espanhol e não é do próprio bot
-        if _idioma_resposta is not None:
-            direcao = "pt_to_en" if _idioma_resposta == "en" else "pt_to_es"
-            label_traduzido = (
-                "🌐 English (translated by Aeon & Celestia)"
-                if _idioma_resposta == "en"
-                else "🇪🇸 Español (traducido por Aeon & Celestia)"
-            )
-            rodape = (
-                "🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation"
-                if _idioma_resposta == "en"
-                else "🌑 Aeon guarda las sombras • ☀️ Celestia trae la luz • traducción automática"
-            )
-
-            traducao = await _chamar_traducao(message.content, direcao)
+            traducao = await _chamar_traducao(message.content, "pt_to_en")
             if traducao:
                 embed = discord.Embed(color=0x1a1a2e)
                 embed.set_author(
@@ -1577,7 +1471,7 @@ async def on_message(message: discord.Message):
                     inline=False
                 )
                 embed.add_field(
-                    name=label_traduzido,
+                    name="🌐 English (translated by Aeon & Celestia)",
                     value=f"> {traducao}",
                     inline=False
                 )
@@ -1586,7 +1480,7 @@ async def on_message(message: discord.Message):
                     value=f"{ref_autor.mention}",
                     inline=True
                 )
-                embed.set_footer(text=rodape)
+                embed.set_footer(text="🌑 Aeon keeps the shadows • ☀️ Celestia brings the light • auto translation")
                 msg_trad = await message.channel.send(embed=embed)
                 async def _deletar_depois_pt(m):
                     await asyncio.sleep(120)
@@ -4251,6 +4145,23 @@ async def on_message(message: discord.Message):
         return await message.channel.send(random.choice(ops))
 
     # ────────────────────────────────────────
+    # JOGUINHOS — "vamos brincar aeon" / "vamos brincar celestia"
+    # ────────────────────────────────────────
+    if _m(content, [
+        "vamos brincar aeon", "bora brincar aeon", "quero brincar com o aeon",
+        "quero brincar com aeon", "jogar com aeon", "jogar com o aeon",
+        "brincadeira aeon", "brincar de aeon", "brincar com aeon",
+    ]):
+        return await iniciar_jogo_aeon(message.channel, message.author)
+
+    if _m(content, [
+        "vamos brincar celestia", "bora brincar celestia", "quero brincar com a celestia",
+        "quero brincar com celestia", "jogar com celestia", "jogar com a celestia",
+        "brincadeira celestia", "brincar de celestia", "brincar com celestia",
+    ]):
+        return await iniciar_jogo_celestia(message.channel, message.author)
+
+    # ────────────────────────────────────────
     # JOGOS / GAMES
     # ────────────────────────────────────────
     if _m(content, [
@@ -5305,6 +5216,292 @@ async def on_message(message: discord.Message):
                 return await message.reply(_fala_celestia(random.choice(CELESTIA_REACOES_FOFAS)))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# JOGUINHOS — "Vamos brincar Aeon" / "Vamos brincar Celestia"
+# Cada gato tem seu próprio joguinho, no tema dele.
+# ══════════════════════════════════════════════════════════════════════
+
+# Placar em memória (reseta se o bot reiniciar)
+_placar_sombras: dict = defaultdict(lambda: {"vitorias": 0, "derrotas": 0})
+_placar_brilho:  dict = defaultdict(lambda: {"recorde": 0})
+
+
+# ────────────────────────────────────────
+# JOGO DO AEON — "Achar a Sombra"
+# Aeon se esconde em 1 de 5 sombras. Ache a certa antes que as trevas te enganem.
+# ────────────────────────────────────────
+
+_SOMBRA_INTRO = [
+    "🌑 **Aeon:** *a luz da sala diminui suavemente* ...vamos brincar. 🌌🖤 "
+    "Escolhi uma sombra para me esconder. As outras quatro estão vazias. Ache-me.",
+    "🌑 **Aeon:** Quer brincar? 🖤🌑 Muito bem. Uma sombra entre cinco guarda a mim. "
+    "As demais, apenas escuridão comum. Escolha com cuidado.",
+    "🌑 **Aeon:** *olhos dourados piscam no escuro e depois somem* Acha que consegue me encontrar? 🌑🔮 "
+    "Um clique. Uma chance. Boa sorte.",
+]
+
+_SOMBRA_ACERTO = [
+    "*emerge exatamente da sombra certa, olhos dourados brilhando* ...encontrou. 🌌🖤 "
+    "Poucos enxergam através da escuridão. Impressionante, {user}.",
+    "*sai devagar da sombra, quase surpreso* ...não esperava isso. 🖤🌑 Você tem instinto para as trevas, {user}.",
+    "*inclina a cabeça, há quase um traço de respeito* Achou. 🌙🖤 As sombras raramente se deixam encontrar assim.",
+]
+
+_SOMBRA_ERRO = [
+    "*ri baixinho, saindo de outra sombra* ...errou, {user}. 🖤🌑 As trevas são traiçoeiras assim mesmo. Tente de novo.",
+    "*aparece atrás de {user}, sem que ninguém percebesse quando* ...essa não era a sombra certa. 🌑🌌 Quase.",
+    "...não. 🖤 *a sombra certa se dissolve no escuro antes que {user} perceba onde estava* Tente de novo.",
+]
+
+
+class _BotaoJogarDeNovoSombra(discord.ui.Button):
+    def __init__(self, autor_id: int):
+        super().__init__(label="🔁 Jogar de novo", style=discord.ButtonStyle.primary, row=1)
+        self.autor_id = autor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa caçada não é sua. 🖤", ephemeral=True
+            )
+        nova_view = JogoSombraView(self.autor_id)
+        await interaction.response.edit_message(
+            content=random.choice(_SOMBRA_INTRO), view=nova_view
+        )
+
+
+class JogoSombraView(discord.ui.View):
+    """Aeon se esconde em uma de 5 sombras — ache a certa."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=30)
+        self.autor_id = autor_id
+        self.terminou = False
+        self.posicao_aeon = random.randint(0, 4)
+
+    async def _resolver(self, interaction: discord.Interaction, indice: int):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa caçada não é sua. 🖤", ephemeral=True
+            )
+        if self.terminou:
+            return
+        self.terminou = True
+        for item in self.children:
+            item.disabled = True
+
+        placar = _placar_sombras[self.autor_id]
+        if indice == self.posicao_aeon:
+            placar["vitorias"] += 1
+            frase = random.choice(_SOMBRA_ACERTO).format(user=interaction.user.mention)
+        else:
+            placar["derrotas"] += 1
+            frase = random.choice(_SOMBRA_ERRO).format(user=interaction.user.mention)
+
+        texto = (
+            f"🌑 **Aeon:** {frase}\n\n"
+            f"🏆 Vitórias: **{placar['vitorias']}** | Derrotas: **{placar['derrotas']}**"
+        )
+        self.add_item(_BotaoJogarDeNovoSombra(self.autor_id))
+        await interaction.response.edit_message(content=texto, view=self)
+
+    @discord.ui.button(label="Sombra 1", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def sombra_1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, 0)
+
+    @discord.ui.button(label="Sombra 2", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def sombra_2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, 1)
+
+    @discord.ui.button(label="Sombra 3", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def sombra_3(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, 2)
+
+    @discord.ui.button(label="Sombra 4", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def sombra_4(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, 3)
+
+    @discord.ui.button(label="Sombra 5", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def sombra_5(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, 4)
+
+
+async def iniciar_jogo_aeon(destino, autor):
+    """Inicia o joguinho do Aeon. destino precisa ter .send() (ctx ou channel)."""
+    view = JogoSombraView(autor.id)
+    await destino.send(content=random.choice(_SOMBRA_INTRO), view=view)
+
+
+# ────────────────────────────────────────
+# JOGO DA CELESTIA — "Sequência Brilhante"
+# Celestia mostra uma sequência de brilhos — repita na ordem certa!
+# ────────────────────────────────────────
+
+_BRILHO_EMOJIS = ["🌟", "💫", "⭐", "🌠"]
+_BRILHO_RODADAS_MAX = 8
+
+_BRILHO_INTRO = [
+    "🌟 **Celestia:** AAAAA vamos brincar!! 💫🤍✨ Eu vou mostrar uma sequência de brilhos "
+    "e você repete na MESMA ordem clicando nos botões!! Presta atenção, viu?? 🌸",
+    "🌟 **Celestia:** OOOI quer brincar comigo?? ☀️🌟🤍 É fácil!! Eu mostro os brilhos, "
+    "você clica na ordem certinha!! A cada rodada fica um pouquinho mais difícil!! ✨",
+]
+
+_BRILHO_RODADA_OK = [
+    "ISOOO!! Acertou tudinho!! 😭🌟✨ Vamos pra próxima, tá ficando emocionante!!",
+    "AAAAA perfeito!! 💫🤍 Sua memória tá brilhando junto comigo!! Próxima rodada!!",
+    "VIU SÓ?? Eu sabia que você conseguia!! ☀️🌸✨ Bora continuar!!",
+]
+
+_BRILHO_ERRO = [
+    "AAAAA quase!! 😭🌸 Não era essa a ordem... mas tudo bem, foi bonito enquanto durou!! ✨",
+    "Ooown, errou a sequência!! 🌟🤍 Sem problema, a gente tenta de novo, combinado?? 💫",
+    "Ai que peninha!! 🌸😭 Não foi dessa vez, mas seu recorde tá guardadinho aqui!! ✨",
+]
+
+_BRILHO_VITORIA_MAXIMA = (
+    "AAAAAAAAA VOCÊ CHEGOU NO FINAL DA SEQUÊNCIA!! 😭🌟💫✨🤍 "
+    "TODOS os brilhos, na ordem certa, até o fim!! Você é IMBATÍVEL, sério mesmo!! 🏆🌸☀️"
+)
+
+
+class _BotaoJogarDeNovoBrilho(discord.ui.Button):
+    def __init__(self, autor_id: int):
+        super().__init__(label="🔁 Jogar de novo", style=discord.ButtonStyle.primary, row=1)
+        self.autor_id = autor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌟 **Celestia:** essa brincadeira não é sua, mas fica à vontade pra começar a sua!! 🌸",
+                ephemeral=True
+            )
+        nova_view = JogoBrilhoView(self.autor_id)
+        await interaction.response.edit_message(
+            content=nova_view.texto_rodada_atual(), view=nova_view
+        )
+
+
+class JogoBrilhoView(discord.ui.View):
+    """Celestia mostra uma sequência crescente de brilhos para o jogador repetir."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=45)
+        self.autor_id  = autor_id
+        self.terminou  = False
+        self.rodada    = 1
+        self.sequencia = [random.randrange(4) for _ in range(self.rodada + 2)]
+        self.progresso = []
+
+    def texto_rodada_atual(self) -> str:
+        mostra = " ".join(_BRILHO_EMOJIS[i] for i in self.sequencia)
+        return (
+            f"🌟 **Celestia:** Rodada **{self.rodada}**!! Memoriza a sequência:\n\n"
+            f"### {mostra}\n\n"
+            f"Agora clica nos botões na MESMA ordem!! ✨🤍"
+        )
+
+    async def _clicar(self, interaction: discord.Interaction, indice: int):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌟 **Celestia:** essa brincadeira não é sua, mas fica à vontade pra começar a sua!! 🌸",
+                ephemeral=True
+            )
+        if self.terminou:
+            return
+
+        posicao = len(self.progresso)
+        self.progresso.append(indice)
+
+        if indice != self.sequencia[posicao]:
+            # errou a sequência
+            self.terminou = True
+            for item in self.children:
+                item.disabled = True
+            placar = _placar_brilho[self.autor_id]
+            pontos = self.rodada - 1
+            placar["recorde"] = max(placar["recorde"], pontos)
+            texto = (
+                f"🌟 **Celestia:** {random.choice(_BRILHO_ERRO)}\n\n"
+                f"✨ Rodadas completas: **{pontos}** | Recorde: **{placar['recorde']}**"
+            )
+            self.add_item(_BotaoJogarDeNovoBrilho(self.autor_id))
+            return await interaction.response.edit_message(content=texto, view=self)
+
+        if len(self.progresso) < len(self.sequencia):
+            # ainda no meio da sequência, só confirma visualmente
+            feito = " ".join(_BRILHO_EMOJIS[i] for i in self.progresso)
+            return await interaction.response.edit_message(
+                content=(
+                    f"🌟 **Celestia:** Rodada **{self.rodada}** — continua!! ✨\n\n"
+                    f"Até agora: {feito}"
+                ),
+                view=self
+            )
+
+        # completou a sequência da rodada
+        if self.rodada >= _BRILHO_RODADAS_MAX:
+            self.terminou = True
+            for item in self.children:
+                item.disabled = True
+            placar = _placar_brilho[self.autor_id]
+            placar["recorde"] = max(placar["recorde"], self.rodada)
+            texto = (
+                f"🌟 **Celestia:** {_BRILHO_VITORIA_MAXIMA}\n\n"
+                f"✨ Recorde: **{placar['recorde']}**"
+            )
+            self.add_item(_BotaoJogarDeNovoBrilho(self.autor_id))
+            return await interaction.response.edit_message(content=texto, view=self)
+
+        self.rodada += 1
+        self.sequencia = [random.randrange(4) for _ in range(self.rodada + 2)]
+        self.progresso = []
+        texto = f"🌟 **Celestia:** {random.choice(_BRILHO_RODADA_OK)}\n\n" + self.texto_rodada_atual()
+        await interaction.response.edit_message(content=texto, view=self)
+
+    @discord.ui.button(label="Brilho 1", style=discord.ButtonStyle.secondary, emoji="🌟", row=0)
+    async def brilho_1(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._clicar(interaction, 0)
+
+    @discord.ui.button(label="Brilho 2", style=discord.ButtonStyle.secondary, emoji="💫", row=0)
+    async def brilho_2(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._clicar(interaction, 1)
+
+    @discord.ui.button(label="Brilho 3", style=discord.ButtonStyle.secondary, emoji="⭐", row=0)
+    async def brilho_3(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._clicar(interaction, 2)
+
+    @discord.ui.button(label="Brilho 4", style=discord.ButtonStyle.secondary, emoji="🌠", row=0)
+    async def brilho_4(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._clicar(interaction, 3)
+
+
+async def iniciar_jogo_celestia(destino, autor):
+    """Inicia o joguinho da Celestia. destino precisa ter .send() (ctx ou channel)."""
+    view = JogoBrilhoView(autor.id)
+    await destino.send(
+        content=f"{random.choice(_BRILHO_INTRO)}\n\n{view.texto_rodada_atual()}",
+        view=view
+    )
+
+
+@bot.command(name="brincar")
+async def cmd_brincar(ctx, *, quem: str = None):
+    """Inicia um joguinho. Uso: .brincar aeon  ou  .brincar celestia"""
+    escolha = (quem or "").strip().lower()
+
+    if "aeon" in escolha:
+        await iniciar_jogo_aeon(ctx, ctx.author)
+    elif "celestia" in escolha:
+        await iniciar_jogo_celestia(ctx, ctx.author)
+    else:
+        await ctx.send(
+            "🌑 **Aeon:** ...escolha com quem brincar. 🖤🌑 `.brincar aeon` ou `.brincar celestia`.\n"
+            "🌟 **Celestia:** É isso mesmo!! Ou só fala **\"vamos brincar aeon\"** ou "
+            "**\"vamos brincar celestia\"** no chat!! 🌸✨"
+        )
+
+
 # ══════════════════════════════════════════════
 # COMANDOS
 # ══════════════════════════════════════════════
@@ -5357,7 +5554,18 @@ async def _enviar_ajuda(ctx):
             "`.aeon [texto]` — fala só com o Aeon\n"
             "`.celestia [texto]` — fala só com a Celestia\n"
             "`.duo [texto]` — os dois respondem juntos\n"
+            "`.brincar aeon` / `.brincar celestia` — joguinhos!\n"
             "`.ajuda` ou `.help` — este menu"
+        ),
+        inline=False
+    )
+    embed.add_field(
+        name="🎮 Joguinhos",
+        value=(
+            "`vamos brincar aeon` — **Achar a Sombra**: "
+            "o Aeon se esconde em 1 de 5 sombras, ache a certa!\n"
+            "`vamos brincar celestia` — **Sequência Brilhante**: "
+            "memorize e repita a sequência de brilhos da Celestia!"
         ),
         inline=False
     )

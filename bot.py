@@ -1495,6 +1495,7 @@ async def on_voice_state_update(
         inicio = _anjo_voice_join.pop(member.id, None)
         if inicio:
             anjo_stats[member.id]["tempo_call"] += agora - inicio
+            asyncio.create_task(_atualizar_ranking_anjo())
     # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
 
 
@@ -6467,6 +6468,7 @@ class BotaoFecharTicketAnjo(discord.ui.View):
         atendente_id = anjo_id if anjo_id else member.id
         anjo_stats[atendente_id]["tickets"] += 1
         await _salvar_anjo_stats()
+        asyncio.create_task(_atualizar_ranking_anjo())
         # ─────────────────────────────────────────────────────────────────────
 
         # ── Gerar log no canal de logs antes de apagar o canal ───────────────
@@ -6967,8 +6969,33 @@ def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
         color=0xe8d5f5,
         timestamp=discord.utils.utcnow()
     )
-    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 5 min")
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min")
     return embed
+
+
+async def _limpar_duplicadas_e_achar_ranking(canal: discord.TextChannel):
+    """Varre o histórico do canal, apaga rankings duplicados antigos (deixando
+    só o mais recente) e devolve essa mensagem mais recente pra ser editada.
+    Serve de rede de segurança caso o ID salvo se perca (ex: deploy sem Volume)."""
+    mensagens_ranking = []
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == "🕊️ Ranking dos Anjos":
+                mensagens_ranking.append(msg)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    if not mensagens_ranking:
+        return None
+
+    # canal.history() vem do mais novo pro mais antigo por padrão
+    mais_recente, *duplicadas = mensagens_ranking
+    for dup in duplicadas:
+        try:
+            await dup.delete()
+        except discord.HTTPException:
+            pass
+    return mais_recente
 
 
 async def _atualizar_ranking_anjo() -> None:
@@ -6992,9 +7019,15 @@ async def _atualizar_ranking_anjo() -> None:
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             mensagem = None
 
+    # Não achou pelo ID salvo (ex: perdeu o JSON num redeploy sem Volume) —
+    # procura no histórico do canal e limpa qualquer duplicada antes de criar uma nova
+    if mensagem is None:
+        mensagem = await _limpar_duplicadas_e_achar_ranking(canal)
+
     if mensagem:
         try:
             await mensagem.edit(embed=embed)
+            _anjo_ranking_message_id = mensagem.id
         except discord.HTTPException:
             mensagem = None
 
@@ -7008,7 +7041,7 @@ async def _atualizar_ranking_anjo() -> None:
     await _salvar_anjo_stats()
 
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=1)
 async def loop_ranking_anjo():
     await _atualizar_ranking_anjo()
 

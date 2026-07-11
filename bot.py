@@ -1765,6 +1765,25 @@ async def on_message(message: discord.Message):
     ]):
         return await iniciar_jogo_celestia(message.channel, message.author)
 
+    if _m(content, [
+        "duelo das trevas", "duelo com aeon", "duelo com o aeon", "jogar duelo aeon",
+        "sombra nevoa chama", "sombra névoa chama",
+        "pedra papel tesoura aeon", "jogar pedra papel tesoura com aeon",
+    ]):
+        return await iniciar_jogo_aeon_duelo(message.channel, message.author)
+
+    if _m(content, [
+        "memoria brilhante", "memória brilhante", "jogo da memoria celestia", "jogo da memória celestia",
+        "jogar memoria com celestia", "jogar memória com celestia", "jogo da memoria com a celestia",
+    ]):
+        return await iniciar_jogo_celestia_memoria(message.channel, message.author)
+
+    if _m(content, [
+        "encruzilhada da dualidade", "encruzilhada", "jogar com os dois", "brincar com os dois",
+        "vamos brincar duo", "jogo da dualidade", "brincar de dualidade",
+    ]):
+        return await iniciar_jogo_duo_encruzilhada(message.channel, message.author)
+
     # ════════════════════════════════════════════════════════════════
     # KITSURA — raposinha à parte, separada de Aeon e Celestia.
     # SÓ aparece se o nome dela for dito. Personalidade quieta,
@@ -5735,6 +5754,9 @@ async def on_message(message: discord.Message):
 # Placar em memória (reseta se o bot reiniciar)
 _placar_sombras: dict = defaultdict(lambda: {"vitorias": 0, "derrotas": 0})
 _placar_brilho:  dict = defaultdict(lambda: {"recorde": 0})
+_placar_duelo:   dict = defaultdict(lambda: {"vitorias": 0, "derrotas": 0, "empates": 0})
+_placar_memoria: dict = defaultdict(lambda: {"melhor_tentativas": None})
+_placar_encruzilhada: dict = defaultdict(lambda: {"jogos": 0})
 
 
 # ────────────────────────────────────────
@@ -5996,20 +6018,408 @@ async def iniciar_jogo_celestia(destino, autor):
     )
 
 
+# ────────────────────────────────────────
+# JOGO DO AEON #2 — "Duelo das Trevas"
+# Pedra, papel e tesoura reimaginado: Sombra vence Névoa, Névoa vence Chama,
+# Chama vence Sombra. Um round rápido contra o Aeon.
+# ────────────────────────────────────────
+
+_DUELO_ESCOLHAS = {
+    "sombra": {"emoji": "🌑", "nome": "Sombra", "vence": "nevoa"},
+    "nevoa":  {"emoji": "🌫️", "nome": "Névoa",  "vence": "chama"},
+    "chama":  {"emoji": "🔥", "nome": "Chama",  "vence": "sombra"},
+}
+
+_DUELO_INTRO = [
+    "🌑 **Aeon:** *os olhos dourados brilham com um desafio silencioso* ...um duelo, então. 🖤🌌 "
+    "Sombra, Névoa ou Chama. Escolha a sua. As trevas decidem o resto.",
+    "🌑 **Aeon:** Quer testar sorte contra mim? 🖤🌑 Sombra vence Névoa. Névoa vence Chama. Chama vence Sombra. "
+    "Escolha com cuidado.",
+    "🌑 **Aeon:** *a névoa ao redor se agita, quase ansiosa* Um round. Uma escolha. 🌌🖤 Vamos ver quem as trevas favorecem hoje.",
+]
+
+_DUELO_VITORIA = [
+    "*inclina a cabeça, quase impressionado* ...você venceu esta rodada, {user}. 🌌🖤 {escolha_user} supera {escolha_aeon}. Raro.",
+    "*a escuridão recua um passo* Dessa vez foi sua, {user}. 🖤🌑 {escolha_user} contra {escolha_aeon}. As trevas reconhecem.",
+    "*pausa, avaliando* ...bem escolhido, {user}. 🌙🖤 {escolha_user} vence {escolha_aeon}. Não vai ser sempre assim.",
+]
+
+_DUELO_DERROTA = [
+    "*a névoa ao redor se acomoda, satisfeita* ...{escolha_aeon} supera {escolha_user}. 🖤🌑 Essa foi minha, {user}.",
+    "*ri baixinho* {escolha_aeon} vence {escolha_user} sempre que se encontram, {user}. 🌑🔮 Tente de novo.",
+    "*olhos dourados brilham com quieta vitória* {escolha_aeon} contra {escolha_user}. 🌌🖤 As trevas favoreceram este lado, {user}.",
+]
+
+_DUELO_EMPATE = [
+    "*pausa, olhando fixamente* ...mesma escolha. 🖤🌌 {escolha_user} contra {escolha_user}. Ninguém cede hoje, {user}.",
+    "*a escuridão parece hesitar* Empate, {user}. 🌑🖤 As trevas não decidiram por nenhum dos dois.",
+]
+
+
+class _BotaoJogarDeNovoDuelo(discord.ui.Button):
+    def __init__(self, autor_id: int):
+        super().__init__(label="🔁 Duelar de novo", style=discord.ButtonStyle.primary, row=1)
+        self.autor_id = autor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...esse duelo não é seu. 🖤", ephemeral=True
+            )
+        nova_view = JogoDueloView(self.autor_id)
+        await interaction.response.edit_message(
+            content=random.choice(_DUELO_INTRO), view=nova_view
+        )
+
+
+class JogoDueloView(discord.ui.View):
+    """Sombra, Névoa ou Chama — duelo de um round contra o Aeon."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=30)
+        self.autor_id = autor_id
+        self.terminou = False
+
+    async def _resolver(self, interaction: discord.Interaction, escolha_user: str):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...esse duelo não é seu. 🖤", ephemeral=True
+            )
+        if self.terminou:
+            return
+        self.terminou = True
+        for item in self.children:
+            item.disabled = True
+
+        escolha_aeon = random.choice(list(_DUELO_ESCOLHAS.keys()))
+        placar = _placar_duelo[self.autor_id]
+
+        nome_user = _DUELO_ESCOLHAS[escolha_user]["emoji"] + " " + _DUELO_ESCOLHAS[escolha_user]["nome"]
+        nome_aeon = _DUELO_ESCOLHAS[escolha_aeon]["emoji"] + " " + _DUELO_ESCOLHAS[escolha_aeon]["nome"]
+
+        if escolha_user == escolha_aeon:
+            placar["empates"] += 1
+            frase = random.choice(_DUELO_EMPATE).format(user=interaction.user.mention, escolha_user=nome_user)
+        elif _DUELO_ESCOLHAS[escolha_user]["vence"] == escolha_aeon:
+            placar["vitorias"] += 1
+            frase = random.choice(_DUELO_VITORIA).format(
+                user=interaction.user.mention, escolha_user=nome_user, escolha_aeon=nome_aeon
+            )
+        else:
+            placar["derrotas"] += 1
+            frase = random.choice(_DUELO_DERROTA).format(
+                user=interaction.user.mention, escolha_user=nome_user, escolha_aeon=nome_aeon
+            )
+
+        texto = (
+            f"🌑 **Aeon:** Você escolheu {nome_user}. Eu escolhi {nome_aeon}.\n\n"
+            f"{frase}\n\n"
+            f"🏆 Vitórias: **{placar['vitorias']}** | Derrotas: **{placar['derrotas']}** | Empates: **{placar['empates']}**"
+        )
+        self.add_item(_BotaoJogarDeNovoDuelo(self.autor_id))
+        await interaction.response.edit_message(content=texto, view=self)
+
+    @discord.ui.button(label="Sombra", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def escolher_sombra(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, "sombra")
+
+    @discord.ui.button(label="Névoa", style=discord.ButtonStyle.secondary, emoji="🌫️", row=0)
+    async def escolher_nevoa(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, "nevoa")
+
+    @discord.ui.button(label="Chama", style=discord.ButtonStyle.secondary, emoji="🔥", row=0)
+    async def escolher_chama(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._resolver(interaction, "chama")
+
+
+async def iniciar_jogo_aeon_duelo(destino, autor):
+    """Inicia o Duelo das Trevas (Sombra/Névoa/Chama) do Aeon. destino precisa ter .send() (ctx ou channel)."""
+    view = JogoDueloView(autor.id)
+    await destino.send(content=random.choice(_DUELO_INTRO), view=view)
+
+
+# ────────────────────────────────────────
+# JOGO DA CELESTIA #2 — "Memória Brilhante"
+# 6 cartas, 3 pares de brilhos escondidos. Vire duas por vez e decore onde
+# cada brilho está para encontrar todos os pares.
+# ────────────────────────────────────────
+
+_MEMORIA_EMOJIS_POOL = ["🌟", "💫", "⭐", "🌠", "☀️", "✨", "🪐", "🌈"]
+_MEMORIA_OCULTA = "❓"
+
+_MEMORIA_INTRO = [
+    "🌟 **Celestia:** AAAAA vamos jogar memória!! 💫🤍✨ Escondi 3 pares de brilhos em 6 cartinhas!! "
+    "Clica em duas por vez pra tentar achar os pares!! Presta atenção onde cada brilho tá!! 🌸",
+    "🌟 **Celestia:** OOOI vem brincar de memória comigo?? ☀️🌟🤍 6 cartinhas, 3 pares escondidos!! "
+    "Clica em duas, se não bater eu escondo de novo, então decora bem!! ✨",
+]
+
+_MEMORIA_PAR_ACHADO = [
+    "ACHOUUU!! 😭🌟✨ Par encontrado, mandou muito bem!!",
+    "AAAAA bateu certinho!! 💫🤍 Sua memória tá brilhando igual eu!!",
+    "ISSOOO!! ☀️🌸✨ Mais um par na conta!!",
+]
+
+_MEMORIA_PAR_ERRADO = [
+    "Ooown, não bateu dessa vez!! 🌟🤍 Escondendo de novo... decora bem, viu?? ✨",
+    "Quase!! 😭🌸 Não eram iguais, mas guarda na memória pra próxima!! 💫",
+    "Ainda não!! ☀️🤍 Escondi de novo, mas você já sabe onde não é!! 🌟",
+]
+
+_MEMORIA_VITORIA = (
+    "AAAAAAAAA VOCÊ ACHOU TODOS OS PARES!! 😭🌟💫✨🤍 "
+    "Sua memória é IMBATÍVEL, sério mesmo!! Fico tão orgulhosa!! 🏆🌸☀️"
+)
+
+
+class _BotaoJogarDeNovoMemoria(discord.ui.Button):
+    def __init__(self, autor_id: int):
+        super().__init__(label="🔁 Jogar de novo", style=discord.ButtonStyle.primary, row=2)
+        self.autor_id = autor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌟 **Celestia:** essa brincadeira não é sua, mas fica à vontade pra começar a sua!! 🌸",
+                ephemeral=True
+            )
+        nova_view = JogoMemoriaView(self.autor_id)
+        await interaction.response.edit_message(
+            content=nova_view.texto_estado(random.choice(_MEMORIA_INTRO)), view=nova_view
+        )
+
+
+class JogoMemoriaView(discord.ui.View):
+    """Jogo da memória: 6 cartas, 3 pares de brilhos escondidos."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=60)
+        self.autor_id = autor_id
+        self.terminou = False
+        emojis_pares = random.sample(_MEMORIA_EMOJIS_POOL, 3)
+        self.cartas = emojis_pares * 2
+        random.shuffle(self.cartas)
+        self.reveladas = [False] * 6   # pares já encontrados (permanente)
+        self.selecionadas = []          # índices virados nesta jogada (temporário)
+        self.tentativas = 0
+        self.pares_encontrados = 0
+        self.ultimo_log = ""
+        self._montar_botoes()
+
+    def _montar_botoes(self):
+        self.clear_items()
+        for i in range(6):
+            mostrar = self.reveladas[i] or i in self.selecionadas
+            emoji = self.cartas[i] if mostrar else _MEMORIA_OCULTA
+            estilo = discord.ButtonStyle.success if self.reveladas[i] else discord.ButtonStyle.secondary
+            botao = discord.ui.Button(
+                label=emoji, style=estilo, row=i // 3, disabled=self.reveladas[i] or self.terminou
+            )
+            botao.callback = self._callback_carta(i)
+            self.add_item(botao)
+
+    def _callback_carta(self, indice: int):
+        async def _callback(interaction: discord.Interaction):
+            await self._clicar(interaction, indice)
+        return _callback
+
+    def texto_estado(self, cabecalho: str = "") -> str:
+        partes = []
+        if cabecalho:
+            partes.append(f"🌟 **Celestia:** {cabecalho}")
+        if self.ultimo_log:
+            partes.append(self.ultimo_log)
+        partes.append(
+            f"✨ Pares encontrados: **{self.pares_encontrados}/3** | Tentativas: **{self.tentativas}**"
+        )
+        return "\n\n".join(partes)
+
+    async def _clicar(self, interaction: discord.Interaction, indice: int):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌟 **Celestia:** essa brincadeira não é sua, mas fica à vontade pra começar a sua!! 🌸",
+                ephemeral=True
+            )
+        if self.terminou or self.reveladas[indice] or indice in self.selecionadas:
+            return
+
+        self.selecionadas.append(indice)
+
+        if len(self.selecionadas) == 1:
+            self._montar_botoes()
+            return await interaction.response.edit_message(content=self.texto_estado(), view=self)
+
+        # segunda carta virada — resolve a jogada
+        self.tentativas += 1
+        i1, i2 = self.selecionadas
+        if self.cartas[i1] == self.cartas[i2]:
+            self.reveladas[i1] = True
+            self.reveladas[i2] = True
+            self.pares_encontrados += 1
+            self.ultimo_log = random.choice(_MEMORIA_PAR_ACHADO)
+        else:
+            self.ultimo_log = random.choice(_MEMORIA_PAR_ERRADO)
+
+        self.selecionadas = []
+
+        if self.pares_encontrados >= 3:
+            self.terminou = True
+            placar = _placar_memoria[self.autor_id]
+            if placar["melhor_tentativas"] is None or self.tentativas < placar["melhor_tentativas"]:
+                placar["melhor_tentativas"] = self.tentativas
+            self._montar_botoes()
+            self.add_item(_BotaoJogarDeNovoMemoria(self.autor_id))
+            texto = (
+                f"🌟 **Celestia:** {_MEMORIA_VITORIA}\n\n"
+                f"✨ Tentativas usadas: **{self.tentativas}** | Melhor recorde: **{placar['melhor_tentativas']}**"
+            )
+            return await interaction.response.edit_message(content=texto, view=self)
+
+        self._montar_botoes()
+        await interaction.response.edit_message(content=self.texto_estado(), view=self)
+
+
+async def iniciar_jogo_celestia_memoria(destino, autor):
+    """Inicia o jogo da Memória Brilhante da Celestia. destino precisa ter .send() (ctx ou channel)."""
+    view = JogoMemoriaView(autor.id)
+    await destino.send(content=view.texto_estado(random.choice(_MEMORIA_INTRO)), view=view)
+
+
+# ────────────────────────────────────────
+# JOGO DOS DOIS — "Encruzilhada da Dualidade"
+# Duas escolhas em sequência — Luz ou Trevas — culminando num título único
+# comentado pelos dois gatos juntos.
+# ────────────────────────────────────────
+
+_ENCRUZILHADA_INTRO = (
+    "🌑 **Aeon:** ...uma encruzilhada se abre à sua frente. 🖤🌌\n"
+    "🌟 **Celestia:** DUAS ESTRADAS!! 😭🌟🤍✨ Luz ou Trevas — escolha a primeira!!\n\n"
+    "Qual caminho você segue?"
+)
+
+_ENC_ESTAGIO1 = {
+    "trevas": (
+        "🌑 **Aeon:** *acena, quase satisfeito* ...as sombras te aceitam. 🖤🌑 "
+        "Um segundo caminho se abre agora. Escolha de novo: Luz ou Trevas?"
+    ),
+    "luz": (
+        "🌟 **Celestia:** AAAAA a luz!! 😭🌟✨ Que escolha linda!! "
+        "Mas o caminho continua — mais uma escolha te espera: Luz ou Trevas??"
+    ),
+}
+
+_ENC_FINAIS = {
+    ("trevas", "trevas"): (
+        "🏆 **Título alcançado: Guardião das Sombras**\n\n"
+        "🌑 **Aeon:** *inclina a cabeça com respeito raro* ...você não hesitou nenhuma vez. 🖤🌌 "
+        "As trevas puras reconhecem os seus.\n"
+        "🌟 **Celestia:** Uau, comprometido do começo ao fim!! 😭🤍 Até eu respeito isso!! ✨"
+    ),
+    ("trevas", "luz"): (
+        "🏆 **Título alcançado: Caminhante do Crepúsculo**\n\n"
+        "🌑 **Aeon:** ...começou nas sombras e encontrou a luz. 🖤🌙 Equilíbrio não é fraqueza.\n"
+        "🌟 **Celestia:** AAAA isso é tão bonito!! 😭🌟✨ Das trevas pra luz — uma jornada de verdade!! 💫"
+    ),
+    ("luz", "trevas"): (
+        "🏆 **Título alcançado: Chama Renascida**\n\n"
+        "🌟 **Celestia:** Começou brilhando e depois foi explorar as sombras?? 😳🌟 Corajoso!!\n"
+        "🌑 **Aeon:** *um leve traço de aprovação* ...a luz que não teme a escuridão. 🖤🌌 Raro."
+    ),
+    ("luz", "luz"): (
+        "🏆 **Título alcançado: Portador da Aurora**\n\n"
+        "🌟 **Celestia:** LUZ E LUZ!! 😭🌟💫✨🤍 VOCÊ É PURO BRILHO DO COMEÇO AO FIM!!\n"
+        "🌑 **Aeon:** *observa em silêncio* ...nem as trevas negam quando o brilho é genuíno. 🖤🌙"
+    ),
+}
+
+
+class _BotaoEncruzilhadaFinal(discord.ui.Button):
+    def __init__(self, autor_id: int):
+        super().__init__(label="🔁 Jogar de novo", style=discord.ButtonStyle.primary, row=1)
+        self.autor_id = autor_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa jornada não é sua. 🖤", ephemeral=True
+            )
+        nova_view = JogoEncruzilhadaView(self.autor_id)
+        await interaction.response.edit_message(content=_ENCRUZILHADA_INTRO, view=nova_view)
+
+
+class JogoEncruzilhadaView(discord.ui.View):
+    """Duas escolhas — Luz ou Trevas — culminando num título de dualidade."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=30)
+        self.autor_id = autor_id
+        self.estagio = 1
+        self.caminho = []
+        self.terminou = False
+
+    async def _escolher(self, interaction: discord.Interaction, escolha: str):
+        if interaction.user.id != self.autor_id:
+            return await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa jornada não é sua. 🖤", ephemeral=True
+            )
+        if self.terminou:
+            return
+
+        self.caminho.append(escolha)
+
+        if self.estagio == 1:
+            self.estagio = 2
+            texto = _ENC_ESTAGIO1[escolha]
+            return await interaction.response.edit_message(content=texto, view=self)
+
+        # estágio final
+        self.terminou = True
+        for item in self.children:
+            item.disabled = True
+        placar = _placar_encruzilhada[self.autor_id]
+        placar["jogos"] += 1
+        chave = tuple(self.caminho)
+        texto = _ENC_FINAIS[chave]
+        self.add_item(_BotaoEncruzilhadaFinal(self.autor_id))
+        await interaction.response.edit_message(content=texto, view=self)
+
+    @discord.ui.button(label="Trevas", style=discord.ButtonStyle.secondary, emoji="🌑", row=0)
+    async def escolher_trevas(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._escolher(interaction, "trevas")
+
+    @discord.ui.button(label="Luz", style=discord.ButtonStyle.secondary, emoji="☀️", row=0)
+    async def escolher_luz(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._escolher(interaction, "luz")
+
+
+async def iniciar_jogo_duo_encruzilhada(destino, autor):
+    """Inicia a Encruzilhada da Dualidade — jogo dos dois gatos juntos. destino precisa ter .send() (ctx ou channel)."""
+    view = JogoEncruzilhadaView(autor.id)
+    await destino.send(content=_ENCRUZILHADA_INTRO, view=view)
+
+
 @bot.command(name="brincar")
 async def cmd_brincar(ctx, *, quem: str = None):
-    """Inicia um joguinho. Uso: .brincar aeon  ou  .brincar celestia"""
+    """Inicia um joguinho. Uso: .brincar aeon | .brincar aeon duelo | .brincar celestia |
+    .brincar celestia memoria | .brincar duo"""
     escolha = (quem or "").strip().lower()
 
-    if "aeon" in escolha:
+    if "duelo" in escolha or "sombra nevoa" in escolha or "sombra névoa" in escolha:
+        await iniciar_jogo_aeon_duelo(ctx, ctx.author)
+    elif "memoria" in escolha or "memória" in escolha:
+        await iniciar_jogo_celestia_memoria(ctx, ctx.author)
+    elif "duo" in escolha or "encruzilhada" in escolha or "dualidade" in escolha:
+        await iniciar_jogo_duo_encruzilhada(ctx, ctx.author)
+    elif "aeon" in escolha:
         await iniciar_jogo_aeon(ctx, ctx.author)
     elif "celestia" in escolha:
         await iniciar_jogo_celestia(ctx, ctx.author)
     else:
         await ctx.send(
-            "🌑 **Aeon:** ...escolha com quem brincar. 🖤🌑 `.brincar aeon` ou `.brincar celestia`.\n"
-            "🌟 **Celestia:** É isso mesmo!! Ou só fala **\"vamos brincar aeon\"** ou "
-            "**\"vamos brincar celestia\"** no chat!! 🌸✨"
+            "🌑 **Aeon:** ...escolha um jogo. 🖤🌑 `.brincar aeon`, `.brincar aeon duelo`, "
+            "`.brincar celestia`, `.brincar celestia memoria` ou `.brincar duo`.\n"
+            "🌟 **Celestia:** Ou fala no chat!! **\"vamos brincar aeon\"**, **\"duelo das trevas\"**, "
+            "**\"vamos brincar celestia\"**, **\"memória brilhante\"** ou **\"encruzilhada\"**!! 🌸✨"
         )
 
 
@@ -6065,7 +6475,8 @@ async def _enviar_ajuda(ctx):
             "`.aeon [texto]` — fala só com o Aeon\n"
             "`.celestia [texto]` — fala só com a Celestia\n"
             "`.duo [texto]` — os dois respondem juntos\n"
-            "`.brincar aeon` / `.brincar celestia` — joguinhos!\n"
+            "`.brincar aeon` / `.brincar aeon duelo` / `.brincar celestia` / "
+            "`.brincar celestia memoria` / `.brincar duo` — joguinhos!\n"
             "`.ajuda` ou `.help` — este menu"
         ),
         inline=False
@@ -6075,8 +6486,15 @@ async def _enviar_ajuda(ctx):
         value=(
             "`vamos brincar aeon` — **Achar a Sombra**: "
             "o Aeon se esconde em 1 de 5 sombras, ache a certa!\n"
+            "`duelo das trevas` — **Duelo das Trevas**: "
+            "Sombra, Névoa ou Chama — um duelo rápido contra o Aeon!\n"
             "`vamos brincar celestia` — **Sequência Brilhante**: "
-            "memorize e repita a sequência de brilhos da Celestia!"
+            "memorize e repita a sequência de brilhos da Celestia!\n"
+            "`memória brilhante` — **Memória Brilhante**: "
+            "vire as cartas e encontre os 3 pares de brilhos escondidos!\n"
+            "`encruzilhada` — **Encruzilhada da Dualidade**: "
+            "escolha Luz ou Trevas duas vezes e desbloqueie um título único, "
+            "com Aeon e Celestia comentando juntos!"
         ),
         inline=False
     )

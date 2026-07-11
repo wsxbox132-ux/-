@@ -6863,7 +6863,11 @@ class BotaoSurpresa(discord.ui.View):
 
 CANAL_RANKING_ANJO_ID = 1525593159525204079  # canal "logs anjo" — onde o ranking é postado
 
-_ANJO_DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anjo_ranking_data.json")
+# Se existir um Volume anexado no Railway, a variável RAILWAY_VOLUME_MOUNT_PATH
+# aponta pra pasta persistente (não é apagada em novos deploys). Sem Volume
+# (rodando local, VPS, etc.) cai na pasta onde o próprio script está.
+_ANJO_DATA_DIR = os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.path.dirname(os.path.abspath(__file__))
+_ANJO_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "anjo_ranking_data.json")
 
 # Pesos usados para calcular a pontuação geral do ranking — ajuste à vontade
 _PESO_MENSAGEM    = 1     # pontos por mensagem no chat
@@ -6904,6 +6908,7 @@ async def _salvar_anjo_stats() -> None:
     tmp_path = _ANJO_DATA_FILE + ".tmp"
 
     def _escrever():
+        os.makedirs(_ANJO_DATA_DIR, exist_ok=True)
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(dados, f, ensure_ascii=False, indent=2)
         os.replace(tmp_path, _ANJO_DATA_FILE)

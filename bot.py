@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import random
 import os
 import re
+import json
 import aiohttp
 import time
 import asyncio
@@ -1444,10 +1445,58 @@ async def on_ready():
     if not convite_brincar_periodico.is_running():
         convite_brincar_periodico.start()
 
+    # ── Ranking de Anjos: setup ────────────────────────────────────────────
+    global _anjo_stats_lock
+    if _anjo_stats_lock is None:
+        _anjo_stats_lock = asyncio.Lock()
+
+    # Recupera (melhor esforço) quem já estava em call com cargo Anjo antes
+    # do bot reiniciar, para não perder o tempo daquela sessão em andamento
+    for guild in bot.guilds:
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+        if not cargo_anjo:
+            continue
+        for canal_voz in guild.voice_channels:
+            for membro in canal_voz.members:
+                if not membro.bot and cargo_anjo in membro.roles:
+                    _anjo_voice_join.setdefault(membro.id, time.time())
+
+    if not loop_ranking_anjo.is_running():
+        loop_ranking_anjo.start()
+    # ─────────────────────────────────────────────────────────────────────
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Boas-vindas desativadas."""
     pass
+
+
+@bot.event
+async def on_voice_state_update(
+    member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+):
+    """Rastreia tempo em call dos membros com cargo Anjo para o ranking."""
+    if member.bot:
+        return
+
+    guild = member.guild
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID) if guild else None
+    if not cargo_anjo or cargo_anjo not in member.roles:
+        return
+
+    agora = time.time()
+
+    entrou_em_call = before.channel is None and after.channel is not None
+    saiu_da_call = before.channel is not None and after.channel is None
+
+    if entrou_em_call:
+        _anjo_voice_join[member.id] = agora
+    elif saiu_da_call:
+        inicio = _anjo_voice_join.pop(member.id, None)
+        if inicio:
+            anjo_stats[member.id]["tempo_call"] += agora - inicio
+    # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
+
 
 @bot.event
 async def on_message(message: discord.Message):
@@ -1463,6 +1512,13 @@ async def on_message(message: discord.Message):
 
     if message.author.bot:
         return
+
+    # ── Ranking de Anjos: conta mensagens de quem tem o cargo Anjo ─────────────
+    if message.guild is not None:
+        cargo_anjo_rank = message.guild.get_role(CARGO_ANJO_ID)
+        if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
+            anjo_stats[message.author.id]["mensagens"] += 1
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -6405,6 +6461,14 @@ class BotaoFecharTicketAnjo(discord.ui.View):
             "Até a próxima!!"
         )
 
+        # ── Ranking de Anjos: registra o atendimento deste ticket ─────────────
+        # Credita o Anjo que assumiu o ticket (ANJO: no tópico); se ninguém
+        # assumiu formalmente, credita quem fechou (desde que tenha o cargo).
+        atendente_id = anjo_id if anjo_id else member.id
+        anjo_stats[atendente_id]["tickets"] += 1
+        await _salvar_anjo_stats()
+        # ─────────────────────────────────────────────────────────────────────
+
         # ── Gerar log no canal de logs antes de apagar o canal ───────────────
         canal_logs = guild.get_channel(CANAL_LOGS_ANJO_ID)
         if canal_logs:
@@ -6788,6 +6852,178 @@ class BotaoSurpresa(discord.ui.View):
         embed_ganhou.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz. 🎁 A surpresa foi resgatada!")
 
         await interaction.response.send_message(embed=embed_ganhou)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# RANKING DE ANJOS — mensagens, tempo em call e tickets atendidos
+# Guarda tudo em anjo_ranking_data.json (mesma pasta do bot) para
+# sobreviver a reinícios. Atualiza automaticamente o ranking no canal
+# "logs anjo" a cada 5 minutos, sempre editando a mesma mensagem.
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_RANKING_ANJO_ID = 1525593159525204079  # canal "logs anjo" — onde o ranking é postado
+
+_ANJO_DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anjo_ranking_data.json")
+
+# Pesos usados para calcular a pontuação geral do ranking — ajuste à vontade
+_PESO_MENSAGEM    = 1     # pontos por mensagem no chat
+_PESO_MINUTO_CALL = 0.5   # pontos por minuto em call
+_PESO_TICKET      = 20    # pontos por ticket atendido
+
+anjo_stats: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+_anjo_ranking_message_id = None   # ID da mensagem de ranking já postada (editada, não duplicada)
+_anjo_voice_join: dict = {}       # user_id -> time.time() de quando entrou na call
+_anjo_stats_lock = None           # criado em on_ready (precisa de event loop rodando)
+
+
+def _carregar_anjo_stats() -> None:
+    """Carrega estatísticas salvas em disco, se existirem. Roda antes do bot conectar."""
+    global _anjo_ranking_message_id
+    if not os.path.exists(_ANJO_DATA_FILE):
+        return
+    try:
+        with open(_ANJO_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for uid_str, valores in dados.get("stats", {}).items():
+            anjo_stats[int(uid_str)] = {
+                "mensagens":  valores.get("mensagens", 0),
+                "tempo_call": valores.get("tempo_call", 0.0),
+                "tickets":    valores.get("tickets", 0),
+            }
+        _anjo_ranking_message_id = dados.get("ranking_message_id")
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_anjo_stats() -> None:
+    """Salva estatísticas em disco de forma atômica (escreve em .tmp e substitui)."""
+    dados = {
+        "stats": {str(uid): v for uid, v in anjo_stats.items()},
+        "ranking_message_id": _anjo_ranking_message_id,
+    }
+    tmp_path = _ANJO_DATA_FILE + ".tmp"
+
+    def _escrever():
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _ANJO_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_anjo_stats_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
+
+
+def _formatar_tempo_call(segundos: float) -> str:
+    segundos = int(segundos)
+    horas, resto = divmod(segundos, 3600)
+    minutos, _ = divmod(resto, 60)
+    if horas:
+        return f"{horas}h{minutos:02d}m"
+    return f"{minutos}m"
+
+
+def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+    membros_anjo = cargo_anjo.members if cargo_anjo else []
+
+    linhas = []
+    for membro in membros_anjo:
+        if membro.bot:
+            continue
+        s = anjo_stats.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+        pontuacao = (
+            s["mensagens"] * _PESO_MENSAGEM
+            + (s["tempo_call"] / 60) * _PESO_MINUTO_CALL
+            + s["tickets"] * _PESO_TICKET
+        )
+        linhas.append((membro, s, pontuacao))
+
+    linhas.sort(key=lambda x: x[2], reverse=True)
+
+    medalhas = ["🥇", "🥈", "🥉"]
+    descricao_linhas = []
+    if linhas:
+        for i, (membro, s, pontuacao) in enumerate(linhas):
+            prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
+            descricao_linhas.append(
+                f"{prefixo} **{membro.display_name}** — 💬 `{s['mensagens']}` msgs · "
+                f"🎙️ `{_formatar_tempo_call(s['tempo_call'])}` em call · "
+                f"🕊️ `{s['tickets']}` tickets — **{pontuacao:.0f} pts**"
+            )
+    else:
+        descricao_linhas.append("*Nenhum Anjo encontrado no servidor.*")
+
+    embed = discord.Embed(
+        title="🕊️ Ranking dos Anjos",
+        description="\n".join(descricao_linhas),
+        color=0xe8d5f5,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 5 min")
+    return embed
+
+
+async def _atualizar_ranking_anjo() -> None:
+    """Atualiza (ou cria, se ainda não existir) a mensagem de ranking no canal de logs anjo."""
+    global _anjo_ranking_message_id
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return
+
+    canal = guild.get_channel(CANAL_RANKING_ANJO_ID)
+    if canal is None:
+        return
+
+    embed = _montar_embed_ranking(guild)
+
+    mensagem = None
+    if _anjo_ranking_message_id:
+        try:
+            mensagem = await canal.fetch_message(_anjo_ranking_message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            mensagem = None
+
+    if mensagem:
+        try:
+            await mensagem.edit(embed=embed)
+        except discord.HTTPException:
+            mensagem = None
+
+    if mensagem is None:
+        try:
+            nova = await canal.send(embed=embed)
+            _anjo_ranking_message_id = nova.id
+        except discord.HTTPException:
+            return
+
+    await _salvar_anjo_stats()
+
+
+@tasks.loop(minutes=5)
+async def loop_ranking_anjo():
+    await _atualizar_ranking_anjo()
+
+
+@bot.command(name="ranking")
+async def cmd_ranking_anjo(ctx, *, alvo: str = None):
+    """Mostra/atualiza o ranking dos Anjos na hora. Uso: .ranking anjo"""
+    if ctx.guild is None:
+        return
+    if alvo is None or "anjo" not in alvo.lower():
+        await ctx.send("⚠️ Uso: `.ranking anjo`")
+        return
+    await _atualizar_ranking_anjo()
+    await ctx.send("🕊️ Ranking dos Anjos atualizado! Confira no canal de logs. ✨")
+
+
+# Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord
+_carregar_anjo_stats()
+
+# ══════════════════════════════════════════════════════════════════════
 
 
 @bot.command(name="surpresachat")

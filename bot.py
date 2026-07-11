@@ -6932,6 +6932,16 @@ async def _salvar_anjo_stats() -> None:
         pass
 
 
+def _tempo_call_atual(membro_id: int) -> float:
+    """Tempo total em call: sessões já fechadas (salvas) + a sessão atual em
+    andamento, se a pessoa estiver em call neste exato momento (contagem 'ao vivo')."""
+    base = anjo_stats.get(membro_id, {}).get("tempo_call", 0.0)
+    inicio_sessao_atual = _anjo_voice_join.get(membro_id)
+    if inicio_sessao_atual:
+        base += time.time() - inicio_sessao_atual
+    return base
+
+
 def _formatar_tempo_call(segundos: float) -> str:
     segundos = int(segundos)
     horas, resto = divmod(segundos, 3600)
@@ -6950,23 +6960,25 @@ def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
         if membro.bot:
             continue
         s = anjo_stats.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+        tempo_call_ao_vivo = _tempo_call_atual(membro.id)
         pontuacao = (
             s["mensagens"] * _PESO_MENSAGEM
-            + (s["tempo_call"] / 60) * _PESO_MINUTO_CALL
+            + (tempo_call_ao_vivo / 60) * _PESO_MINUTO_CALL
             + s["tickets"] * _PESO_TICKET
         )
-        linhas.append((membro, s, pontuacao))
+        linhas.append((membro, s, tempo_call_ao_vivo, pontuacao))
 
-    linhas.sort(key=lambda x: x[2], reverse=True)
+    linhas.sort(key=lambda x: x[3], reverse=True)
 
     medalhas = ["🥇", "🥈", "🥉"]
     descricao_linhas = []
     if linhas:
-        for i, (membro, s, pontuacao) in enumerate(linhas):
+        for i, (membro, s, tempo_call_ao_vivo, pontuacao) in enumerate(linhas):
             prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
+            em_call_agora = " 🔴" if membro.id in _anjo_voice_join else ""
             descricao_linhas.append(
                 f"{prefixo} **{membro.display_name}** — 💬 `{s['mensagens']}` msgs · "
-                f"🎙️ `{_formatar_tempo_call(s['tempo_call'])}` em call · "
+                f"🎙️ `{_formatar_tempo_call(tempo_call_ao_vivo)}`{em_call_agora} em call · "
                 f"🕊️ `{s['tickets']}` tickets — **{pontuacao:.0f} pts**"
             )
     else:

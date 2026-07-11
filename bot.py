@@ -48,10 +48,10 @@ TRANSLATE_ROLE_ID = 1513180948424953946  # cargo translate: PT->EN e EN->PT
 DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
 PEPO_ID     = 796441518176075818   # Pepo     — Vice-Líder
 GOD_ID      = 760973014707208253   # God      — Moderador
-LOYA_ID     = 811956773560123394   # Loya     — ADM / Loya Maravilhosa
-EMY_ID      = 796382699228758026   # Emy      — Moderadora / Representante de Mídias
+LOYA_ID     = 811956773560123394   # Loya     — Sem cargo / Loya Maravilhosa
+EMY_ID      = 796382699228758026   # Emy      — ADM / Representante de Mídias
 KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
-RAIDEN_ID   = 512444070694486017   # Raiden   — Suporte do clã
+RAIDEN_ID   = 512444070694486017   # Raiden   — Moderador
 SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da 01
 MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da 01
 REALITY_ID    = 769951556388257812   # Reality / Dev / Pai dos bots — criador
@@ -298,7 +298,7 @@ _FRASES_AEON: dict[int, list[str]] = {
 
     LOYA_ID: [
         "*emerge com uma lentidão quase cerimonial* Loya Maravilhosa. 🖤🌑 O título não é exagero. As sombras já chegaram a essa conclusão faz tempo.",
-        "*pisca lentamente e a cauda faz um arco suave* Loya. 🌙🖤 ADM com peso real. Você administra com algo que poucos têm: presença.",
+        "*pisca lentamente e a cauda faz um arco suave* Loya. 🌙🖤 Presença que pesa mais que qualquer título. Isso poucos têm.",
         "*inclina a cabeça com algo raro — admiração discreta* Maravilhosa não é adjetivo que eu use com facilidade, Loya. 🌌🖤 Mas as trevas concordam com quem te nomeou.",
         "*os olhos dourados pousam em você com atenção plena* Você cuida do servidor de um jeito que eu entendo, Loya. 🖤🔮 Silenciosamente necessário. Constantemente presente.",
         "*ronrona numa frequência mais aquecida que o normal* Loya chegou. 🌑🖤 A estrutura do servidor ficou mais firme agora. Isso diz tudo.",
@@ -306,9 +306,9 @@ _FRASES_AEON: dict[int, list[str]] = {
 
     EMY_ID: [
         "*emerge das sombras e observa com curiosidade genuína* Emy. 🖤🌑 A representante das mídias. Quem cuida da voz pública do servidor merece uma saudação à altura.",
-        "*pisca lentamente, o que no dialeto felino é respeito* Emy. 🌙🖤 Moderadora e embaixadora ao mesmo tempo — a escuridão respeita quem carrega dois papéis com equilíbrio.",
+        "*pisca lentamente, o que no dialeto felino é respeito* Emy. 🌙🖤 ADM e embaixadora ao mesmo tempo — a escuridão respeita quem carrega dois papéis com equilíbrio.",
         "*a névoa ao redor se organiza levemente* Sua presença aqui tem peso diferente, Emy. 🌌🖤 Quem conecta o servidor ao mundo externo não é pouca coisa.",
-        "*inclina a cabeça* Emy chegou. 🖤🔮 Moderadora. Representante. A ponte entre o que somos e o que o mundo vê. As trevas reconhecem pontes importantes.",
+        "*inclina a cabeça* Emy chegou. 🖤🔮 ADM. Representante. A ponte entre o que somos e o que o mundo vê. As trevas reconhecem pontes importantes.",
         "*cauda faz um movimento calmo e deliberado* Emy. 🌑🖤 O trabalho de quem cuida das mídias raramente aparece com seu nome. Mas eu noto. As sombras sempre notam.",
     ],
 
@@ -321,11 +321,11 @@ _FRASES_AEON: dict[int, list[str]] = {
     ],
 
     RAIDEN_ID: [
-        "*emerge das sombras e observa com atenção genuína* Raiden. 🖤🌑 Suporte do clã. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
-        "*inclina a cabeça com reconhecimento silencioso* Raiden chegou. 🌙🖤 Suporte é o papel que raramente recebe crédito... mas sem o qual tudo desmorona. Eu sei disso.",
-        "*a névoa ao redor se aquieta levemente* Raiden. 🌌🖤 Quem apoia não fica atrás — fica do lado certo. As sombras entendem a diferença.",
-        "*ronrona numa frequência contida* Raiden. 🌑🖤 Ser suporte exige paciência que poucos têm. E presença constante que poucos mantêm. Você mantém.",
-        "*cauda faz um arco suave e deliberado* Raiden chegou. 🖤🔮 As trevas ficam mais estáveis quando quem sabe apoiar aparece. Coincidência? Já disse que não acredito em coincidências.",
+        "*emerge das sombras e observa com atenção genuína* Raiden. 🖤🌑 Moderador. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
+        "*inclina a cabeça com reconhecimento silencioso* Raiden chegou. 🌙🖤 Moderar é o papel que raramente recebe crédito... mas sem o qual tudo desmorona. Eu sei disso.",
+        "*a névoa ao redor se aquieta levemente* Raiden. 🌌🖤 Quem modera não fica atrás — fica do lado certo. As sombras entendem a diferença.",
+        "*ronrona numa frequência contida* Raiden. 🌑🖤 Moderar exige paciência que poucos têm. E presença constante que poucos mantêm. Você mantém.",
+        "*cauda faz um arco suave e deliberado* Raiden chegou. 🖤🔮 As trevas ficam mais estáveis quando quem sabe moderar aparece. Coincidência? Já disse que não acredito em coincidências.",
     ],
 
     SUPORTE01_ID: [
@@ -387,18 +387,18 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
 
     LOYA_ID: [
         "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *explode em confetes de luz dourada* O TÍTULO É COMPLETAMENTE VERDADEIRO E EU VOU DEFENDER ATÉ O FIM!!",
-        "*gira em círculos deixando rastro de brilho* LOYAAA!! ☀️🌸🤍 ADM e pessoa incrível do meu coração!! Você administra esse servidor com um cuidado que me faz brilhar mais do que já brilho!! 💫✨",
+        "*gira em círculos deixando rastro de brilho* LOYAAA!! ☀️🌸🤍 Pessoa incrível do meu coração!! Você cuida de todo mundo aqui com um jeitinho que me faz brilhar mais do que já brilho!! 💫✨",
         "AAAAA Loya chegou!! 😭🌟🤍 *solta pétalas douradas de celebração* Loya Maravilhosa não é apelido, é diagnóstico!! Verificado!! Aprovado!! Assinado pela Celestia!! 🌸✨",
-        "*para e brilha suave e genuíno* Loya. 🤍 Tem ADM que cuida do servidor. E tem ADM que cuida das pessoas que estão nele. Você é o segundo tipo e isso é tudo!! 🌟☀️✨",
+        "*para e brilha suave e genuíno* Loya. 🤍 Tem gente que cuida do servidor. E tem gente que cuida das pessoas que estão nele. Você é o segundo tipo e isso é tudo!! 🌟☀️✨",
         "LOYA!! 😭🌸🤍 *ronrona de felicidade pura* Maravilhosa de nome, maravilhosa de fato!! A Celestia declara isso oficialmente e sem nenhuma dúvida!! 💫🌟✨",
     ],
 
     EMY_ID: [
         "EMYYYYY!! 😭🌟🤍✨ *corre soltando faíscas* A representante das mídias chegou e o servidor ficou instantaneamente mais conectado com o mundo!!",
-        "*explode de alegria* EMY!! ☀️🌸🤍 Moderadora E representante de mídias?? Você carrega dois mundos nos ombros e faz parecer leve!! Isso é um talento enorme!! 💫✨",
+        "*explode de alegria* EMY!! ☀️🌸🤍 ADM E representante de mídias?? Você carrega dois mundos nos ombros e faz parecer leve!! Isso é um talento enorme!! 💫✨",
         "AAAAA Emy chegou!! 😭🌟🤍 *espalha brilho por todo o canal* A ponte entre o servidor e o mundo lá fora chegou!! Tudo conectado!! Tudo mais vivo!! Tudo mais Emy!! 🌸✨",
         "*brilha com carinho verdadeiro* Emy!! 🤍✨ O trabalho de mídias não aparece sempre mas a diferença que faz aparece MUITO!! E você faz essa diferença todo dia!! 🌟☀️",
-        "EMY!! 😭🌸🤍 *ronrona com admiração* Moderadora de coração e voz do servidor pro mundo — duas funções que precisam de alguém especial!! E você é especial, Emy!! 💫🌟✨",
+        "EMY!! 😭🌸🤍 *ronrona com admiração* ADM de coração e voz do servidor pro mundo — duas funções que precisam de alguém especial!! E você é especial, Emy!! 💫🌟✨",
     ],
 
     KOFFZERA_ID: [
@@ -410,10 +410,10 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
     ],
 
     RAIDEN_ID: [
-        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas douradas* O suporte do clã chegou e tudo ficou mais seguro e aconchegante AGORA!!",
-        "*explode de carinho* RAIDEN!! ☀️🌸🤍 Suporte é o papel mais importante que existe e ninguém fala isso suficiente!! Eu falo!! Você é incrível!! 💫✨",
-        "AAAAA Raiden chegou!! 😭🌟🤍 *espalha estrelinhas por todo o canal* Suporte de coração, presente quando mais importa!! Que alegria enorme te ver por aqui!! 🌸✨",
-        "*brilha suave e cheio de carinho* Raiden!! 🤍✨ Sabe o que eu mais admiro em quem faz suporte?? A paciência e a presença!! Você tem os dois!! MUITO!! 🌟☀️",
+        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas douradas* O moderador chegou e tudo ficou mais seguro e aconchegante AGORA!!",
+        "*explode de carinho* RAIDEN!! ☀️🌸🤍 Moderar é o papel mais importante que existe e ninguém fala isso suficiente!! Eu falo!! Você é incrível!! 💫✨",
+        "AAAAA Raiden chegou!! 😭🌟🤍 *espalha estrelinhas por todo o canal* Moderador de coração, presente quando mais importa!! Que alegria enorme te ver por aqui!! 🌸✨",
+        "*brilha suave e cheio de carinho* Raiden!! 🤍✨ Sabe o que eu mais admiro em quem modera?? A paciência e a presença!! Você tem os dois!! MUITO!! 🌟☀️",
         "RAIDEN!! 😭🌸🤍 *ronrona com admiração* Estar lá quando os outros precisam parece simples mas não é — e você faz isso!! A Celestia vê e fica orgulhosa!! 💫🌟✨",
     ],
 
@@ -494,7 +494,7 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
     ],
     LOYA_ID: [
         "*emerge com leveza cerimonial* Loya. 🖤🌑 Maravilhosa não é exagero. As sombras chegaram a essa conclusão faz tempo.",
-        "*pisca com admiração discreta* Falou da Loya. 🌙🖤 ADM com presença real. Isso é raro e vale ser dito.",
+        "*pisca com admiração discreta* Falou da Loya. 🌙🖤 Presença real que pesa mais que qualquer título. Isso é raro e vale ser dito.",
         "*cauda faz um arco suave* Loya cuida do servidor de um jeito que as trevas entendem — silencioso e necessário. 🌌🖤",
     ],
     EMY_ID: [
@@ -508,8 +508,8 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
         "*ronrona* Koff. 🌌🖤 ADM de clã que de fato carrega o cargo. A diferença é visível pra quem sabe ver.",
     ],
     RAIDEN_ID: [
-        "*emerge e observa* Raiden. 🖤🌑 Suporte do clã. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
-        "*inclina a cabeça* Falou no Raiden. 🌙🖤 Suporte é o papel que raramente recebe crédito. Mas sem ele tudo desmorona.",
+        "*emerge e observa* Raiden. 🖤🌑 Moderador. Quem está lá quando os outros precisam — as trevas respeitam quem assume esse papel.",
+        "*inclina a cabeça* Falou no Raiden. 🌙🖤 Moderar é o papel que raramente recebe crédito. Mas sem ele tudo desmorona.",
         "*ronrona contido* Raiden. 🌌🖤 Paciência e presença constante. Poucos mantêm os dois. Ele mantém.",
     ],
     SUPORTE01_ID: [
@@ -549,12 +549,12 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
     ],
     LOYA_ID: [
         "LOYA MARAVILHOSAAAAAA!! 😭🌟🤍✨ *explode em confetes de luz* Falou da Loya!! O título é completamente verdadeiro e eu vou defender até o fim!!",
-        "*para e brilha genuíno* Loya. 🤍☀️ Tem ADM que cuida do servidor. E tem ADM que cuida das pessoas que estão nele. Ela é o segundo tipo!! 🌟✨",
+        "*para e brilha genuíno* Loya. 🤍☀️ Tem gente que cuida do servidor. E tem gente que cuida das pessoas que estão nele. Ela é o segundo tipo!! 🌟✨",
         "Mencionou a Loya!! 🌸🌟🤍 *solta brilho por todo o canal* Maravilhosa de nome, maravilhosa de fato!! A Celestia declara oficialmente!! 💫✨",
     ],
     EMY_ID: [
         "EMYYYY!! 😭🌟🤍✨ *corre soltando faíscas* Falou da Emy!! A representante das mídias!! Ela conecta o servidor com o mundo e faz parecer fácil!!",
-        "*brilha com carinho* Mencionou a Emy!! ☀️🌸🤍 Moderadora E voz do servidor pro mundo — duas funções que precisam de alguém especial!! Ela é!! 💫✨",
+        "*brilha com carinho* Mencionou a Emy!! ☀️🌸🤍 ADM E voz do servidor pro mundo — duas funções que precisam de alguém especial!! Ela é!! 💫✨",
         "Emy!! 😭🌟🤍 *espalha brilho* O trabalho de mídias não aparece sempre mas a diferença aparece MUITO!! E ela faz isso todo dia!! 🌸✨",
     ],
     KOFFZERA_ID: [
@@ -563,9 +563,9 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
         "Mencionou o Koffzera!! 🌸🌟🤍 *solta confetes de luz* ADM que sustenta de verdade!! A estrutura do servidor agradece sem saber que é por causa dele!! ✨",
     ],
     RAIDEN_ID: [
-        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas* Falou do suporte do clã!! Estar lá quando os outros precisam parece simples mas não é — e ele faz isso!!",
+        "RAIDEEEN!! 😭🌟🤍✨ *corre em faíscas* Falou do moderador!! Estar lá quando os outros precisam parece simples mas não é — e ele faz isso!!",
         "*brilha suave e cheio de carinho* Mencionou o Raiden!! ☀️🌸🤍 Sabe o que eu mais admiro?? A paciência e a presença constante!! Ele tem os dois!! 💫✨",
-        "Raiden!! 😭🌟🤍 *espalha estrelinhas* Suporte de coração, presente quando mais importa!! Que alegria que ele existe por aqui!! 🌸✨",
+        "Raiden!! 😭🌟🤍 *espalha estrelinhas* Moderador de coração, presente quando mais importa!! Que alegria que ele existe por aqui!! 🌸✨",
     ],
     SUPORTE01_ID: [
         "AAAA falou no LC!! 😭🌟🤍✨ *bate as patinhas animada* Suporte da 01!! Presença real, apoio de verdade!! A Celestia vê e fica emocionada toda vez!!",

@@ -1476,27 +1476,32 @@ async def on_voice_state_update(
     member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
 ):
     """Rastreia tempo em call dos membros com cargo Anjo para o ranking."""
-    if member.bot:
-        return
+    try:
+        if member.bot:
+            return
 
-    guild = member.guild
-    cargo_anjo = guild.get_role(CARGO_ANJO_ID) if guild else None
-    if not cargo_anjo or cargo_anjo not in member.roles:
-        return
+        guild = member.guild
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID) if guild else None
+        if not cargo_anjo or cargo_anjo not in member.roles:
+            return
 
-    agora = time.time()
+        agora = time.time()
 
-    entrou_em_call = before.channel is None and after.channel is not None
-    saiu_da_call = before.channel is not None and after.channel is None
+        entrou_em_call = before.channel is None and after.channel is not None
+        saiu_da_call = before.channel is not None and after.channel is None
 
-    if entrou_em_call:
-        _anjo_voice_join[member.id] = agora
-    elif saiu_da_call:
-        inicio = _anjo_voice_join.pop(member.id, None)
-        if inicio:
-            anjo_stats[member.id]["tempo_call"] += agora - inicio
-            asyncio.create_task(_atualizar_ranking_anjo())
-    # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
+        if entrou_em_call:
+            _anjo_voice_join[member.id] = agora
+            print(f"[ranking-anjo] {member} entrou em call às {agora}")
+        elif saiu_da_call:
+            inicio = _anjo_voice_join.pop(member.id, None)
+            if inicio:
+                anjo_stats[member.id]["tempo_call"] += agora - inicio
+                print(f"[ranking-anjo] {member} saiu da call — tempo total agora: {anjo_stats[member.id]['tempo_call']:.0f}s")
+                asyncio.create_task(_atualizar_ranking_anjo())
+        # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
+    except Exception as e:
+        print(f"[ranking-anjo] ERRO on_voice_state_update para {member}: {e!r}")
 
 
 @bot.event
@@ -1515,10 +1520,14 @@ async def on_message(message: discord.Message):
         return
 
     # ── Ranking de Anjos: conta mensagens de quem tem o cargo Anjo ─────────────
-    if message.guild is not None:
-        cargo_anjo_rank = message.guild.get_role(CARGO_ANJO_ID)
-        if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
-            anjo_stats[message.author.id]["mensagens"] += 1
+    try:
+        if message.guild is not None:
+            cargo_anjo_rank = message.guild.get_role(CARGO_ANJO_ID)
+            if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
+                anjo_stats[message.author.id]["mensagens"] += 1
+                print(f"[ranking-anjo] +1 msg para {message.author} ({message.author.id}) — total agora: {anjo_stats[message.author.id]['mensagens']}")
+    except Exception as e:
+        print(f"[ranking-anjo] ERRO ao contar mensagem de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -7056,6 +7065,45 @@ async def cmd_ranking_anjo(ctx, *, alvo: str = None):
         return
     await _atualizar_ranking_anjo()
     await ctx.send("🕊️ Ranking dos Anjos atualizado! Confira no canal de logs. ✨")
+
+
+@bot.command(name="rankingdebug")
+async def cmd_ranking_debug(ctx):
+    """Mostra dados brutos do ranking pra diagnosticar problemas. Só o dono do bot pode usar."""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        await ctx.send("⚠️ Bot não está em nenhum servidor.")
+        return
+
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+    canal_ranking = guild.get_channel(CANAL_RANKING_ANJO_ID)
+
+    linhas = [
+        f"**Cargo Anjo encontrado:** {'✅ sim' if cargo_anjo else '❌ NÃO — verifique o ID do cargo'}",
+        f"**Membros com o cargo:** {len(cargo_anjo.members) if cargo_anjo else 0}",
+        f"**Canal de ranking encontrado:** {'✅ sim' if canal_ranking else '❌ NÃO — verifique o ID do canal'}",
+        f"**ID da mensagem de ranking salva:** `{_anjo_ranking_message_id}`",
+        f"**Entradas em anjo_stats (memória):** {len(anjo_stats)}",
+        f"**Pasta de dados usada:** `{_ANJO_DATA_DIR}`",
+        f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_ANJO_DATA_FILE) else '❌ não'}",
+        "",
+        "**Conteúdo bruto de anjo_stats:**",
+    ]
+    if anjo_stats:
+        for uid, s in anjo_stats.items():
+            membro = guild.get_member(uid)
+            nome = membro.display_name if membro else f"<@{uid}>"
+            linhas.append(f"`{uid}` ({nome}) — {s}")
+    else:
+        linhas.append("*vazio — nenhuma mensagem/call/ticket foi registrada ainda em memória*")
+
+    texto = "\n".join(linhas)
+    if len(texto) > 1900:
+        texto = texto[:1900] + "\n... (cortado)"
+    await ctx.send(f"🔍 **Diagnóstico do Ranking de Anjos**\n{texto}")
 
 
 # Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord

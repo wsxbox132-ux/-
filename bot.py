@@ -1785,6 +1785,29 @@ async def on_message(message: discord.Message):
         return await iniciar_jogo_duo_encruzilhada(message.channel, message.author)
 
     # ════════════════════════════════════════════════════════════════
+    # BRINCAR — pedido genérico, sem dizer qual dos 5 jogos.
+    # Os gatilhos específicos acima já teriam capturado o caso de a frase
+    # mencionar aeon/celestia/duelo/memória/encruzilhada. Chegar até aqui
+    # significa que a pessoa quer brincar mas não escolheu ainda — dá as
+    # instruções de qual jogo escolher, sem nunca mencionar comando com ponto.
+    # ════════════════════════════════════════════════════════════════
+    if _m(content, [
+        "vamos brincar", "bora brincar", "quero brincar", "quero jogar",
+        "vamos jogar", "bora jogar", "joguinho", "tem jogo", "quero uma brincadeira",
+        "brincar com voces", "brincar com vocês", "jogar com voces", "jogar com vocês",
+    ]):
+        return await message.channel.send(
+            "🌑 **Aeon:** ...com quem, e qual jogo? 🖤🌑 Temos:\n"
+            "• **\"vamos brincar aeon\"** — *Achar a Sombra*: acho onde eu me escondi entre 5 sombras.\n"
+            "• **\"duelo das trevas\"** — *Duelo das Trevas*: Sombra, Névoa ou Chama, um round contra mim.\n"
+            "🌟 **Celestia:** E comigo!! 🌟🤍✨\n"
+            "• **\"vamos brincar celestia\"** — *Sequência Brilhante*: memoriza e repete a sequência!\n"
+            "• **\"memória brilhante\"** — *Memória Brilhante*: acha os 3 pares de cartinhas!\n"
+            "• **\"encruzilhada\"** — *Encruzilhada da Dualidade*: jogo com a gente dois juntos!! "
+            "Escolhe um e já começa!! 💫"
+        )
+
+    # ════════════════════════════════════════════════════════════════
     # KITSURA — raposinha à parte, separada de Aeon e Celestia.
     # SÓ aparece se o nome dela for dito. Personalidade quieta,
     # meio pra baixo, fala pouco e sem euforia.
@@ -6398,31 +6421,6 @@ async def iniciar_jogo_duo_encruzilhada(destino, autor):
     await destino.send(content=_ENCRUZILHADA_INTRO, view=view)
 
 
-@bot.command(name="brincar")
-async def cmd_brincar(ctx, *, quem: str = None):
-    """Inicia um joguinho. Uso: .brincar aeon | .brincar aeon duelo | .brincar celestia |
-    .brincar celestia memoria | .brincar duo"""
-    escolha = (quem or "").strip().lower()
-
-    if "duelo" in escolha or "sombra nevoa" in escolha or "sombra névoa" in escolha:
-        await iniciar_jogo_aeon_duelo(ctx, ctx.author)
-    elif "memoria" in escolha or "memória" in escolha:
-        await iniciar_jogo_celestia_memoria(ctx, ctx.author)
-    elif "duo" in escolha or "encruzilhada" in escolha or "dualidade" in escolha:
-        await iniciar_jogo_duo_encruzilhada(ctx, ctx.author)
-    elif "aeon" in escolha:
-        await iniciar_jogo_aeon(ctx, ctx.author)
-    elif "celestia" in escolha:
-        await iniciar_jogo_celestia(ctx, ctx.author)
-    else:
-        await ctx.send(
-            "🌑 **Aeon:** ...escolha um jogo. 🖤🌑 `.brincar aeon`, `.brincar aeon duelo`, "
-            "`.brincar celestia`, `.brincar celestia memoria` ou `.brincar duo`.\n"
-            "🌟 **Celestia:** Ou fala no chat!! **\"vamos brincar aeon\"**, **\"duelo das trevas\"**, "
-            "**\"vamos brincar celestia\"**, **\"memória brilhante\"** ou **\"encruzilhada\"**!! 🌸✨"
-        )
-
-
 # ══════════════════════════════════════════════
 # COMANDOS
 # ══════════════════════════════════════════════
@@ -6475,26 +6473,27 @@ async def _enviar_ajuda(ctx):
             "`.aeon [texto]` — fala só com o Aeon\n"
             "`.celestia [texto]` — fala só com a Celestia\n"
             "`.duo [texto]` — os dois respondem juntos\n"
-            "`.brincar aeon` / `.brincar aeon duelo` / `.brincar celestia` / "
-            "`.brincar celestia memoria` / `.brincar duo` — joguinhos!\n"
             "`.ajuda` ou `.help` — este menu"
         ),
         inline=False
     )
     embed.add_field(
-        name="🎮 Joguinhos",
+        name="🎮 Joguinhos — qual escolher?",
         value=(
-            "`vamos brincar aeon` — **Achar a Sombra**: "
-            "o Aeon se esconde em 1 de 5 sombras, ache a certa!\n"
-            "`duelo das trevas` — **Duelo das Trevas**: "
-            "Sombra, Névoa ou Chama — um duelo rápido contra o Aeon!\n"
-            "`vamos brincar celestia` — **Sequência Brilhante**: "
-            "memorize e repita a sequência de brilhos da Celestia!\n"
-            "`memória brilhante` — **Memória Brilhante**: "
-            "vire as cartas e encontre os 3 pares de brilhos escondidos!\n"
-            "`encruzilhada` — **Encruzilhada da Dualidade**: "
+            "Os jogos não usam comando com ponto, é só falar no chat:\n\n"
+            "🌑 **\"vamos brincar aeon\"** — **Achar a Sombra**: "
+            "o Aeon se esconde em 1 de 5 sombras, ache a certa!\n\n"
+            "🌑 **\"duelo das trevas\"** — **Duelo das Trevas**: "
+            "Sombra, Névoa ou Chama — um duelo rápido contra o Aeon!\n\n"
+            "🌟 **\"vamos brincar celestia\"** — **Sequência Brilhante**: "
+            "memorize e repita a sequência de brilhos da Celestia!\n\n"
+            "🌟 **\"memória brilhante\"** — **Memória Brilhante**: "
+            "vire as cartas e encontre os 3 pares de brilhos escondidos!\n\n"
+            "🌑🌟 **\"encruzilhada\"** — **Encruzilhada da Dualidade**: "
             "escolha Luz ou Trevas duas vezes e desbloqueie um título único, "
-            "com Aeon e Celestia comentando juntos!"
+            "com Aeon e Celestia comentando juntos!\n\n"
+            "Se só disser **\"vamos brincar\"** sem escolher, os dois listam as opções "
+            "pra você decidir qual jogo quer."
         ),
         inline=False
     )

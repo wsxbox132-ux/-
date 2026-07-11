@@ -1746,43 +1746,92 @@ async def on_message(message: discord.Message):
         return
 
     # ════════════════════════════════════════════════════════════════
-    # JOGUINHOS — "vamos brincar aeon" / "vamos brincar celestia"
+    # JOGUINHOS — "vamos brincar aeon" / "vamos brincar celestia" / etc.
     # Fica logo no topo da cadeia para não ser interceptado por
     # saudações personalizadas, chamados genéricos ou qualquer outro
     # gatilho que também contenha "aeon"/"celestia" na frase.
+    #
+    # IMPORTANTE: primeiro verificamos QUANTOS jogos a frase menciona.
+    # Se a pessoa citar mais de um (ex.: "vamos brincar Aeon e Celestia")
+    # a frase bate em mais de um gatilho ao mesmo tempo — nesse caso NÃO
+    # escolhemos um jogo sozinho por conta própria, mostramos as opções
+    # pra pessoa decidir. Só inicia um jogo direto quando exatamente um
+    # gatilho bateu, sem ambiguidade.
     # ════════════════════════════════════════════════════════════════
-    if _m(content, [
+    _GATILHOS_SOMBRA = [
         "vamos brincar aeon", "bora brincar aeon", "quero brincar com o aeon",
         "quero brincar com aeon", "jogar com aeon", "jogar com o aeon",
         "brincadeira aeon", "brincar de aeon", "brincar com aeon",
-    ]):
-        return await iniciar_jogo_aeon(message.channel, message.author)
-
-    if _m(content, [
+    ]
+    _GATILHOS_BRILHO = [
         "vamos brincar celestia", "bora brincar celestia", "quero brincar com a celestia",
         "quero brincar com celestia", "jogar com celestia", "jogar com a celestia",
         "brincadeira celestia", "brincar de celestia", "brincar com celestia",
-    ]):
-        return await iniciar_jogo_celestia(message.channel, message.author)
-
-    if _m(content, [
+    ]
+    _GATILHOS_DUELO = [
         "duelo das trevas", "duelo com aeon", "duelo com o aeon", "jogar duelo aeon",
         "sombra nevoa chama", "sombra névoa chama",
         "pedra papel tesoura aeon", "jogar pedra papel tesoura com aeon",
-    ]):
-        return await iniciar_jogo_aeon_duelo(message.channel, message.author)
-
-    if _m(content, [
+    ]
+    _GATILHOS_MEMORIA = [
         "memoria brilhante", "memória brilhante", "jogo da memoria celestia", "jogo da memória celestia",
         "jogar memoria com celestia", "jogar memória com celestia", "jogo da memoria com a celestia",
-    ]):
-        return await iniciar_jogo_celestia_memoria(message.channel, message.author)
-
-    if _m(content, [
+    ]
+    _GATILHOS_ENCRUZILHADA = [
         "encruzilhada da dualidade", "encruzilhada", "jogar com os dois", "brincar com os dois",
         "vamos brincar duo", "jogo da dualidade", "brincar de dualidade",
-    ]):
-        return await iniciar_jogo_duo_encruzilhada(message.channel, message.author)
+    ]
+    _GATILHOS_GENERICO = [
+        "vamos brincar", "bora brincar", "quero brincar", "quero jogar",
+        "vamos jogar", "bora jogar", "joguinho", "tem jogo", "quero uma brincadeira",
+        "brincar com voces", "brincar com vocês", "jogar com voces", "jogar com vocês",
+    ]
+
+    _MENSAGEM_ESCOLHA_JOGO = (
+        "🌑 **Aeon:** ...com quem, e qual jogo? 🖤🌑 Temos:\n"
+        "• **\"vamos brincar aeon\"** — *Achar a Sombra*: acho onde eu me escondi entre 5 sombras.\n"
+        "• **\"duelo das trevas\"** — *Duelo das Trevas*: Sombra, Névoa ou Chama, um round contra mim.\n"
+        "🌟 **Celestia:** E comigo!! 🌟🤍✨\n"
+        "• **\"vamos brincar celestia\"** — *Sequência Brilhante*: memoriza e repete a sequência!\n"
+        "• **\"memória brilhante\"** — *Memória Brilhante*: acha os 3 pares de cartinhas!\n"
+        "• **\"encruzilhada\"** — *Encruzilhada da Dualidade*: jogo com a gente dois juntos!! "
+        "Escolhe um por vez e já começa!! 💫"
+    )
+
+    _bate_sombra       = _m(content, _GATILHOS_SOMBRA)
+    _bate_brilho       = _m(content, _GATILHOS_BRILHO)
+    _bate_duelo        = _m(content, _GATILHOS_DUELO)
+    _bate_memoria      = _m(content, _GATILHOS_MEMORIA)
+    _bate_encruzilhada = _m(content, _GATILHOS_ENCRUZILHADA)
+
+    _jogos_batidos = [
+        (_bate_sombra, iniciar_jogo_aeon),
+        (_bate_brilho, iniciar_jogo_celestia),
+        (_bate_duelo, iniciar_jogo_aeon_duelo),
+        (_bate_memoria, iniciar_jogo_celestia_memoria),
+        (_bate_encruzilhada, iniciar_jogo_duo_encruzilhada),
+    ]
+    _qtd_jogos_batidos = sum(1 for bateu, _ in _jogos_batidos if bateu)
+
+    # Caso especial: a pessoa citou os dois nomes soltos ("... aeon e
+    # celestia ...", "aeon, celestia, bora jogar") sem pedir um mecanismo
+    # específico (duelo/memória/encruzilhada). Uma frase assim costuma bater
+    # só no gatilho da Sombra por sorte de substring (ex.: "vamos brincar
+    # aeon e celestia" contém "vamos brincar aeon"), o que faria escolher
+    # o jogo errado sozinho. Então forçamos ambiguidade aqui também.
+    _mencionou_os_dois_nomes = ("aeon" in content) and ("celestia" in content)
+    if _mencionou_os_dois_nomes and not (_bate_duelo or _bate_memoria or _bate_encruzilhada):
+        _qtd_jogos_batidos = max(_qtd_jogos_batidos, 2)
+
+    if _qtd_jogos_batidos == 1:
+        for bateu, iniciar in _jogos_batidos:
+            if bateu:
+                return await iniciar(message.channel, message.author)
+
+    if _qtd_jogos_batidos >= 2:
+        # Mencionou mais de um jogo/gato na mesma frase — ambíguo,
+        # não escolhe por conta própria, pede pra pessoa especificar.
+        return await message.channel.send(_MENSAGEM_ESCOLHA_JOGO)
 
     # ════════════════════════════════════════════════════════════════
     # BRINCAR — pedido genérico, sem dizer qual dos 5 jogos.
@@ -1791,21 +1840,8 @@ async def on_message(message: discord.Message):
     # significa que a pessoa quer brincar mas não escolheu ainda — dá as
     # instruções de qual jogo escolher, sem nunca mencionar comando com ponto.
     # ════════════════════════════════════════════════════════════════
-    if _m(content, [
-        "vamos brincar", "bora brincar", "quero brincar", "quero jogar",
-        "vamos jogar", "bora jogar", "joguinho", "tem jogo", "quero uma brincadeira",
-        "brincar com voces", "brincar com vocês", "jogar com voces", "jogar com vocês",
-    ]):
-        return await message.channel.send(
-            "🌑 **Aeon:** ...com quem, e qual jogo? 🖤🌑 Temos:\n"
-            "• **\"vamos brincar aeon\"** — *Achar a Sombra*: acho onde eu me escondi entre 5 sombras.\n"
-            "• **\"duelo das trevas\"** — *Duelo das Trevas*: Sombra, Névoa ou Chama, um round contra mim.\n"
-            "🌟 **Celestia:** E comigo!! 🌟🤍✨\n"
-            "• **\"vamos brincar celestia\"** — *Sequência Brilhante*: memoriza e repete a sequência!\n"
-            "• **\"memória brilhante\"** — *Memória Brilhante*: acha os 3 pares de cartinhas!\n"
-            "• **\"encruzilhada\"** — *Encruzilhada da Dualidade*: jogo com a gente dois juntos!! "
-            "Escolhe um e já começa!! 💫"
-        )
+    if _m(content, _GATILHOS_GENERICO):
+        return await message.channel.send(_MENSAGEM_ESCOLHA_JOGO)
 
     # ════════════════════════════════════════════════════════════════
     # KITSURA — raposinha à parte, separada de Aeon e Celestia.

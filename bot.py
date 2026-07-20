@@ -1625,15 +1625,20 @@ async def _log_mensagem_editada(
             name=f"{autor.display_name} ({autor})",
             icon_url=autor.display_avatar.url,
         )
+        embed.set_thumbnail(url=autor.display_avatar.url)
         autor_txt = f"{autor.mention} `({autor.id})`"
     else:
         embed.set_author(name="Autor desconhecido")
         autor_txt = "`desconhecido — mensagem fora do cache`"
 
     embed.description = (
-        f"✏️ **Mensagem Editada**\n"
-        f"📍 Canal: {canal_origem.mention if canal_origem else '`desconhecido`'}\n"
-        f"👤 Autor: {autor_txt}"
+        f"✏️ **Mensagem Editada**\n\n"
+        f"👤 **Autor**\n{autor_txt}"
+    )
+    embed.add_field(
+        name="📍 Canal",
+        value=f"{canal_origem.mention if canal_origem else '`desconhecido`'}",
+        inline=False,
     )
     embed.add_field(
         name="📝 Antes",
@@ -1672,15 +1677,20 @@ async def _log_mensagem_apagada(
             name=f"{autor.display_name} ({autor})",
             icon_url=autor.display_avatar.url,
         )
+        embed.set_thumbnail(url=autor.display_avatar.url)
         autor_txt = f"{autor.mention} `({autor.id})`"
     else:
         embed.set_author(name="Autor desconhecido")
         autor_txt = "`desconhecido — mensagem fora do cache`"
 
     embed.description = (
-        f"🗑️ **Mensagem Apagada**\n"
-        f"📍 Canal: {canal_origem.mention if canal_origem else '`desconhecido`'}\n"
-        f"👤 Autor: {autor_txt}"
+        f"🗑️ **Mensagem Apagada**\n\n"
+        f"👤 **Autor**\n{autor_txt}"
+    )
+    embed.add_field(
+        name="📍 Canal",
+        value=f"{canal_origem.mention if canal_origem else '`desconhecido`'}",
+        inline=False,
     )
     embed.add_field(
         name="💬 Conteúdo",

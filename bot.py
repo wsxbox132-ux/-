@@ -1413,6 +1413,301 @@ async def convite_brincar_periodico():
     await canal.send(mensagem)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# SISTEMA DE LOGS — Voz/Call e Chat
+# Dois canais dedicados registram tudo que acontece em call (entrar, sair,
+# trocar de canal, ser puxado por alguém) e no chat (mensagens editadas ou
+# apagadas, incluindo quem apagou quando não foi o próprio autor).
+# Visual inspirado no estilo de logs do servidor, com a assinatura
+# Aeon & Celestia no rodapé.
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_LOGS_VOZ_ID  = 1528888311580594500   # logs de call: entrar / sair / trocar / puxar
+CANAL_LOGS_CHAT_ID = 1528888359437598751   # logs de chat: editar / apagar mensagens
+
+# Cores no estilo do servidor (trevas + luz), cada evento com sua identidade
+COR_LOG_ENTROU = 0x57F287   # verde — entrou em call
+COR_LOG_SAIU   = 0xED4245   # vermelho — saiu da call
+COR_LOG_TROCOU = 0x5865F2   # azul — trocou de canal por conta própria
+COR_LOG_PUXADO = 0xFEE75C   # dourado — foi movido por outra pessoa
+COR_LOG_EDITOU = 0xFAA61A   # laranja — mensagem editada
+COR_LOG_APAGOU = 0xED4245   # vermelho — mensagem apagada
+COR_LOG_BULK   = 0x992D22   # vermelho escuro — limpeza em massa
+
+LOGS_FOOTER_TEXT = "🌑 Aeon vela as trevas · ☀️ Celestia guarda a luz · Logs"
+
+# Rastreia, para QUALQUER membro (não só cargo Anjo), o horário em que
+# entrou no canal de voz atual — usado só para mostrar "tempo na call"
+# nos logs. Independente do _anjo_voice_join usado no ranking de Anjos.
+_voice_log_join: dict = {}
+
+
+def _formatar_duracao_log(segundos: float) -> str:
+    """Formata uma duração em segundos como '1h 12m', '5m 30s', '42s', etc."""
+    segundos = max(0, int(segundos))
+    h, resto = divmod(segundos, 3600)
+    m, s = divmod(resto, 60)
+    partes = []
+    if h:
+        partes.append(f"{h}h")
+    if m:
+        partes.append(f"{m}m")
+    if not h:
+        partes.append(f"{s}s")
+    return " ".join(partes) if partes else "0s"
+
+
+async def _buscar_executor_move_voz(
+    guild: discord.Guild,
+    membro: discord.Member,
+    canal_novo: discord.VoiceChannel,
+):
+    """
+    Consulta o audit log em busca de uma ação MEMBER_MOVE recente que tenha
+    movido gente para `canal_novo`. Se encontrar e o autor da ação não for
+    o próprio membro, consideramos que a pessoa foi "puxada" — retornamos
+    quem fez isso. Caso contrário (ou sem permissão de ver audit log),
+    retorna None e tratamos como troca de canal por vontade própria.
+
+    Observação: o Discord não registra no audit log QUEM especificamente
+    foi movido em cada entrada de member_move (só o canal de destino e a
+    quantidade de pessoas movidas de uma vez), então usamos proximidade de
+    tempo + canal de destino como heurística — o mesmo método usado pela
+    maioria dos bots de log.
+    """
+    try:
+        async for entry in guild.audit_logs(limit=6, action=discord.AuditLogAction.member_move):
+            delta = (discord.utils.utcnow() - entry.created_at).total_seconds()
+            if delta > 5:
+                continue
+            entry_canal = getattr(entry.extra, "channel", None)
+            if entry_canal and canal_novo and entry_canal.id == canal_novo.id:
+                if entry.user and entry.user.id != membro.id:
+                    return entry.user
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return None
+
+
+async def _buscar_executor_delecao(
+    guild: discord.Guild,
+    autor: discord.abc.User,
+    canal: discord.abc.GuildChannel,
+):
+    """
+    Consulta o audit log em busca de quem apagou a mensagem de `autor` em
+    `canal`. Se ninguém aparecer com uma entrada MESSAGE_DELETE recente
+    tendo esse autor como alvo, consideramos que a própria pessoa apagou
+    (não existe entrada de audit log quando alguém apaga a própria msg).
+    """
+    try:
+        async for entry in guild.audit_logs(limit=8, action=discord.AuditLogAction.message_delete):
+            delta = (discord.utils.utcnow() - entry.created_at).total_seconds()
+            if delta > 6:
+                continue
+            if entry.target and getattr(entry.target, "id", None) == autor.id:
+                entry_canal = getattr(entry.extra, "channel", None)
+                if entry_canal is None or (canal is not None and entry_canal.id == canal.id):
+                    return entry.user
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return None
+
+
+async def _processar_log_voz(
+    member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+):
+    """Registra no canal de logs de voz: entrada, saída, troca de canal e,
+    quando aplicável, quem puxou a pessoa para outro canal."""
+    try:
+        if member.bot:
+            return
+        guild = member.guild
+        if guild is None:
+            return
+
+        canal_log = guild.get_channel(CANAL_LOGS_VOZ_ID)
+        if canal_log is None:
+            return
+
+        agora = time.time()
+        entrou = before.channel is None and after.channel is not None
+        saiu = before.channel is not None and after.channel is None
+        trocou = (
+            before.channel is not None
+            and after.channel is not None
+            and before.channel.id != after.channel.id
+        )
+
+        if not (entrou or saiu or trocou):
+            return  # mudança irrelevante pra esse log (ex.: só mute/deafen)
+
+        embed = discord.Embed()
+        embed.set_author(name=str(member.display_name), icon_url=member.display_avatar.url)
+        embed.set_thumbnail(url=member.display_avatar.url)
+        embed.set_footer(text=LOGS_FOOTER_TEXT)
+        embed.timestamp = discord.utils.utcnow()
+
+        if entrou:
+            _voice_log_join[member.id] = agora
+            embed.color = COR_LOG_ENTROU
+            embed.description = (
+                f"🟢 **Entrou em Call**\n\n"
+                f"👤 **Membro**\n{member.mention} `({member.id})`"
+            )
+            embed.add_field(name="🔊 Canal", value=f"`{after.channel.name}`", inline=False)
+            await canal_log.send(embed=embed)
+            return
+
+        if saiu:
+            inicio = _voice_log_join.pop(member.id, None)
+            duracao_txt = _formatar_duracao_log(agora - inicio) if inicio else "desconhecido"
+            embed.color = COR_LOG_SAIU
+            embed.description = (
+                f"🔴 **Saiu da Call**\n\n"
+                f"👤 **Membro**\n{member.mention} `({member.id})`"
+            )
+            embed.add_field(name="🔊 Canal", value=f"`{before.channel.name}`", inline=False)
+            embed.add_field(name="⏱️ Tempo na call", value=duracao_txt, inline=False)
+            await canal_log.send(embed=embed)
+            return
+
+        if trocou:
+            inicio = _voice_log_join.get(member.id)
+            duracao_txt = _formatar_duracao_log(agora - inicio) if inicio else "desconhecido"
+            _voice_log_join[member.id] = agora  # reinicia contagem no novo canal
+
+            executor = await _buscar_executor_move_voz(guild, member, after.channel)
+
+            if executor:
+                embed.color = COR_LOG_PUXADO
+                embed.description = (
+                    f"🖐️ **Foi Puxado(a) de Call**\n\n"
+                    f"👤 **Membro**\n{member.mention} `({member.id})`"
+                )
+            else:
+                embed.color = COR_LOG_TROCOU
+                embed.description = (
+                    f"🔄 **Trocou de Call**\n\n"
+                    f"👤 **Membro**\n{member.mention} `({member.id})`"
+                )
+            embed.add_field(name="🔴 Saiu de", value=f"`🔊 {before.channel.name}`", inline=True)
+            embed.add_field(name="🟢 Entrou em", value=f"`🔊 {after.channel.name}`", inline=True)
+            embed.add_field(name="⏱️ Tempo no canal anterior", value=duracao_txt, inline=False)
+            if executor:
+                embed.add_field(
+                    name="🖐️ Puxado(a) por",
+                    value=f"{executor.mention} `({executor.id})`",
+                    inline=False,
+                )
+            await canal_log.send(embed=embed)
+            return
+
+    except Exception as e:
+        print(f"[logs-voz] ERRO _processar_log_voz para {member}: {e!r}")
+
+
+async def _log_mensagem_editada(
+    guild: discord.Guild,
+    autor,
+    canal_origem,
+    conteudo_antigo,
+    conteudo_novo: str,
+    jump_url: str,
+):
+    canal_log = guild.get_channel(CANAL_LOGS_CHAT_ID)
+    if canal_log is None:
+        return
+
+    embed = discord.Embed(color=COR_LOG_EDITOU)
+    if autor is not None:
+        embed.set_author(
+            name=f"{autor.display_name} ({autor})",
+            icon_url=autor.display_avatar.url,
+        )
+        autor_txt = f"{autor.mention} `({autor.id})`"
+    else:
+        embed.set_author(name="Autor desconhecido")
+        autor_txt = "`desconhecido — mensagem fora do cache`"
+
+    embed.description = (
+        f"✏️ **Mensagem Editada**\n"
+        f"📍 Canal: {canal_origem.mention if canal_origem else '`desconhecido`'}\n"
+        f"👤 Autor: {autor_txt}"
+    )
+    embed.add_field(
+        name="📝 Antes",
+        value=(conteudo_antigo[:1000] if conteudo_antigo else "*(não estava em cache)*"),
+        inline=False,
+    )
+    embed.add_field(
+        name="📝 Depois",
+        value=(conteudo_novo[:1000] if conteudo_novo else "*(vazio)*"),
+        inline=False,
+    )
+    embed.add_field(name="🔗 Mensagem", value=f"[Clique para ver]({jump_url})", inline=False)
+    embed.set_footer(text=LOGS_FOOTER_TEXT)
+    embed.timestamp = discord.utils.utcnow()
+    await canal_log.send(embed=embed)
+
+
+async def _log_mensagem_apagada(
+    guild: discord.Guild,
+    autor,
+    canal_origem,
+    conteudo,
+    anexos,
+):
+    canal_log = guild.get_channel(CANAL_LOGS_CHAT_ID)
+    if canal_log is None:
+        return
+
+    executor = None
+    if autor is not None and not getattr(autor, "bot", False):
+        executor = await _buscar_executor_delecao(guild, autor, canal_origem)
+
+    embed = discord.Embed(color=COR_LOG_APAGOU)
+    if autor is not None:
+        embed.set_author(
+            name=f"{autor.display_name} ({autor})",
+            icon_url=autor.display_avatar.url,
+        )
+        autor_txt = f"{autor.mention} `({autor.id})`"
+    else:
+        embed.set_author(name="Autor desconhecido")
+        autor_txt = "`desconhecido — mensagem fora do cache`"
+
+    embed.description = (
+        f"🗑️ **Mensagem Apagada**\n"
+        f"📍 Canal: {canal_origem.mention if canal_origem else '`desconhecido`'}\n"
+        f"👤 Autor: {autor_txt}"
+    )
+    embed.add_field(
+        name="💬 Conteúdo",
+        value=(conteudo[:1000] if conteudo else "*(não estava em cache / sem texto)*"),
+        inline=False,
+    )
+    if anexos:
+        embed.add_field(name="📎 Anexos", value="\n".join(anexos[:5])[:1000], inline=False)
+
+    if executor and (autor is None or executor.id != autor.id):
+        embed.add_field(
+            name="🧾 Apagada por",
+            value=f"{executor.mention} `({executor.id})`",
+            inline=False,
+        )
+    else:
+        embed.add_field(
+            name="🧾 Apagada por",
+            value="A própria pessoa apagou a mensagem.",
+            inline=False,
+        )
+    embed.set_footer(text=LOGS_FOOTER_TEXT)
+    embed.timestamp = discord.utils.utcnow()
+    await canal_log.send(embed=embed)
+
+
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -1508,7 +1803,12 @@ async def on_member_join(member: discord.Member):
 async def on_voice_state_update(
     member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
 ):
-    """Rastreia tempo em call dos membros com cargo Anjo para o ranking."""
+    """Rastreia tempo em call dos membros com cargo Anjo para o ranking,
+    e registra no canal de logs de voz quem entrou/saiu/trocou/foi puxado."""
+    # Log de voz vale para QUALQUER membro humano, independente de cargo —
+    # roda isolado num try próprio pra nunca quebrar a lógica do ranking abaixo.
+    asyncio.create_task(_processar_log_voz(member, before, after))
+
     try:
         if member.bot:
             return
@@ -1535,6 +1835,120 @@ async def on_voice_state_update(
         # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
     except Exception as e:
         print(f"[ranking-anjo] ERRO on_voice_state_update para {member}: {e!r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# LOGS DE CHAT — mensagens editadas e apagadas
+# Usa eventos "raw" (funcionam mesmo se a mensagem não estava em cache),
+# mas aproveita o cache quando disponível para mostrar o conteúdo antigo.
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.event
+async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
+    try:
+        if payload.guild_id is None:
+            return  # DM — não loga
+        if payload.channel_id in (CANAL_LOGS_VOZ_ID, CANAL_LOGS_CHAT_ID):
+            return  # ignora edições dentro dos próprios canais de log
+
+        novo_conteudo = payload.data.get("content")
+        if novo_conteudo is None:
+            return  # edição sem campo de conteúdo (ex.: só embed carregou) — ignora
+
+        guild = bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        canal_origem = guild.get_channel(payload.channel_id) or guild.get_thread(payload.channel_id)
+
+        cached = payload.cached_message
+        autor = cached.author if cached else None
+
+        if autor is None:
+            # Melhor esforço: tenta descobrir o autor buscando a mensagem atual
+            try:
+                if canal_origem is not None:
+                    msg_atual = await canal_origem.fetch_message(payload.message_id)
+                    autor = msg_atual.author
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                autor = None
+
+        if autor is not None and autor.bot:
+            return  # não loga edição de mensagens de bot
+
+        conteudo_antigo = cached.content if cached else None
+        if conteudo_antigo is not None and conteudo_antigo == novo_conteudo:
+            return  # texto não mudou de verdade (ex.: só metadata de embed)
+
+        jump_url = f"https://discord.com/channels/{payload.guild_id}/{payload.channel_id}/{payload.message_id}"
+        await _log_mensagem_editada(guild, autor, canal_origem, conteudo_antigo, novo_conteudo, jump_url)
+    except Exception as e:
+        print(f"[logs-chat] ERRO on_raw_message_edit: {e!r}")
+
+
+@bot.event
+async def on_raw_message_delete(payload: discord.RawMessageDeleteEvent):
+    try:
+        if payload.guild_id is None:
+            return
+        if payload.channel_id in (CANAL_LOGS_VOZ_ID, CANAL_LOGS_CHAT_ID):
+            return
+
+        guild = bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        canal_origem = guild.get_channel(payload.channel_id) or guild.get_thread(payload.channel_id)
+
+        cached = payload.cached_message
+        autor = cached.author if cached else None
+        if autor is not None and autor.bot:
+            return
+
+        conteudo = cached.content if (cached and cached.content) else None
+        anexos = [a.url for a in cached.attachments] if (cached and cached.attachments) else None
+
+        await _log_mensagem_apagada(guild, autor, canal_origem, conteudo, anexos)
+    except Exception as e:
+        print(f"[logs-chat] ERRO on_raw_message_delete: {e!r}")
+
+
+@bot.event
+async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent):
+    try:
+        if payload.guild_id is None:
+            return
+        if payload.channel_id in (CANAL_LOGS_VOZ_ID, CANAL_LOGS_CHAT_ID):
+            return
+
+        guild = bot.get_guild(payload.guild_id)
+        if guild is None:
+            return
+        canal_log = guild.get_channel(CANAL_LOGS_CHAT_ID)
+        if canal_log is None:
+            return
+        canal_origem = guild.get_channel(payload.channel_id) or guild.get_thread(payload.channel_id)
+
+        executor = None
+        try:
+            async for entry in guild.audit_logs(limit=3, action=discord.AuditLogAction.message_bulk_delete):
+                delta = (discord.utils.utcnow() - entry.created_at).total_seconds()
+                if delta <= 8:
+                    executor = entry.user
+                    break
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+        embed = discord.Embed(color=COR_LOG_BULK)
+        embed.description = (
+            f"🧹 **Limpeza em Massa de Mensagens**\n\n"
+            f"📍 Canal: {canal_origem.mention if canal_origem else '`desconhecido`'}\n"
+            f"🔢 Quantidade apagada: **{len(payload.message_ids)}**\n"
+            f"🧾 Executado por: {executor.mention if executor else '`não identificado`'}"
+        )
+        embed.set_footer(text=LOGS_FOOTER_TEXT)
+        embed.timestamp = discord.utils.utcnow()
+        await canal_log.send(embed=embed)
+    except Exception as e:
+        print(f"[logs-chat] ERRO on_raw_bulk_message_delete: {e!r}")
 
 
 @bot.event

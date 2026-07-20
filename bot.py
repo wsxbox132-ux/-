@@ -1467,8 +1467,46 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    """Boas-vindas desativadas."""
-    pass
+    """Ao entrar no servidor, explica pra pessoa como abrir um ticket
+    e avisa que a staff atende em até 24h (pode demorar um pouco, já que
+    a maior parte da equipe trabalha/estuda fora do Discord)."""
+    if member.bot:
+        return
+
+    embed = discord.Embed(
+        title="🌑☀️ Ei, seja muito bem-vindo(a)!",
+        description=(
+            f"Oiii {member.mention}!! Que alegria te ver chegando por aqui!! 😭🌟🤍✨\n\n"
+            "🌟 **Celestia:** *brilha toda animada* Antes de mais nada, pra gente te "
+            "liberar direitinho no servidor, você precisa **abrir um ticket**, tá bom?? "
+            "É rapidinho e é por ali que a gente cuida de você!! ☀️🌸💫\n\n"
+            "🌑 **Aeon:** *emerge das sombras com calma* Assim que o ticket for aberto, "
+            "alguém da staff aparece pra te atender em até **24 horas**. 🖤🌑 "
+            "...as sombras pedem um pouco de paciência: a maior parte da equipe "
+            "trabalha, estuda e tem vida lá fora, então às vezes pode demorar "
+            "um pouquinho. Mas alguém vem, garantido.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎫 Abra seu ticket quando puder e fica tranquilo(a) esperando!\n"
+            "🌙 *As portas estão abertas — é só questão de tempo.*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0x2b2b3b
+    )
+    embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
+
+    enviado_no_dm = True
+    try:
+        await member.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException):
+        enviado_no_dm = False
+
+    if not enviado_no_dm:
+        canal = member.guild.get_channel(CANAL_BOAS_VINDAS_ID)
+        if canal is not None:
+            try:
+                await canal.send(content=member.mention, embed=embed)
+            except discord.HTTPException:
+                pass
 
 
 @bot.event
@@ -6612,6 +6650,23 @@ async def _enviar_boas_vindas(guild: discord.Guild, member: discord.Member, tipo
                 "🌙 *Fique à vontade, visitante. As portas estão abertas.*"
             ),
             color=0x2b2b3b
+        )
+        embed.add_field(
+            name="📋 Só um avisinho fofo antes de continuar~ 🌸",
+            value=(
+                f"🌟 **Celestia:** Escuta aqui com carinho, {member.display_name}!! 😊🤍✨ "
+                "Você vai ficar como **visitante por 7 diazinhos**, viu?? "
+                "É só o tempinho da gente ir se conhecendo direitinho!! ☀️💫\n\n"
+                "🌑 **Aeon:** ...e pra virar membro de verdade, as sombras pedem "
+                "alguns detalhezinhos: 🖤🌑\n"
+                "🔗 conta do **Roblox vinculada** ao Discord\n"
+                "👕 pelo menos **uma camisa** com a skin do clã\n"
+                "🏷️ a **tag do clã** equipada\n"
+                "💬 e um pouquinho de **atividade** por aqui também!\n\n"
+                "🌟 **Celestia:** Nada muito difícil, tá?? A gente confia em você!! "
+                "Só ser você mesmo e aparecer de vez em quando que já ajuda demais!! 🌸🤍✨"
+            ),
+            inline=False
         )
     else:  # membro
         embed = discord.Embed(

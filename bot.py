@@ -1494,19 +1494,14 @@ async def on_member_join(member: discord.Member):
     )
     embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
 
-    enviado_no_dm = True
     try:
         await member.send(embed=embed)
-    except (discord.Forbidden, discord.HTTPException):
-        enviado_no_dm = False
-
-    if not enviado_no_dm:
-        canal = member.guild.get_channel(CANAL_BOAS_VINDAS_ID)
-        if canal is not None:
-            try:
-                await canal.send(content=member.mention, embed=embed)
-            except discord.HTTPException:
-                pass
+        print(f"[boas-vindas] DM enviada com sucesso para {member} ({member.id})")
+    except discord.Forbidden:
+        print(f"[boas-vindas] NÃO consegui mandar DM para {member} ({member.id}) — "
+              f"a pessoa deve ter DMs de membros do servidor desativadas.")
+    except discord.HTTPException as e:
+        print(f"[boas-vindas] Erro HTTP ao mandar DM para {member} ({member.id}): {e!r}")
 
 
 @bot.event

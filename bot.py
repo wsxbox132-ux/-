@@ -6689,6 +6689,16 @@ async def _enviar_boas_vindas(guild: discord.Guild, member: discord.Member, tipo
     embed.set_footer(text="🌑 Aeon guarda as trevas. ☀️ Celestia guia a luz.")
     await canal.send(embed=embed)
 
+    # ── Também manda no PV (privado) do membro ──────────────────────────────
+    try:
+        await member.send(embed=embed)
+        print(f"[boas-vindas-{tipo}] DM enviada com sucesso para {member} ({member.id})")
+    except discord.Forbidden:
+        print(f"[boas-vindas-{tipo}] NÃO consegui mandar DM para {member} ({member.id}) — "
+              f"a pessoa deve ter DMs de membros do servidor desativadas.")
+    except discord.HTTPException as e:
+        print(f"[boas-vindas-{tipo}] Erro HTTP ao mandar DM para {member} ({member.id}): {e!r}")
+
 
 class BotaoVisitante(discord.ui.View):
     """View com botão de confirmação para visitantes."""

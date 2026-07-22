@@ -8198,11 +8198,13 @@ def _emoji_da_cor(chave: str) -> str:
 # }
 xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": []})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
-_xp_ranking_message_ids: list = []  # IDs das mensagens de ranking já postadas, em ordem (página 1, página 2...). Editadas, nunca duplicadas — só ganha mais páginas se a lista passar do limite de caracteres de 1 embed.
+_xp_ranking_message_id = None   # ID da mensagem de ranking já postada (editada, nunca duplicada)
+_xp_ranking_pagina_atual = 0     # página atualmente exibida no ranking fixo (navegada pelos botões ◀️ ▶️)
 _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
 _xp_batalha_info_message_id = None  # ID da mensagem explicando as batalhas (fica logo abaixo da de cor)
 _xp_enciclopedia_message_id = None  # ID da mensagem da Enciclopédia de Criaturas (fica por último, embaixo de tudo)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
+
 
 
 def _xp_necessario_para_nivel(nivel: int) -> int:

@@ -8156,8 +8156,9 @@ def _emoji_da_cor(chave: str) -> str:
 #     "xp": int (total acumulado), "nivel": int, "level_message_id": int|None,
 #     "elegivel": bool (já mandou mensagem em algum dos 3 canais de _XP_CANAIS_RANKING?),
 #     "cor": str (chave em _CORES_QUADRADO — cor escolhida pra o próprio quadradinho),
+#     "vitorias": int (vitórias na Arena de Batalhas), "derrotas": int (derrotas na Arena de Batalhas),
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
 _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
@@ -8203,6 +8204,8 @@ def _carregar_xp_stats() -> None:
                 "level_message_id": valores.get("level_message_id"),
                 "elegivel":         valores.get("elegivel", False),
                 "cor":              valores.get("cor", _COR_PADRAO),
+                "vitorias":         valores.get("vitorias", 0),
+                "derrotas":         valores.get("derrotas", 0),
             }
         _xp_ranking_message_id = dados.get("ranking_message_id")
         _xp_cor_message_id = dados.get("cor_message_id")
@@ -8361,19 +8364,22 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
             continue
         nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
         cor_emoji = _emoji_da_cor(dados.get("cor", _COR_PADRAO))
-        linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario, cor_emoji))
+        vitorias = dados.get("vitorias", 0)
+        derrotas = dados.get("derrotas", 0)
+        linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas))
 
     linhas.sort(key=lambda x: x[1], reverse=True)
 
     medalhas = ["🥇", "🥈", "🥉"]
     descricao_linhas = []
     if linhas:
-        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji) in enumerate(linhas):
+        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas) in enumerate(linhas):
             prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
             barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=cor_emoji)
             descricao_linhas.append(
                 f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
-                f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)"
+                f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)\n"
+                f"┗ ⚔️ Vitórias: `{vitorias}` | Derrotas: `{derrotas}`"
             )
     else:
         descricao_linhas.append(
@@ -9061,7 +9067,12 @@ async def _executar_batalha(
 
     # ── Lança o "dado" que decide quanto (ou se) o vencedor rouba de XP ──
     dados_perdedor = xp_stats[perdedor.id]
+    dados_vencedor = xp_stats[vencedor.id]
     xp_perdedor_antes = dados_perdedor["xp"]
+
+    # ── Registro de vitórias/derrotas — atualiza sempre, independente de roubo de XP ──
+    dados_vencedor["vitorias"] = dados_vencedor.get("vitorias", 0) + 1
+    dados_perdedor["derrotas"] = dados_perdedor.get("derrotas", 0) + 1
 
     xp_roubado = 0
     percentual = 0.0
@@ -9071,7 +9082,6 @@ async def _executar_batalha(
         xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
 
     if xp_roubado > 0:
-        dados_vencedor = xp_stats[vencedor.id]
         nivel_antigo_vencedor = dados_vencedor["nivel"]
 
         dados_perdedor["xp"] = max(0, xp_perdedor_antes - xp_roubado)
@@ -9083,8 +9093,10 @@ async def _executar_batalha(
         if dados_vencedor["nivel"] > nivel_antigo_vencedor and canal.guild:
             asyncio.create_task(_anunciar_level_up(canal.guild, vencedor, dados_vencedor["nivel"]))
 
-        asyncio.create_task(_salvar_xp_stats())
         asyncio.create_task(_atualizar_ranking_xp())
+
+    # Salva sempre — mesmo sem roubo de XP, o placar de vitórias/derrotas mudou
+    asyncio.create_task(_salvar_xp_stats())
 
     # ── Conclusão dramática ───────────────────────────────────────────────
     if xp_roubado > 0:
@@ -9098,12 +9110,19 @@ async def _executar_batalha(
             f"nenhum XP foi roubado de **{perdedor.display_name}**."
         )
 
+    texto_placar = (
+        f"📊 **Retrospecto:** {vencedor.mention} `🏆 {dados_vencedor['vitorias']} vitórias / "
+        f"{dados_vencedor['derrotas']} derrotas` — {perdedor.mention} `🏆 {dados_perdedor['vitorias']} vitórias / "
+        f"{dados_perdedor['derrotas']} derrotas`"
+    )
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
             f"**{criatura_vencedora['nome']}** ({vencedor.mention}) derrota "
             f"**{criatura_perdedora['nome']}** ({perdedor.mention})!\n\n"
             f"{texto_roubo}\n\n"
+            f"{texto_placar}\n\n"
             f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
             f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
         ),

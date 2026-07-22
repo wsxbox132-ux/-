@@ -2009,6 +2009,13 @@ async def on_message(message: discord.Message):
         print(f"[ranking-xp] ERRO ao processar XP de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Batalha de Criaturas ("Eu te desafio @alguém") ─────────────────────
+    try:
+        await _processar_desafio(message)
+    except Exception as e:
+        print(f"[batalha] ERRO ao processar desafio de {message.author}: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     # ── Anti-spam ─────────────────────────────────────────────────────────────
     await checar_spam(message)
     # ─────────────────────────────────────────────────────────────────────────
@@ -8717,6 +8724,220 @@ async def cmd_xp_debug(ctx):
 
 # Carrega o histórico de XP salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_xp_stats()
+
+# ══════════════════════════════════════════════════════════════════════
+# BATALHA DE CRIATURAS — "Eu te desafio @alguém"
+# Quando alguém escreve "eu te desafio @pessoa" no chat, Aeon & Celestia
+# armam uma batalha dramática entre duas criaturas sorteadas aleatoriamente
+# — uma pro desafiante, outra pro desafiado. No fim, quem vence PODE roubar
+# uma fatia do XP total de quem perdeu (no ranking de nível): é lançado um
+# "dado" que decide entre 1% e 20%... ou, com uma certa chance, nada.
+# ══════════════════════════════════════════════════════════════════════
+
+_BATALHA_CRIATURAS = [
+    {"nome": "Caveira Perpétua",       "gif": "https://i.pinimg.com/originals/11/d4/f6/11d4f665781ad7710f79e76ae03532bf.gif"},
+    {"nome": "Heroína das Esmeraldas", "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
+    {"nome": "Samurai do Pix",         "gif": "https://i.pinimg.com/originals/32/e6/fe/32e6fe1d93519ce4ed0c9d1ef666ea86.gif"},
+    {"nome": "Cavaleiro Elemental",    "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
+    {"nome": "Caveira da Prisão",      "gif": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEivaQ2fr4t0qnYKfUiXbCeBU2HGF2vMB6oCjiEbAjADBdNYPoOqzEU8jSDdHDwD5xgI7MGL9qj0eH60EgBEaGjgV4JIHDait9dSFusVjLvykhwIWHPa4tfeDhzOr3uhwQfyNtzw7mz-Q9_E/s1600/Phantasm_attack_8.gif"},
+    {"nome": "Eco da Luz",             "gif": "https://i.pinimg.com/originals/25/83/b2/2583b2768cb33f0165e3a88ac3debbde.gif"},
+]
+
+# Detecta a frase em qualquer lugar da mensagem (com ou sem acento), desde
+# que tenha alguém mencionado junto.
+_BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf", re.IGNORECASE)
+
+_BATALHA_COOLDOWN_SEGUNDOS = 120    # tempo mínimo entre desafios lançados pela MESMA pessoa
+_batalha_ultimo_desafio: dict = {}  # user_id -> time.time() do último desafio lançado
+_batalha_canal_ativo: set = set()   # channel_id -> impede 2 batalhas rolando ao mesmo tempo no mesmo canal
+
+_BATALHA_CHANCE_SEM_ROUBO = 0.15    # 15% de chance do vencedor não levar XP NENHUM
+_BATALHA_ROUBO_MIN = 0.01           # 1%  — mínimo que o dado pode sortear
+_BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
+
+
+def _sortear_criaturas():
+    """Sorteia 2 criaturas diferentes: uma pro desafiante, outra pro desafiado."""
+    if len(_BATALHA_CRIATURAS) >= 2:
+        return random.sample(_BATALHA_CRIATURAS, 2)
+    return [random.choice(_BATALHA_CRIATURAS), random.choice(_BATALHA_CRIATURAS)]
+
+
+async def _executar_batalha(
+    canal: discord.TextChannel, desafiante: discord.Member, desafiado: discord.Member
+) -> None:
+    """Roda a sequência dramática da batalha inteira: abertura, revelação das
+    duas criaturas, suspense e conclusão (com ou sem roubo de XP)."""
+    criatura_desafiante, criatura_desafiado = _sortear_criaturas()
+
+    # ── Abertura ──────────────────────────────────────────────────────────
+    embed_abertura = discord.Embed(
+        title="⚔️ UMA BATALHA COMEÇA!",
+        description=(
+            f"🌑 **Aeon:** *as sombras se agitam de repente* ...{desafiante.mention} lançou o desafio. "
+            f"{desafiado.mention}, as trevas aguardam sua resposta. 🖤🌑\n"
+            f"🌟 **Celestia:** AAAAA UMA BATALHA?! 😱🌟✨ *brilha intensamente* "
+            f"TODO MUNDO PRA ARENA, ISSO VAI SER ÉPICO!!"
+        ),
+        color=0x2b2b3b,
+    )
+    embed_abertura.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    await canal.send(embed=embed_abertura)
+    await asyncio.sleep(2)
+
+    # ── Criatura do desafiante ───────────────────────────────────────────
+    embed_c1 = discord.Embed(
+        title="🔥 O desafiador entra em campo!",
+        description=f"**{desafiante.display_name}** invoca... **{criatura_desafiante['nome']}**!! 💥",
+        color=0xff4444,
+    )
+    embed_c1.set_image(url=criatura_desafiante["gif"])
+    await canal.send(embed=embed_c1)
+    await asyncio.sleep(2.5)
+
+    # ── Criatura do desafiado ────────────────────────────────────────────
+    embed_c2 = discord.Embed(
+        title="💠 O desafiado revida!",
+        description=f"**{desafiado.display_name}** responde invocando... **{criatura_desafiado['nome']}**!! ⚡",
+        color=0x4488ff,
+    )
+    embed_c2.set_image(url=criatura_desafiado["gif"])
+    await canal.send(embed=embed_c2)
+    await asyncio.sleep(3)
+
+    # ── Suspense antes do resultado ──────────────────────────────────────
+    aviso = await canal.send("💥⚡ *As duas criaturas colidem em um choque de poder...* ⚡💥")
+    await asyncio.sleep(2.5)
+    try:
+        await aviso.delete()
+    except discord.HTTPException:
+        pass
+
+    # ── Sorteia o vencedor (50/50) ───────────────────────────────────────
+    if random.random() < 0.5:
+        vencedor, criatura_vencedora = desafiante, criatura_desafiante
+        perdedor, criatura_perdedora = desafiado, criatura_desafiado
+    else:
+        vencedor, criatura_vencedora = desafiado, criatura_desafiado
+        perdedor, criatura_perdedora = desafiante, criatura_desafiante
+
+    # ── Lança o "dado" que decide quanto (ou se) o vencedor rouba de XP ──
+    dados_perdedor = xp_stats[perdedor.id]
+    xp_perdedor_antes = dados_perdedor["xp"]
+
+    xp_roubado = 0
+    percentual = 0.0
+    if xp_perdedor_antes > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
+        percentual = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
+        xp_roubado = max(1, round(xp_perdedor_antes * percentual))
+        xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
+
+    if xp_roubado > 0:
+        dados_vencedor = xp_stats[vencedor.id]
+        nivel_antigo_vencedor = dados_vencedor["nivel"]
+
+        dados_perdedor["xp"] = max(0, xp_perdedor_antes - xp_roubado)
+        dados_perdedor["nivel"], _, _ = _calcular_nivel(dados_perdedor["xp"])
+
+        dados_vencedor["xp"] += xp_roubado
+        dados_vencedor["nivel"], _, _ = _calcular_nivel(dados_vencedor["xp"])
+
+        if dados_vencedor["nivel"] > nivel_antigo_vencedor and canal.guild:
+            asyncio.create_task(_anunciar_level_up(canal.guild, vencedor, dados_vencedor["nivel"]))
+
+        asyncio.create_task(_salvar_xp_stats())
+        asyncio.create_task(_atualizar_ranking_xp())
+
+    # ── Conclusão dramática ───────────────────────────────────────────────
+    if xp_roubado > 0:
+        texto_roubo = (
+            f"💰 O dado sorteou **`{percentual * 100:.1f}%`**! "
+            f"**{vencedor.display_name}** saqueou **`{xp_roubado}` XP** de **{perdedor.display_name}**!"
+        )
+    else:
+        texto_roubo = (
+            f"🍃 O dado não favoreceu **{vencedor.display_name}** dessa vez — "
+            f"nenhum XP foi roubado de **{perdedor.display_name}**."
+        )
+
+    embed_resultado = discord.Embed(
+        title="🏆 FIM DE BATALHA!",
+        description=(
+            f"**{criatura_vencedora['nome']}** ({vencedor.mention}) derrota "
+            f"**{criatura_perdedora['nome']}** ({perdedor.mention})!\n\n"
+            f"{texto_roubo}\n\n"
+            f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
+            f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
+        ),
+        color=0xf5c542,
+        timestamp=discord.utils.utcnow(),
+    )
+    embed_resultado.set_thumbnail(url=vencedor.display_avatar.url)
+    embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    await canal.send(embed=embed_resultado)
+
+
+async def _processar_desafio(message: discord.Message) -> None:
+    """Detecta 'eu te desafio @alguém' no chat e, se tudo certo, inicia a batalha."""
+    if message.guild is None or message.author.bot:
+        return
+    if not message.mentions:
+        return
+    if not _BATALHA_REGEX.search(message.content or ""):
+        return
+
+    desafiante = message.author
+    desafiado = next(
+        (m for m in message.mentions if not m.bot and m.id != desafiante.id), None
+    )
+
+    if desafiado is None:
+        await message.channel.send(
+            "🌑 **Aeon:** ...não dá pra desafiar a si mesmo, nem um bot. "
+            "As sombras não aceitam covardia. 🖤🌑"
+        )
+        return
+
+    if message.channel.id in _batalha_canal_ativo:
+        await message.channel.send(
+            "🌟 **Celestia:** Calma, calma!! 😅🌸 Já tem uma batalha rolando por aqui, espera terminar!!"
+        )
+        return
+
+    agora = time.time()
+    ultimo = _batalha_ultimo_desafio.get(desafiante.id, 0)
+    if agora - ultimo < _BATALHA_COOLDOWN_SEGUNDOS:
+        restante = int(_BATALHA_COOLDOWN_SEGUNDOS - (agora - ultimo))
+        await message.channel.send(
+            f"🌑 **Aeon:** ...as sombras ainda descansam do último combate. "
+            f"Espere mais `{restante}s` antes de desafiar de novo. 🖤🌑"
+        )
+        return
+
+    guild = message.guild
+    cargo_xp = guild.get_role(CARGO_XP_ID)
+    if not cargo_xp or cargo_xp not in desafiante.roles or cargo_xp not in desafiado.roles:
+        await message.channel.send(
+            "🌟 **Celestia:** Pra batalhar valendo pontos, os dois precisam estar "
+            "participando do ranking de nível!! 🌸✨"
+        )
+        return
+
+    dados_desafiante = xp_stats[desafiante.id]
+    dados_desafiado = xp_stats[desafiado.id]
+    if dados_desafiante["xp"] <= 0 and dados_desafiado["xp"] <= 0:
+        await message.channel.send(
+            "🌑 **Aeon:** ...ninguém aqui tem XP suficiente pra valer a pena essa batalha ainda. 🖤🌑"
+        )
+        return
+
+    _batalha_ultimo_desafio[desafiante.id] = agora
+    _batalha_canal_ativo.add(message.channel.id)
+
+    try:
+        await _executar_batalha(message.channel, desafiante, desafiado)
+    finally:
+        _batalha_canal_ativo.discard(message.channel.id)
 
 # ══════════════════════════════════════════════════════════════════════
 

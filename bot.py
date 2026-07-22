@@ -8242,7 +8242,12 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
     for membro in membros_xp:
         if membro.bot:
             continue
-        dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0})
+        # Só entra no ranking quem JÁ interagiu pelo menos uma vez (mandou
+        # mensagem e ganhou xp). Assim o ranking nasce vazio quando o bot liga
+        # e vai preenchendo sozinho conforme as pessoas forem interagindo.
+        if membro.id not in xp_stats:
+            continue
+        dados = xp_stats[membro.id]
         nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
         linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario))
 
@@ -8259,7 +8264,10 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
                 f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)"
             )
     else:
-        descricao_linhas.append("*Nenhum membro com o cargo de XP encontrado no servidor.*")
+        descricao_linhas.append(
+            "*Ninguém entrou no ranking ainda — mande uma mensagem no servidor "
+            "pra começar a ganhar XP!* 💬"
+        )
 
     embed = discord.Embed(
         title="⭐ Ranking de Nível",

@@ -9033,6 +9033,61 @@ async def cmd_xp_debug(ctx):
     await ctx.send(f"🔍 **Diagnóstico do Ranking de XP**\n{texto}")
 
 
+@bot.command(name="xpbackfill")
+async def cmd_xp_backfill(ctx, limite: int = None):
+    """Varre o histórico dos 3 canais de ranking e marca como 'elegivel' todo
+    mundo que JÁ mandou mensagem lá antes — inclusive mensagens antigas, de
+    antes da liberação do cargo. Sem isso, só quem mandar uma mensagem NOVA
+    depois da atualização apareceria no ranking; com isso, quem já participava
+    antes aparece de uma vez, sem precisar mandar mensagem de novo.
+    Só o dono do bot pode usar. Uso: .xpbackfill [limite de msgs por canal]"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        await ctx.send("⚠️ Bot não está em nenhum servidor.")
+        return
+
+    aviso = await ctx.send(
+        "🔎 Varrendo o histórico dos canais de ranking pra achar quem já "
+        "participou antes... isso pode levar um tempinho em canais grandes."
+    )
+
+    encontrados = set()
+    for canal_id in _XP_CANAIS_RANKING:
+        canal = guild.get_channel(canal_id)
+        if canal is None:
+            continue
+        try:
+            async for msg in canal.history(limit=limite):
+                if msg.author.bot:
+                    continue
+                encontrados.add(msg.author.id)
+        except (discord.Forbidden, discord.HTTPException) as e:
+            await ctx.send(f"⚠️ Não consegui ler o histórico de {canal.mention}: `{e}`")
+
+    novos = 0
+    for uid in encontrados:
+        membro = guild.get_member(uid)
+        if membro is None:
+            continue  # já saiu do servidor — não destrava quem não tá mais aqui
+        dados = xp_stats[uid]
+        if not dados.get("elegivel"):
+            novos += 1
+        dados["elegivel"] = True
+
+    await _salvar_xp_stats()
+    await _atualizar_ranking_xp()
+
+    await aviso.edit(
+        content=(
+            f"✅ Varredura concluída! `{len(encontrados)}` pessoas encontradas nos canais de ranking, "
+            f"`{novos}` delas foram destravadas agora e já aparecem no ranking fixo."
+        )
+    )
+
+
 # Carrega o histórico de XP salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_xp_stats()
 

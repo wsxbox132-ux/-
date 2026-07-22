@@ -8161,6 +8161,7 @@ xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": N
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
 _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
+_xp_batalha_info_message_id = None  # ID da mensagem explicando as batalhas (fica logo abaixo da de cor)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
 
 
@@ -8189,7 +8190,7 @@ def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: 
 
 def _carregar_xp_stats() -> None:
     """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
-    global _xp_ranking_message_id, _xp_cor_message_id
+    global _xp_ranking_message_id, _xp_cor_message_id, _xp_batalha_info_message_id
     if not os.path.exists(_XP_DATA_FILE):
         return
     try:
@@ -8205,6 +8206,7 @@ def _carregar_xp_stats() -> None:
             }
         _xp_ranking_message_id = dados.get("ranking_message_id")
         _xp_cor_message_id = dados.get("cor_message_id")
+        _xp_batalha_info_message_id = dados.get("batalha_info_message_id")
     except (json.JSONDecodeError, OSError, ValueError):
         pass
 
@@ -8215,6 +8217,7 @@ async def _salvar_xp_stats() -> None:
         "stats": {str(uid): v for uid, v in xp_stats.items()},
         "ranking_message_id": _xp_ranking_message_id,
         "cor_message_id": _xp_cor_message_id,
+        "batalha_info_message_id": _xp_batalha_info_message_id,
     }
     tmp_path = _XP_DATA_FILE + ".tmp"
 
@@ -8551,6 +8554,103 @@ async def _atualizar_pergunta_cor(canal: discord.TextChannel) -> None:
         print(f"[ranking-xp] ERRO ao enviar mensagem de escolha de cor em #{canal.name}: {e!r}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Mensagem fixa explicando a mecânica de batalhas — fica logo abaixo da
+# de escolha de cor, sempre editada (nunca duplica).
+# ══════════════════════════════════════════════════════════════════════
+
+_XP_BATALHA_INFO_TITULO = "⚔️ Quer testar suas criaturas? Batalhe por pontos!"
+
+
+def _montar_embed_info_batalha() -> discord.Embed:
+    embed = discord.Embed(
+        title=_XP_BATALHA_INFO_TITULO,
+        description=(
+            "🌟 **Celestia:** Sabia que dá pra DESAFIAR outras pessoas por aqui?? 😆⚔️✨ "
+            "*pula animada* Bora te explicar como funciona!!\n"
+            "🌑 **Aeon:** ...preste atenção. As regras das sombras são simples. 🖤🌑\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**1️⃣ Como desafiar**\n"
+            "Escreva `Eu te desafio @alguém` em qualquer canal. A pessoa desafiada "
+            f"tem `{_BATALHA_TEMPO_ACEITE}s` pra **aceitar** ou **recusar** no botão que aparece.\n\n"
+            "**2️⃣ A batalha**\n"
+            "Se aceitar, cada lado invoca uma criatura aleatória (dentre as disponíveis) "
+            "e elas se enfrentam num combate dramático. O vencedor é sorteado — pode ser qualquer um dos dois.\n\n"
+            "**3️⃣ O roubo de XP**\n"
+            f"Quem vence PODE roubar uma fatia do XP total de quem perdeu: um dado decide entre "
+            f"`{_BATALHA_ROUBO_MIN * 100:.0f}%` e `{_BATALHA_ROUBO_MAX * 100:.0f}%`. "
+            f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
+            "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
+            "**4️⃣ Pra poder batalhar**\n"
+            "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
+            f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
+            "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
+            f"depois de `{_BATALHA_TEMPO_SOMEM}s` — não fica lixo acumulando no chat!*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0xe8d5f5,
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    return embed
+
+
+async def _achar_mensagem_info_batalha(canal: discord.TextChannel):
+    """Varre o histórico do canal, apaga explicações de batalha duplicadas
+    antigas (deixando só a mais recente) e devolve essa mensagem pra ser editada."""
+    mensagens = []
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == _XP_BATALHA_INFO_TITULO:
+                mensagens.append(msg)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    if not mensagens:
+        return None
+
+    mais_recente, *duplicadas = mensagens
+    for dup in duplicadas:
+        try:
+            await dup.delete()
+        except discord.HTTPException:
+            pass
+    return mais_recente
+
+
+async def _atualizar_info_batalha(canal: discord.TextChannel) -> None:
+    """Garante que a mensagem explicando as batalhas fique sempre logo abaixo
+    da mensagem de escolha de cor (fixa, editada, nunca duplicada)."""
+    global _xp_batalha_info_message_id
+
+    embed = _montar_embed_info_batalha()
+
+    mensagem = None
+    if _xp_batalha_info_message_id:
+        try:
+            mensagem = await canal.fetch_message(_xp_batalha_info_message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            mensagem = None
+
+    if mensagem is None:
+        mensagem = await _achar_mensagem_info_batalha(canal)
+
+    if mensagem:
+        try:
+            await mensagem.edit(embed=embed)
+            _xp_batalha_info_message_id = mensagem.id
+            return
+        except discord.HTTPException as e:
+            print(f"[ranking-xp] ERRO ao editar mensagem de explicação de batalha: {e!r}")
+            mensagem = None
+
+    try:
+        nova = await canal.send(embed=embed)
+        _xp_batalha_info_message_id = nova.id
+        print(f"[ranking-xp] Mensagem de explicação de batalha criada em #{canal.name} (id {nova.id}).")
+    except discord.HTTPException as e:
+        print(f"[ranking-xp] ERRO ao enviar mensagem de explicação de batalha em #{canal.name}: {e!r}")
+
+
 async def _atualizar_ranking_xp() -> None:
     """Atualiza (ou cria, se ainda não existir) a mensagem de ranking de XP, sempre
     editando a mesma mensagem (fica 'fixa' no topo, nunca duplica)."""
@@ -8603,6 +8703,12 @@ async def _atualizar_ranking_xp() -> None:
         await _atualizar_pergunta_cor(canal)
     except Exception as e:
         print(f"[ranking-xp] ERRO ao atualizar mensagem de escolha de cor: {e!r}")
+
+    # Mantém a explicação da mecânica de batalhas fixa logo abaixo da de cor
+    try:
+        await _atualizar_info_batalha(canal)
+    except Exception as e:
+        print(f"[ranking-xp] ERRO ao atualizar mensagem de explicação de batalha: {e!r}")
 
     await _salvar_xp_stats()
 

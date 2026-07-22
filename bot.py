@@ -1770,6 +1770,15 @@ async def on_ready():
         loop_ranking_anjo.start()
     # ─────────────────────────────────────────────────────────────────────
 
+    # ── Ranking de Nível (XP): setup ─────────────────────────────────────
+    global _xp_stats_lock
+    if _xp_stats_lock is None:
+        _xp_stats_lock = asyncio.Lock()
+
+    if not loop_ranking_xp.is_running():
+        loop_ranking_xp.start()
+    # ─────────────────────────────────────────────────────────────────────
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Ao entrar no servidor, explica pra pessoa como abrir um ticket
@@ -1987,6 +1996,11 @@ async def on_message(message: discord.Message):
         print(f"[ranking-anjo] ERRO ao contar mensagem de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Ranking de Nível (XP) ───────────────────────────────────────────────
+    try:
+        await _processar_xp_mensagem(message)
+    except Exception as e:
+        print(f"[ranking-xp] ERRO ao processar XP de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
     # ── Anti-spam ─────────────────────────────────────────────────────────────
@@ -7308,6 +7322,10 @@ CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e re
 CANAL_LOGS_ANJO_ID        = 1290058994794106881  # canal de logs dos tickets de anjo
 CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
+
+# ── Sistema de XP / Ranking de Nível (estilo Lorrita) ───────────────────────
+CANAL_XP_ID = 1529543505267916942  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
+CARGO_XP_ID = 1290029716241256600  # cargo dos membros que participam do ranking de XP
 IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
 
 
@@ -8057,6 +8075,342 @@ async def cmd_ranking_debug(ctx):
 
 # Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_anjo_stats()
+
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════
+# RANKING DE NÍVEL / XP — estilo Lorrita
+# Todo membro com o cargo CARGO_XP_ID ganha XP ao mandar mensagem (com
+# cooldown pra evitar spam). O ranking geral fica sempre como a MESMA
+# mensagem no topo do canal CANAL_XP_ID (editada, nunca duplicada). Quando
+# alguém sobe de nível, uma nova mensagem de aviso aparece embaixo — e o
+# aviso de nível anterior dessa mesma pessoa é apagado, então só existe
+# sempre UM aviso de nível por pessoa, sempre o mais recente.
+# Guarda tudo em xp_ranking_data.json (mesma pasta persistente do Anjo) pra
+# sobreviver a reinícios.
+# ══════════════════════════════════════════════════════════════════════
+
+_XP_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "xp_ranking_data.json")
+
+# Configuração de ganho de XP — ajuste à vontade
+_XP_MIN_POR_MSG       = 15   # xp mínimo ganho por mensagem válida
+_XP_MAX_POR_MSG       = 25   # xp máximo ganho por mensagem válida
+_XP_COOLDOWN_SEGUNDOS = 60   # tempo mínimo entre ganhos de xp da mesma pessoa
+
+# xp_stats[user_id] = {"xp": int (total acumulado), "nivel": int, "level_message_id": int|None}
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None})
+_xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
+_xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
+_xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
+
+
+def _xp_necessario_para_nivel(nivel: int) -> int:
+    """Quanto de XP é necessário pra sair desse nível e ir pro próximo (curva estilo Lorrita/MEE6)."""
+    return 5 * (nivel ** 2) + 50 * nivel + 100
+
+
+def _calcular_nivel(xp_total: int):
+    """A partir do XP total acumulado, devolve (nivel_atual, xp_dentro_do_nivel_atual, xp_necessario_no_nivel_atual)."""
+    nivel = 0
+    restante = max(xp_total, 0)
+    while True:
+        necessario = _xp_necessario_para_nivel(nivel)
+        if restante < necessario:
+            return nivel, restante, necessario
+        restante -= necessario
+        nivel += 1
+
+
+def _barra_progresso(atual: int, necessario: int, tamanho: int = 10) -> str:
+    necessario = max(necessario, 1)
+    preenchido = max(0, min(tamanho, round((atual / necessario) * tamanho)))
+    return "🟪" * preenchido + "⬜" * (tamanho - preenchido)
+
+
+def _carregar_xp_stats() -> None:
+    """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
+    global _xp_ranking_message_id
+    if not os.path.exists(_XP_DATA_FILE):
+        return
+    try:
+        with open(_XP_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for uid_str, valores in dados.get("stats", {}).items():
+            xp_stats[int(uid_str)] = {
+                "xp":               valores.get("xp", 0),
+                "nivel":            valores.get("nivel", 0),
+                "level_message_id": valores.get("level_message_id"),
+            }
+        _xp_ranking_message_id = dados.get("ranking_message_id")
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_xp_stats() -> None:
+    """Salva estatísticas de XP em disco de forma atômica (escreve em .tmp e substitui)."""
+    dados = {
+        "stats": {str(uid): v for uid, v in xp_stats.items()},
+        "ranking_message_id": _xp_ranking_message_id,
+    }
+    tmp_path = _XP_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_ANJO_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _XP_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_xp_stats_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
+
+
+async def _anunciar_level_up(guild: discord.Guild, membro: discord.Member, nivel_novo: int) -> None:
+    """Manda o aviso de novo nível no canal de XP, apagando antes o aviso do nível
+    anterior dessa mesma pessoa (assim só existe sempre um aviso, o mais recente)."""
+    canal = guild.get_channel(CANAL_XP_ID)
+    if canal is None:
+        return
+
+    dados = xp_stats[membro.id]
+
+    antigo_id = dados.get("level_message_id")
+    if antigo_id:
+        try:
+            antiga = await canal.fetch_message(antigo_id)
+            await antiga.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    embed = discord.Embed(
+        title="⭐ Level Up!",
+        description=(
+            f"🎉 {membro.mention} subiu para o **nível {nivel_novo}**!\n\n"
+            "🌑 **Aeon:** *inclina a cabeça em reconhecimento* ...as sombras notaram seu progresso. 🖤🌑\n"
+            "🌟 **Celestia:** AAAAA PARABÉNS!! 😭🌟🤍✨ *explode em faíscas douradas* CONTINUE ASSIM!! 💫"
+        ),
+        color=0xf5c542,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_thumbnail(url=membro.display_avatar.url)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Nível")
+
+    try:
+        nova = await canal.send(embed=embed)
+        dados["level_message_id"] = nova.id
+    except discord.HTTPException:
+        pass
+
+
+async def _processar_xp_mensagem(message: discord.Message) -> None:
+    """Dá XP pra quem tem o cargo de XP (com cooldown) e cuida do level-up, se acontecer."""
+    if message.guild is None or message.author.bot:
+        return
+
+    cargo_xp = message.guild.get_role(CARGO_XP_ID)
+    if not cargo_xp or cargo_xp not in message.author.roles:
+        return
+
+    agora = time.time()
+    uid = message.author.id
+    ultimo = _xp_ultimo_ganho.get(uid, 0)
+    if agora - ultimo < _XP_COOLDOWN_SEGUNDOS:
+        return
+    _xp_ultimo_ganho[uid] = agora
+
+    ganho = random.randint(_XP_MIN_POR_MSG, _XP_MAX_POR_MSG)
+    dados = xp_stats[uid]
+    nivel_antigo = dados["nivel"]
+    dados["xp"] += ganho
+
+    nivel_novo, _, _ = _calcular_nivel(dados["xp"])
+    dados["nivel"] = nivel_novo
+
+    if nivel_novo > nivel_antigo:
+        await _anunciar_level_up(message.guild, message.author, nivel_novo)
+
+
+def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
+    cargo_xp = guild.get_role(CARGO_XP_ID)
+    membros_xp = cargo_xp.members if cargo_xp else []
+
+    linhas = []
+    for membro in membros_xp:
+        if membro.bot:
+            continue
+        dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0})
+        nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
+        linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario))
+
+    linhas.sort(key=lambda x: x[1], reverse=True)
+
+    medalhas = ["🥇", "🥈", "🥉"]
+    descricao_linhas = []
+    if linhas:
+        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario) in enumerate(linhas):
+            prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
+            barra = _barra_progresso(xp_no_nivel, xp_necessario)
+            descricao_linhas.append(
+                f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
+                f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)"
+            )
+    else:
+        descricao_linhas.append("*Nenhum membro com o cargo de XP encontrado no servidor.*")
+
+    embed = discord.Embed(
+        title="⭐ Ranking de Nível",
+        description="\n".join(descricao_linhas),
+        color=0xe8d5f5,
+        timestamp=discord.utils.utcnow()
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min")
+    return embed
+
+
+async def _limpar_duplicadas_e_achar_ranking_xp(canal: discord.TextChannel):
+    """Varre o histórico do canal, apaga rankings de XP duplicados antigos (deixando
+    só o mais recente) e devolve essa mensagem mais recente pra ser editada."""
+    mensagens_ranking = []
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == "⭐ Ranking de Nível":
+                mensagens_ranking.append(msg)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    if not mensagens_ranking:
+        return None
+
+    mais_recente, *duplicadas = mensagens_ranking
+    for dup in duplicadas:
+        try:
+            await dup.delete()
+        except discord.HTTPException:
+            pass
+    return mais_recente
+
+
+async def _atualizar_ranking_xp() -> None:
+    """Atualiza (ou cria, se ainda não existir) a mensagem de ranking de XP, sempre
+    editando a mesma mensagem (fica 'fixa' no topo, nunca duplica)."""
+    global _xp_ranking_message_id
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return
+
+    canal = guild.get_channel(CANAL_XP_ID)
+    if canal is None:
+        return
+
+    embed = _montar_embed_ranking_xp(guild)
+
+    mensagem = None
+    if _xp_ranking_message_id:
+        try:
+            mensagem = await canal.fetch_message(_xp_ranking_message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            mensagem = None
+
+    if mensagem is None:
+        mensagem = await _limpar_duplicadas_e_achar_ranking_xp(canal)
+
+    if mensagem:
+        try:
+            await mensagem.edit(embed=embed)
+            _xp_ranking_message_id = mensagem.id
+        except discord.HTTPException:
+            mensagem = None
+
+    if mensagem is None:
+        try:
+            nova = await canal.send(embed=embed)
+            _xp_ranking_message_id = nova.id
+        except discord.HTTPException:
+            return
+
+    await _salvar_xp_stats()
+
+
+@tasks.loop(minutes=1)
+async def loop_ranking_xp():
+    await _atualizar_ranking_xp()
+
+
+@bot.command(name="nivel")
+async def cmd_nivel(ctx, membro: discord.Member = None):
+    """Mostra o nível e XP de um membro (ou de quem usou o comando). Uso: .nivel [@membro]"""
+    if ctx.guild is None:
+        return
+
+    membro = membro or ctx.author
+    cargo_xp = ctx.guild.get_role(CARGO_XP_ID)
+    if not cargo_xp or cargo_xp not in membro.roles:
+        await ctx.send(f"⚠️ {membro.mention} não participa do ranking de nível (não tem o cargo necessário).")
+        return
+
+    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0})
+    nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
+    barra = _barra_progresso(xp_no_nivel, xp_necessario)
+
+    embed = discord.Embed(
+        title=f"⭐ Nível de {membro.display_name}",
+        description=(
+            f"**Nível:** `{nivel}`\n"
+            f"**Progresso:** {barra} `{xp_no_nivel}/{xp_necessario}`\n"
+            f"**XP total:** `{dados['xp']}`"
+        ),
+        color=0xe8d5f5
+    )
+    embed.set_thumbnail(url=membro.display_avatar.url)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Nível")
+    await ctx.send(embed=embed)
+
+
+@bot.command(name="xpdebug")
+async def cmd_xp_debug(ctx):
+    """Mostra dados brutos do ranking de XP pra diagnosticar problemas. Só o dono do bot pode usar."""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        await ctx.send("⚠️ Bot não está em nenhum servidor.")
+        return
+
+    cargo_xp = guild.get_role(CARGO_XP_ID)
+    canal_xp = guild.get_channel(CANAL_XP_ID)
+
+    linhas = [
+        f"**Cargo de XP encontrado:** {'✅ sim' if cargo_xp else '❌ NÃO — verifique o ID do cargo'}",
+        f"**Membros com o cargo:** {len(cargo_xp.members) if cargo_xp else 0}",
+        f"**Canal de XP encontrado:** {'✅ sim' if canal_xp else '❌ NÃO — verifique o ID do canal'}",
+        f"**ID da mensagem de ranking salva:** `{_xp_ranking_message_id}`",
+        f"**Entradas em xp_stats (memória):** {len(xp_stats)}",
+        f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_XP_DATA_FILE) else '❌ não'}",
+        "",
+        "**Conteúdo bruto de xp_stats:**",
+    ]
+    if xp_stats:
+        for uid, s in xp_stats.items():
+            membro = guild.get_member(uid)
+            nome = membro.display_name if membro else f"<@{uid}>"
+            linhas.append(f"`{uid}` ({nome}) — {s}")
+    else:
+        linhas.append("*vazio — nenhuma mensagem foi registrada ainda em memória*")
+
+    texto = "\n".join(linhas)
+    if len(texto) > 1900:
+        texto = texto[:1900] + "\n... (cortado)"
+    await ctx.send(f"🔍 **Diagnóstico do Ranking de XP**\n{texto}")
+
+
+# Carrega o histórico de XP salvo assim que o módulo sobe — antes mesmo de conectar no Discord
+_carregar_xp_stats()
 
 # ══════════════════════════════════════════════════════════════════════
 

@@ -1780,6 +1780,9 @@ async def on_ready():
 
     if not loop_ranking_xp.is_running():
         loop_ranking_xp.start()
+
+    # Registra o menu de escolha de cor como view persistente (sobrevive a reinícios)
+    bot.add_view(CorQuadradoView())
     # ─────────────────────────────────────────────────────────────────────
 
 @bot.event
@@ -8119,13 +8122,38 @@ _XP_CANAIS_RANKING = {_XP_CANAL_1, _XP_CANAL_BONUS, _XP_CANAL_3}
 _XP_MULTIPLICADOR_BONUS  = 1.6    # canal bônus: 60% a mais de xp por mensagem
 _XP_MULTIPLICADOR_OUTROS = 0.35   # qualquer outro canal do servidor: bem menos xp (35% do normal)
 
+# ── Personalização de cor do quadradinho no ranking ─────────────────────────
+# Cada pessoa pode escolher a cor do próprio "quadradinho" (o quadrado que
+# se preenche na barra de progresso) através do menu que fica abaixo do
+# ranking fixo. A cor da parte vazia da barra continua sempre branca.
+_COR_PADRAO = "roxo"
+_CORES_QUADRADO = {
+    "roxo":     {"emoji": "🟪", "label": "Roxo (padrão)"},
+    "azul":     {"emoji": "🟦", "label": "Azul"},
+    "vermelho": {"emoji": "🟥", "label": "Vermelho"},
+    "verde":    {"emoji": "🟩", "label": "Verde"},
+    "amarelo":  {"emoji": "🟨", "label": "Amarelo"},
+    "laranja":  {"emoji": "🟧", "label": "Laranja"},
+    "marrom":   {"emoji": "🟫", "label": "Marrom"},
+    "preto":    {"emoji": "⬛", "label": "Preto"},
+}
+
+
+def _emoji_da_cor(chave: str) -> str:
+    """Devolve o emoji do quadradinho preenchido para a cor escolhida
+    (ou a cor padrão, se a chave for inválida/desconhecida)."""
+    return _CORES_QUADRADO.get(chave, _CORES_QUADRADO[_COR_PADRAO])["emoji"]
+
+
 # xp_stats[user_id] = {
 #     "xp": int (total acumulado), "nivel": int, "level_message_id": int|None,
 #     "elegivel": bool (já mandou mensagem em algum dos 3 canais de _XP_CANAIS_RANKING?),
+#     "cor": str (chave em _CORES_QUADRADO — cor escolhida pra o próprio quadradinho),
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
+_xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
 
 
@@ -8146,15 +8174,15 @@ def _calcular_nivel(xp_total: int):
         nivel += 1
 
 
-def _barra_progresso(atual: int, necessario: int, tamanho: int = 10) -> str:
+def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: str = "🟪") -> str:
     necessario = max(necessario, 1)
     preenchido = max(0, min(tamanho, round((atual / necessario) * tamanho)))
-    return "🟪" * preenchido + "⬜" * (tamanho - preenchido)
+    return cor_emoji * preenchido + "⬜" * (tamanho - preenchido)
 
 
 def _carregar_xp_stats() -> None:
     """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
-    global _xp_ranking_message_id
+    global _xp_ranking_message_id, _xp_cor_message_id
     if not os.path.exists(_XP_DATA_FILE):
         return
     try:
@@ -8166,8 +8194,10 @@ def _carregar_xp_stats() -> None:
                 "nivel":            valores.get("nivel", 0),
                 "level_message_id": valores.get("level_message_id"),
                 "elegivel":         valores.get("elegivel", False),
+                "cor":              valores.get("cor", _COR_PADRAO),
             }
         _xp_ranking_message_id = dados.get("ranking_message_id")
+        _xp_cor_message_id = dados.get("cor_message_id")
     except (json.JSONDecodeError, OSError, ValueError):
         pass
 
@@ -8177,6 +8207,7 @@ async def _salvar_xp_stats() -> None:
     dados = {
         "stats": {str(uid): v for uid, v in xp_stats.items()},
         "ranking_message_id": _xp_ranking_message_id,
+        "cor_message_id": _xp_cor_message_id,
     }
     tmp_path = _XP_DATA_FILE + ".tmp"
 
@@ -8319,16 +8350,17 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
         if not dados.get("elegivel"):
             continue
         nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
-        linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario))
+        cor_emoji = _emoji_da_cor(dados.get("cor", _COR_PADRAO))
+        linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario, cor_emoji))
 
     linhas.sort(key=lambda x: x[1], reverse=True)
 
     medalhas = ["🥇", "🥈", "🥉"]
     descricao_linhas = []
     if linhas:
-        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario) in enumerate(linhas):
+        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji) in enumerate(linhas):
             prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
-            barra = _barra_progresso(xp_no_nivel, xp_necessario)
+            barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=cor_emoji)
             descricao_linhas.append(
                 f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
                 f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)"
@@ -8346,7 +8378,7 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
         color=0xe8d5f5,
         timestamp=discord.utils.utcnow()
     )
-    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min")
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min • 🎨 personalize seu quadradinho no menu abaixo!")
     return embed
 
 
@@ -8371,6 +8403,145 @@ async def _limpar_duplicadas_e_achar_ranking_xp(canal: discord.TextChannel):
         except discord.HTTPException:
             pass
     return mais_recente
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Menu de personalização — escolha da cor do quadradinho no ranking
+# Fica numa mensagem fixa logo abaixo do ranking. Cada pessoa escolhe a
+# própria cor no menu (dropdown) e a mudança já vale pra próxima vez que
+# o ranking for atualizado (no máximo 1 min, ou na hora, se possível).
+# ══════════════════════════════════════════════════════════════════════
+
+_XP_COR_TITULO = "🎨 Personalize seu quadradinho!"
+
+
+class CorQuadradoSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label=info["label"],
+                value=chave,
+                emoji=info["emoji"],
+                default=(chave == _COR_PADRAO),
+            )
+            for chave, info in _CORES_QUADRADO.items()
+        ]
+        super().__init__(
+            placeholder="🎨 Escolha a cor do seu quadradinho...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="xp_cor_quadrado_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        cor_escolhida = self.values[0]
+        info = _CORES_QUADRADO.get(cor_escolhida)
+        if info is None:
+            await interaction.response.send_message(
+                "⚠️ Cor inválida, tenta de novo.", ephemeral=True
+            )
+            return
+
+        dados = xp_stats[interaction.user.id]
+        dados["cor"] = cor_escolhida
+        asyncio.create_task(_salvar_xp_stats())
+
+        await interaction.response.send_message(
+            f"{info['emoji']} Combinado! Seu quadradinho no ranking agora é **{info['label']}**. "
+            "🌑 **Aeon:** ...as sombras registraram sua escolha. 🌟 **Celestia:** FICOU LINDO!! ✨",
+            ephemeral=True,
+        )
+
+        # Tenta atualizar o ranking na hora, pra pessoa já ver a cor nova
+        # sem precisar esperar o próximo ciclo automático (até 1 min).
+        try:
+            await _atualizar_ranking_xp()
+        except Exception as e:
+            print(f"[ranking-xp] ERRO ao atualizar ranking após troca de cor: {e!r}")
+
+
+class CorQuadradoView(discord.ui.View):
+    """View persistente com o menu de escolha de cor — sobrevive a reinícios do bot."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(CorQuadradoSelect())
+
+
+def _montar_embed_pergunta_cor() -> discord.Embed:
+    embed = discord.Embed(
+        title=_XP_COR_TITULO,
+        description=(
+            "🌟 **Celestia:** Psiu!! Quer que o seu quadradinho no ranking tenha "
+            "uma cor diferente?? 😆🌈✨ *aponta pro menu com empolgação*\n"
+            "🌑 **Aeon:** ...escolha no menu abaixo. A cor é só sua — ninguém mais mexe nela. 🖤🌑\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎨 Selecione uma cor no menu para personalizar seu quadradinho.\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ),
+        color=0xe8d5f5,
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Personalização do Ranking")
+    return embed
+
+
+async def _achar_mensagem_cor_xp(canal: discord.TextChannel):
+    """Varre o histórico do canal, apaga mensagens de escolha de cor duplicadas
+    antigas (deixando só a mais recente) e devolve essa mensagem pra ser editada."""
+    mensagens = []
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == _XP_COR_TITULO:
+                mensagens.append(msg)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    if not mensagens:
+        return None
+
+    mais_recente, *duplicadas = mensagens
+    for dup in duplicadas:
+        try:
+            await dup.delete()
+        except discord.HTTPException:
+            pass
+    return mais_recente
+
+
+async def _atualizar_pergunta_cor(canal: discord.TextChannel) -> None:
+    """Garante que a mensagem com o menu de escolha de cor fique sempre logo
+    abaixo do ranking (fixa, editada, nunca duplicada)."""
+    global _xp_cor_message_id
+
+    embed = _montar_embed_pergunta_cor()
+    view = CorQuadradoView()
+
+    mensagem = None
+    if _xp_cor_message_id:
+        try:
+            mensagem = await canal.fetch_message(_xp_cor_message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            mensagem = None
+
+    if mensagem is None:
+        mensagem = await _achar_mensagem_cor_xp(canal)
+
+    if mensagem:
+        try:
+            await mensagem.edit(embed=embed, view=view)
+            _xp_cor_message_id = mensagem.id
+            return
+        except discord.HTTPException as e:
+            print(f"[ranking-xp] ERRO ao editar mensagem de escolha de cor: {e!r}")
+            mensagem = None
+
+    try:
+        nova = await canal.send(embed=embed, view=view)
+        _xp_cor_message_id = nova.id
+        print(f"[ranking-xp] Mensagem de escolha de cor criada em #{canal.name} (id {nova.id}).")
+    except discord.HTTPException as e:
+        print(f"[ranking-xp] ERRO ao enviar mensagem de escolha de cor em #{canal.name}: {e!r}")
 
 
 async def _atualizar_ranking_xp() -> None:
@@ -8419,6 +8590,12 @@ async def _atualizar_ranking_xp() -> None:
         except discord.HTTPException as e:
             print(f"[ranking-xp] ERRO ao enviar mensagem de ranking em #{canal.name}: {e!r}")
             return
+
+    # Mantém o menu de escolha de cor sempre fixo logo abaixo do ranking
+    try:
+        await _atualizar_pergunta_cor(canal)
+    except Exception as e:
+        print(f"[ranking-xp] ERRO ao atualizar mensagem de escolha de cor: {e!r}")
 
     await _salvar_xp_stats()
 
@@ -8474,9 +8651,9 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
         await ctx.send(f"⚠️ {membro.mention} não participa do ranking de nível (não tem o cargo necessário).")
         return
 
-    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False})
+    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False, "cor": _COR_PADRAO})
     nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
-    barra = _barra_progresso(xp_no_nivel, xp_necessario)
+    barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=_emoji_da_cor(dados.get("cor", _COR_PADRAO)))
 
     status_ranking = (
         "✅ Aparece no ranking fixo"

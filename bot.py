@@ -8198,7 +8198,7 @@ def _emoji_da_cor(chave: str) -> str:
 # }
 xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": []})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
-_xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
+_xp_ranking_message_ids: list = []  # IDs das mensagens de ranking já postadas, em ordem (página 1, página 2...). Editadas, nunca duplicadas — só ganha mais páginas se a lista passar do limite de caracteres de 1 embed.
 _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
 _xp_batalha_info_message_id = None  # ID da mensagem explicando as batalhas (fica logo abaixo da de cor)
 _xp_enciclopedia_message_id = None  # ID da mensagem da Enciclopédia de Criaturas (fica por último, embaixo de tudo)
@@ -8230,7 +8230,7 @@ def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: 
 
 def _carregar_xp_stats() -> None:
     """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
-    global _xp_ranking_message_id, _xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id
+    global _xp_ranking_message_ids, _xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id
     if not os.path.exists(_XP_DATA_FILE):
         return
     try:
@@ -8247,7 +8247,15 @@ def _carregar_xp_stats() -> None:
                 "derrotas":         valores.get("derrotas", 0),
                 "criaturas":        valores.get("criaturas", []),
             }
-        _xp_ranking_message_id = dados.get("ranking_message_id")
+        # Compatibilidade: versões antigas salvavam só "ranking_message_id"
+        # (uma mensagem só). Versões novas salvam "ranking_message_ids" (lista,
+        # uma por página). Aceita as duas pra não perder o histórico salvo.
+        ids_novos = dados.get("ranking_message_ids")
+        if ids_novos is not None:
+            _xp_ranking_message_ids = [i for i in ids_novos if i]
+        else:
+            id_antigo = dados.get("ranking_message_id")
+            _xp_ranking_message_ids = [id_antigo] if id_antigo else []
         _xp_cor_message_id = dados.get("cor_message_id")
         _xp_batalha_info_message_id = dados.get("batalha_info_message_id")
         _xp_enciclopedia_message_id = dados.get("enciclopedia_message_id")
@@ -8259,7 +8267,7 @@ async def _salvar_xp_stats() -> None:
     """Salva estatísticas de XP em disco de forma atômica (escreve em .tmp e substitui)."""
     dados = {
         "stats": {str(uid): v for uid, v in xp_stats.items()},
-        "ranking_message_id": _xp_ranking_message_id,
+        "ranking_message_ids": _xp_ranking_message_ids,
         "cor_message_id": _xp_cor_message_id,
         "batalha_info_message_id": _xp_batalha_info_message_id,
         "enciclopedia_message_id": _xp_enciclopedia_message_id,
@@ -8389,14 +8397,22 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
     asyncio.create_task(_salvar_xp_stats())
 
 
-def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
-    # ⚠️ Destravado: não depende mais de cargo. A ÚNICA condição pra entrar
-    # no ranking é ter mandado UMA mensagem em pelo menos um dos canais
-    # elegíveis (_XP_CANAIS_RANKING, que inclui o chat geral em _XP_CANAL_1)
-    # — a partir daí a pessoa JÁ aparece aqui na hora, mesmo ainda no Nível 0
-    # com pouco ou nenhum XP. Sem limite de posições: aparece todo mundo que
-    # se qualificar, não só um "top N". Só precisa ainda estar no servidor
-    # (quem sai é removido de xp_stats pelo on_member_remove).
+def _montar_embeds_ranking_xp(guild: discord.Guild) -> list:
+    """Monta o ranking de XP como uma LISTA de embeds. Normalmente é só 1
+    embed, mas se a lista de gente elegível ficar grande demais pra caber
+    no limite de caracteres de um único embed do Discord, quebra sozinho em
+    várias páginas — cada página vira sua própria mensagem, sempre nessa
+    ordem, uma embaixo da outra, logo abaixo da página 1 (e antes do menu de
+    cor / info de batalha / enciclopédia).
+
+    ⚠️ Destravado: não depende mais de cargo. A ÚNICA condição pra entrar
+    no ranking é ter mandado UMA mensagem em pelo menos um dos canais
+    elegíveis (_XP_CANAIS_RANKING, que inclui o chat geral em _XP_CANAL_1)
+    — a partir daí a pessoa JÁ aparece aqui na hora, mesmo ainda no Nível 0
+    com pouco ou nenhum XP. Sem limite de posições: aparece todo mundo que
+    se qualificar, não só um "top N". Só precisa ainda estar no servidor
+    (quem sai é removido de xp_stats pelo on_member_remove).
+    """
     linhas = []
     for uid, dados in xp_stats.items():
         if not dados.get("elegivel"):
@@ -8414,71 +8430,105 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
     # é resolvido por nome, pra ordem ficar estável entre atualizações.
     linhas.sort(key=lambda x: (-x[1], x[0].display_name.lower()))
 
-    medalhas = ["🥇", "🥈", "🥉"]
-    descricao_linhas = []
+    RODAPE_PADRAO = "🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min • 🎨 personalize seu quadradinho no menu abaixo!"
+
+    if not linhas:
+        embed = discord.Embed(
+            title="⭐ Ranking de Nível",
+            description=(
+                "*Ninguém entrou no ranking ainda — mande uma mensagem em "
+                f"<#{_XP_CANAL_1}>, <#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}> "
+                "pra começar a aparecer aqui!* 💬"
+            ),
+            color=0xe8d5f5,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed.set_footer(text=RODAPE_PADRAO)
+        return [embed]
+
     LIMITE_DESCRICAO = 3900  # margem de segurança abaixo do limite real (4096) do Discord
     total = len(linhas)
-    if linhas:
-        largura_rank = max(2, len(str(total)))
-        tamanho_acumulado = 0
-        mostrados = 0
-        for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas) in enumerate(linhas):
-            prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>{largura_rank}}`"
-            barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=cor_emoji)
-            linha = (
-                f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
-                f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)\n"
-                f"┗ ⚔️ Vitórias: `{vitorias}` | Derrotas: `{derrotas}`"
-            )
-            if tamanho_acumulado + len(linha) + 1 > LIMITE_DESCRICAO:
-                break
-            descricao_linhas.append(linha)
-            tamanho_acumulado += len(linha) + 1
-            mostrados += 1
+    largura_rank = max(2, len(str(total)))
+    medalhas = ["🥇", "🥈", "🥉"]
 
-        if mostrados < total:
-            descricao_linhas.append(
-                f"\n*...e mais `{total - mostrados}` pessoa(s) no ranking — a lista "
-                "ficou grande demais pra caber numa única mensagem!* 📜"
-            )
-    else:
-        descricao_linhas.append(
-            "*Ninguém entrou no ranking ainda — mande uma mensagem em "
-            f"<#{_XP_CANAL_1}>, <#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}> "
-            "pra começar a aparecer aqui!* 💬"
+    # Quebra as linhas em páginas: cada página só recebe mais uma linha se
+    # ainda couber dentro do limite de caracteres — senão abre página nova.
+    paginas_linhas = [[]]
+    tamanho_atual = 0
+    for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas) in enumerate(linhas):
+        prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>{largura_rank}}`"
+        barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=cor_emoji)
+        linha = (
+            f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
+            f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)\n"
+            f"┗ ⚔️ Vitórias: `{vitorias}` | Derrotas: `{derrotas}`"
         )
+        if tamanho_atual + len(linha) + 1 > LIMITE_DESCRICAO and paginas_linhas[-1]:
+            paginas_linhas.append([])
+            tamanho_atual = 0
+        paginas_linhas[-1].append(linha)
+        tamanho_atual += len(linha) + 1
 
-    embed = discord.Embed(
-        title="⭐ Ranking de Nível",
-        description="\n".join(descricao_linhas),
-        color=0xe8d5f5,
-        timestamp=discord.utils.utcnow()
-    )
-    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min • 🎨 personalize seu quadradinho no menu abaixo!")
-    return embed
+    total_paginas = len(paginas_linhas)
+    embeds = []
+    for idx, linhas_pagina in enumerate(paginas_linhas):
+        titulo = "⭐ Ranking de Nível" if idx == 0 else f"⭐ Ranking de Nível — Parte {idx + 1}"
+        embed = discord.Embed(
+            title=titulo,
+            description="\n".join(linhas_pagina),
+            color=0xe8d5f5,
+            timestamp=discord.utils.utcnow(),
+        )
+        if total_paginas > 1:
+            embed.set_footer(
+                text=f"🌑 Aeon & ☀️ Celestia — página {idx + 1}/{total_paginas} • atualizado automaticamente a cada 1 min"
+            )
+        else:
+            embed.set_footer(text=RODAPE_PADRAO)
+        embeds.append(embed)
+
+    return embeds
 
 
-async def _limpar_duplicadas_e_achar_ranking_xp(canal: discord.TextChannel):
-    """Varre o histórico do canal, apaga rankings de XP duplicados antigos (deixando
-    só o mais recente) e devolve essa mensagem mais recente pra ser editada."""
-    mensagens_ranking = []
+async def _achar_mensagens_ranking_xp(canal: discord.TextChannel) -> list:
+    """Varre o histórico do canal procurando TODAS as páginas do ranking já
+    postadas pelo bot (pode ser 1 ou várias) e devolve na ordem em que
+    aparecem no canal — a mais antiga primeiro, que é sempre a página 1."""
+    encontradas = []
     try:
         async for msg in canal.history(limit=50):
-            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == "⭐ Ranking de Nível":
-                mensagens_ranking.append(msg)
+            if (
+                msg.author.id == bot.user.id
+                and msg.embeds
+                and (msg.embeds[0].title or "").startswith("⭐ Ranking de Nível")
+            ):
+                encontradas.append(msg)
     except (discord.Forbidden, discord.HTTPException):
-        return None
+        return []
+    encontradas.sort(key=lambda m: m.created_at)
+    return encontradas
 
-    if not mensagens_ranking:
-        return None
 
-    mais_recente, *duplicadas = mensagens_ranking
-    for dup in duplicadas:
+async def _apagar_mensagens_fixas_abaixo_do_ranking(canal: discord.TextChannel) -> None:
+    """Quando o número de páginas do ranking muda (cresce ou diminui), as
+    mensagens fixas que ficam abaixo dele (cor, info de batalha, enciclopédia)
+    precisam ser apagadas e recriadas no final — senão ficam "presas" entre
+    as páginas do ranking, fora de ordem."""
+    global _xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id
+
+    for msg_id in (_xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id):
+        if not msg_id:
+            continue
         try:
-            await dup.delete()
-        except discord.HTTPException:
+            msg = await canal.fetch_message(msg_id)
+            await msg.delete()
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             pass
-    return mais_recente
+
+    _xp_cor_message_id = None
+    _xp_batalha_info_message_id = None
+    _xp_enciclopedia_message_id = None
+
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -8881,9 +8931,13 @@ async def _atualizar_enciclopedia(canal: discord.TextChannel) -> None:
 
 
 async def _atualizar_ranking_xp() -> None:
-    """Atualiza (ou cria, se ainda não existir) a mensagem de ranking de XP, sempre
-    editando a mesma mensagem (fica 'fixa' no topo, nunca duplica)."""
-    global _xp_ranking_message_id
+    """Atualiza (ou cria, se ainda não existir) as mensagens de ranking de XP.
+    Normalmente é só 1 mensagem, sempre editada (fixa no topo, nunca
+    duplica). Se a lista de gente elegível crescer demais pra caber num
+    único embed, cria automaticamente páginas extras — mensagens separadas,
+    uma embaixo da outra, sempre logo abaixo da página 1 e antes do menu de
+    cor / info de batalha / enciclopédia."""
+    global _xp_ranking_message_ids
 
     guild = bot.guilds[0] if bot.guilds else None
     if guild is None:
@@ -8898,34 +8952,60 @@ async def _atualizar_ranking_xp() -> None:
         )
         return
 
-    embed = _montar_embed_ranking_xp(guild)
+    embeds_novos = _montar_embeds_ranking_xp(guild)
+    n_paginas = len(embeds_novos)
 
-    mensagem = None
-    if _xp_ranking_message_id:
+    # Tenta reaproveitar as mensagens de página já salvas (na ordem certa).
+    mensagens = []
+    for msg_id in _xp_ranking_message_ids:
         try:
-            mensagem = await canal.fetch_message(_xp_ranking_message_id)
+            mensagens.append(await canal.fetch_message(msg_id))
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            mensagem = None
+            mensagens.append(None)
+    mensagens = [m for m in mensagens if m is not None]
 
-    if mensagem is None:
-        mensagem = await _limpar_duplicadas_e_achar_ranking_xp(canal)
+    # Se não sobrou nada salvo (primeira vez, ou perdeu tudo), procura no histórico.
+    if not mensagens:
+        mensagens = await _achar_mensagens_ranking_xp(canal)
 
-    if mensagem:
-        try:
-            await mensagem.edit(embed=embed)
-            _xp_ranking_message_id = mensagem.id
-        except discord.HTTPException as e:
-            print(f"[ranking-xp] ERRO ao editar mensagem de ranking: {e!r}")
-            mensagem = None
+    if len(mensagens) == n_paginas:
+        # Mesmo número de páginas de antes — só edita cada uma no lugar, sem apagar nada.
+        novos_ids = []
+        falhou = False
+        for msg, embed in zip(mensagens, embeds_novos):
+            try:
+                await msg.edit(embed=embed)
+                novos_ids.append(msg.id)
+            except discord.HTTPException as e:
+                print(f"[ranking-xp] ERRO ao editar página do ranking: {e!r}")
+                falhou = True
+                break
+        if not falhou:
+            _xp_ranking_message_ids = novos_ids
+        else:
+            mensagens = []  # cai pro reflow completo abaixo
 
-    if mensagem is None:
-        try:
-            nova = await canal.send(embed=embed)
-            _xp_ranking_message_id = nova.id
-            print(f"[ranking-xp] Mensagem de ranking criada em #{canal.name} (id {nova.id}).")
-        except discord.HTTPException as e:
-            print(f"[ranking-xp] ERRO ao enviar mensagem de ranking em #{canal.name}: {e!r}")
-            return
+    if len(mensagens) != n_paginas:
+        # Número de páginas mudou (cresceu ou diminuiu) — apaga as páginas
+        # antigas e as mensagens fixas de baixo, manda tudo de novo na ordem
+        # certa: página 1, página 2 (se houver), ..., cor, batalha, enciclopédia.
+        for msg in mensagens:
+            try:
+                await msg.delete()
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+
+        await _apagar_mensagens_fixas_abaixo_do_ranking(canal)
+
+        novos_ids = []
+        for embed in embeds_novos:
+            try:
+                nova = await canal.send(embed=embed)
+                novos_ids.append(nova.id)
+            except discord.HTTPException as e:
+                print(f"[ranking-xp] ERRO ao enviar página do ranking em #{canal.name}: {e!r}")
+        _xp_ranking_message_ids = novos_ids
+        print(f"[ranking-xp] Ranking reorganizado em #{canal.name}: {n_paginas} página(s).")
 
     # Mantém o menu de escolha de cor sempre fixo logo abaixo do ranking
     try:
@@ -9035,7 +9115,7 @@ async def cmd_xp_debug(ctx):
         f"**Cargo de XP encontrado:** {'✅ sim' if cargo_xp else '❌ NÃO — verifique o ID do cargo'}",
         f"**Membros com o cargo:** {len(cargo_xp.members) if cargo_xp else 0}",
         f"**Canal de XP encontrado:** {'✅ sim' if canal_xp else '❌ NÃO — verifique o ID do canal'}",
-        f"**ID da mensagem de ranking salva:** `{_xp_ranking_message_id}`",
+        f"**IDs das páginas de ranking salvas:** `{_xp_ranking_message_ids}`",
         f"**Entradas em xp_stats (memória):** {len(xp_stats)}",
         f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_XP_DATA_FILE) else '❌ não'}",
         "",

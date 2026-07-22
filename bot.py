@@ -1783,6 +1783,9 @@ async def on_ready():
 
     # Registra o menu de escolha de cor como view persistente (sobrevive a reinícios)
     bot.add_view(CorQuadradoView())
+
+    # Registra o menu da Enciclopédia de Criaturas como view persistente (sobrevive a reinícios)
+    bot.add_view(EnciclopediaView())
     # ─────────────────────────────────────────────────────────────────────
 
 @bot.event
@@ -8157,12 +8160,14 @@ def _emoji_da_cor(chave: str) -> str:
 #     "elegivel": bool (já mandou mensagem em algum dos 3 canais de _XP_CANAIS_RANKING?),
 #     "cor": str (chave em _CORES_QUADRADO — cor escolhida pra o próprio quadradinho),
 #     "vitorias": int (vitórias na Arena de Batalhas), "derrotas": int (derrotas na Arena de Batalhas),
+#     "criaturas": list[str] (ids das criaturas já desbloqueadas na Enciclopédia, vencendo batalhas com elas),
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": []})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
 _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fica logo abaixo do ranking)
 _xp_batalha_info_message_id = None  # ID da mensagem explicando as batalhas (fica logo abaixo da de cor)
+_xp_enciclopedia_message_id = None  # ID da mensagem da Enciclopédia de Criaturas (fica por último, embaixo de tudo)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
 
 
@@ -8191,7 +8196,7 @@ def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: 
 
 def _carregar_xp_stats() -> None:
     """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
-    global _xp_ranking_message_id, _xp_cor_message_id, _xp_batalha_info_message_id
+    global _xp_ranking_message_id, _xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id
     if not os.path.exists(_XP_DATA_FILE):
         return
     try:
@@ -8206,10 +8211,12 @@ def _carregar_xp_stats() -> None:
                 "cor":              valores.get("cor", _COR_PADRAO),
                 "vitorias":         valores.get("vitorias", 0),
                 "derrotas":         valores.get("derrotas", 0),
+                "criaturas":        valores.get("criaturas", []),
             }
         _xp_ranking_message_id = dados.get("ranking_message_id")
         _xp_cor_message_id = dados.get("cor_message_id")
         _xp_batalha_info_message_id = dados.get("batalha_info_message_id")
+        _xp_enciclopedia_message_id = dados.get("enciclopedia_message_id")
     except (json.JSONDecodeError, OSError, ValueError):
         pass
 
@@ -8221,6 +8228,7 @@ async def _salvar_xp_stats() -> None:
         "ranking_message_id": _xp_ranking_message_id,
         "cor_message_id": _xp_cor_message_id,
         "batalha_info_message_id": _xp_batalha_info_message_id,
+        "enciclopedia_message_id": _xp_enciclopedia_message_id,
     }
     tmp_path = _XP_DATA_FILE + ".tmp"
 
@@ -8587,7 +8595,12 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"`{_BATALHA_ROUBO_MIN * 100:.0f}%` e `{_BATALHA_ROUBO_MAX * 100:.0f}%`. "
             f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
-            "**4️⃣ Pra poder batalhar**\n"
+            "**4️⃣ Desbloqueando criaturas**\n"
+            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico ou 🟡 Lendário — e quanto mais "
+            "rara, menos ela costuma aparecer no sorteio. Quem **vence** a batalha destrava a criatura que "
+            "invocou pra sua coleção pra sempre; quem perde não leva essa criatura. Veja a lista completa "
+            "na 📖 **Enciclopédia** (mensagem fixa aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
+            "**5️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -8657,6 +8670,164 @@ async def _atualizar_info_batalha(canal: discord.TextChannel) -> None:
         print(f"[ranking-xp] ERRO ao enviar mensagem de explicação de batalha em #{canal.name}: {e!r}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# ENCICLOPÉDIA DE CRIATURAS — fica por ÚLTIMO no canal de ranking, embaixo
+# de tudo (ranking, cor e explicação de batalha). Lista todas as criaturas
+# que existem, agrupadas por raridade. Cada pessoa pode usar o menu de
+# seleção pra ver os detalhes (imagem) de uma criatura e conferir, de forma
+# privada (ephemeral), se ELA MESMA já desbloqueou aquela criatura ou não.
+# ══════════════════════════════════════════════════════════════════════
+
+_XP_ENCICLOPEDIA_TITULO = "📖 Enciclopédia de Criaturas"
+
+
+def _montar_embed_enciclopedia() -> discord.Embed:
+    """Monta o embed geral da Enciclopédia: todas as criaturas existentes,
+    agrupadas por raridade (da mais rara pra mais comum)."""
+    embed = discord.Embed(
+        title=_XP_ENCICLOPEDIA_TITULO,
+        description=(
+            "🌟 **Celestia:** Toda criatura que já apareceu (ou pode aparecer) na Arena de "
+            "Batalhas mora aqui!! 😆📖✨\n"
+            "🌑 **Aeon:** ...vença uma batalha invocando uma criatura pra desbloqueá-la de vez "
+            "na sua coleção. Quem perde não a leva. 🖤🌑\n\n"
+            "👇 Use o menu abaixo pra ver os detalhes (e a imagem) de cada uma, e conferir "
+            "**só pra você** se já desbloqueou ou não."
+        ),
+        color=0x9b59b6,
+    )
+    for raridade in _ORDEM_RARIDADES:
+        info = _RARIDADES[raridade]
+        nomes = [c["nome"] for c in _BATALHA_CRIATURAS if c["raridade"] == raridade]
+        if not nomes:
+            continue
+        embed.add_field(
+            name=f"{info['emoji']} {info['label']} ({len(nomes)})",
+            value="\n".join(f"• {nome}" for nome in nomes),
+            inline=False,
+        )
+    embed.set_footer(text=f"🌑 Aeon & ☀️ Celestia — {len(_BATALHA_CRIATURAS)} criaturas ao todo")
+    return embed
+
+
+class EnciclopediaSelect(discord.ui.Select):
+    """Menu de seleção com todas as criaturas. Ao escolher uma, a pessoa recebe
+    (de forma privada) a imagem, a raridade e se JÁ desbloqueou aquela criatura."""
+
+    def __init__(self):
+        options = [
+            discord.SelectOption(
+                label=c["nome"][:100],
+                value=c["id"],
+                description=_RARIDADES[c["raridade"]]["label"],
+                emoji=_RARIDADES[c["raridade"]]["emoji"],
+            )
+            for c in _BATALHA_CRIATURAS
+        ]
+        super().__init__(
+            placeholder="📖 Escolha uma criatura para ver os detalhes...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="enciclopedia_criaturas_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        criatura = next((c for c in _BATALHA_CRIATURAS if c["id"] == self.values[0]), None)
+        if criatura is None:
+            await interaction.response.send_message("⚠️ Criatura não encontrada.", ephemeral=True)
+            return
+
+        dados = xp_stats[interaction.user.id]
+        desbloqueada = criatura["id"] in dados.get("criaturas", [])
+        info_raridade = _RARIDADES[criatura["raridade"]]
+
+        if desbloqueada:
+            status = "🔓 **Você já desbloqueou essa criatura!** Ela pode aparecer nas suas batalhas."
+        else:
+            status = (
+                "🔒 **Você ainda não desbloqueou essa criatura.** "
+                "Vença uma batalha enquanto ela for a invocada pra destravá-la!"
+            )
+
+        embed = discord.Embed(
+            title=f"{info_raridade['emoji']} {criatura['nome']}",
+            description=f"**Raridade:** {info_raridade['label']}\n\n{status}",
+            color=info_raridade["cor"],
+        )
+        embed.set_image(url=criatura["gif"])
+        embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Enciclopédia de Criaturas")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class EnciclopediaView(discord.ui.View):
+    """View persistente (sobrevive a reinícios do bot) com o menu de seleção
+    de criaturas da Enciclopédia."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(EnciclopediaSelect())
+
+
+async def _achar_mensagem_enciclopedia(canal: discord.TextChannel):
+    """Varre o histórico do canal, apaga Enciclopédias duplicadas antigas
+    (deixando só a mais recente) e devolve essa mensagem pra ser editada."""
+    mensagens = []
+    try:
+        async for msg in canal.history(limit=50):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == _XP_ENCICLOPEDIA_TITULO:
+                mensagens.append(msg)
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    if not mensagens:
+        return None
+
+    mais_recente, *duplicadas = mensagens
+    for dup in duplicadas:
+        try:
+            await dup.delete()
+        except discord.HTTPException:
+            pass
+    return mais_recente
+
+
+async def _atualizar_enciclopedia(canal: discord.TextChannel) -> None:
+    """Garante que a Enciclopédia fique sempre por ÚLTIMO no canal (fixa,
+    editada, nunca duplicada), embaixo do ranking, da cor e da explicação
+    de batalha."""
+    global _xp_enciclopedia_message_id
+
+    embed = _montar_embed_enciclopedia()
+    view = EnciclopediaView()
+
+    mensagem = None
+    if _xp_enciclopedia_message_id:
+        try:
+            mensagem = await canal.fetch_message(_xp_enciclopedia_message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            mensagem = None
+
+    if mensagem is None:
+        mensagem = await _achar_mensagem_enciclopedia(canal)
+
+    if mensagem:
+        try:
+            await mensagem.edit(embed=embed, view=view)
+            _xp_enciclopedia_message_id = mensagem.id
+            return
+        except discord.HTTPException as e:
+            print(f"[ranking-xp] ERRO ao editar mensagem de enciclopédia: {e!r}")
+            mensagem = None
+
+    try:
+        nova = await canal.send(embed=embed, view=view)
+        _xp_enciclopedia_message_id = nova.id
+        print(f"[ranking-xp] Mensagem de enciclopédia criada em #{canal.name} (id {nova.id}).")
+    except discord.HTTPException as e:
+        print(f"[ranking-xp] ERRO ao enviar mensagem de enciclopédia em #{canal.name}: {e!r}")
+
+
 async def _atualizar_ranking_xp() -> None:
     """Atualiza (ou cria, se ainda não existir) a mensagem de ranking de XP, sempre
     editando a mesma mensagem (fica 'fixa' no topo, nunca duplica)."""
@@ -8715,6 +8886,12 @@ async def _atualizar_ranking_xp() -> None:
         await _atualizar_info_batalha(canal)
     except Exception as e:
         print(f"[ranking-xp] ERRO ao atualizar mensagem de explicação de batalha: {e!r}")
+
+    # Mantém a Enciclopédia de Criaturas fixa por ÚLTIMO, embaixo de tudo
+    try:
+        await _atualizar_enciclopedia(canal)
+    except Exception as e:
+        print(f"[ranking-xp] ERRO ao atualizar mensagem de enciclopédia: {e!r}")
 
     await _salvar_xp_stats()
 
@@ -8846,13 +9023,52 @@ _carregar_xp_stats()
 # "dado" que decide entre 1% e 20%... ou, com uma certa chance, nada.
 # ══════════════════════════════════════════════════════════════════════
 
+# ── Raridades das criaturas ──────────────────────────────────────────────
+# Define o emoji/cor/label de cada raridade e o PESO usado no sorteio de
+# batalha (quanto maior o peso, mais fácil essa raridade aparecer). Isso faz
+# criaturas Lendárias serem naturalmente mais raras de invocar (e, por
+# tabela, mais raras de desbloquear).
+_RARIDADES = {
+    "comum":    {"label": "Comum",    "emoji": "⚪", "cor": 0xb0b0b0, "peso": 50},
+    "raro":     {"label": "Raro",     "emoji": "🔵", "cor": 0x3498db, "peso": 25},
+    "epico":    {"label": "Épico",    "emoji": "🟣", "cor": 0x9b59b6, "peso": 15},
+    "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
+}
+_ORDEM_RARIDADES = ("lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+
+# Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
+# um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
 _BATALHA_CRIATURAS = [
-    {"nome": "Caveira Perpétua",       "gif": "https://i.pinimg.com/originals/11/d4/f6/11d4f665781ad7710f79e76ae03532bf.gif"},
-    {"nome": "Heroína das Esmeraldas", "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
-    {"nome": "Samurai do Pix",         "gif": "https://i.pinimg.com/originals/32/e6/fe/32e6fe1d93519ce4ed0c9d1ef666ea86.gif"},
-    {"nome": "Cavaleiro Elemental",    "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
-    {"nome": "Caveira da Prisão",      "gif": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEivaQ2fr4t0qnYKfUiXbCeBU2HGF2vMB6oCjiEbAjADBdNYPoOqzEU8jSDdHDwD5xgI7MGL9qj0eH60EgBEaGjgV4JIHDait9dSFusVjLvykhwIWHPa4tfeDhzOr3uhwQfyNtzw7mz-Q9_E/s1600/Phantasm_attack_8.gif"},
-    {"nome": "Eco da Luz",             "gif": "https://i.pinimg.com/originals/25/83/b2/2583b2768cb33f0165e3a88ac3debbde.gif"},
+    # ── Comuns ──────────────────────────────────────────────────────────
+    {"id": "caveira_perpetua",        "nome": "Caveira Perpétua",             "raridade": "comum",    "gif": "https://i.pinimg.com/originals/11/d4/f6/11d4f665781ad7710f79e76ae03532bf.gif"},
+    {"id": "samurai_pix",             "nome": "Samurai do Pix",               "raridade": "comum",    "gif": "https://i.pinimg.com/originals/32/e6/fe/32e6fe1d93519ce4ed0c9d1ef666ea86.gif"},
+    {"id": "abandonado",              "nome": "O Abandonado",                 "raridade": "comum",    "gif": "https://i.pinimg.com/originals/19/7b/88/197b887956c1741536cbda7a8bf0c59c.gif"},
+    {"id": "desconectado",            "nome": "O Desconectado",               "raridade": "comum",    "gif": "https://64.media.tumblr.com/e59c49cc960b3af010126aa2185f9af4/tumblr_o2ukydWovF1rznluto3_250.gif"},
+    {"id": "rino_acabado",            "nome": "Rino, o Acabado",              "raridade": "comum",    "gif": "https://33.media.tumblr.com/fc4838c3660618bf7dd87103de60871b/tumblr_inline_nzsz2t9ltH1s38bty_500.gif"},
+    {"id": "plebeu",                  "nome": "O Plebeu",                     "raridade": "comum",    "gif": "https://i.pinimg.com/originals/1c/9f/2b/1c9f2b392f039b76b7f3a68039730d21.gif"},
+
+    # ── Raras ───────────────────────────────────────────────────────────
+    {"id": "cavaleiro_elemental",     "nome": "Cavaleiro Elemental",          "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
+    {"id": "caveira_prisao",          "nome": "Caveira da Prisão",            "raridade": "raro",     "gif": "https://blogger.googleusercontent.com/img/b/R29vZ2xl/AVvXsEivaQ2fr4t0qnYKfUiXbCeBU2HGF2vMB6oCjiEbAjADBdNYPoOqzEU8jSDdHDwD5xgI7MGL9qj0eH60EgBEaGjgV4JIHDait9dSFusVjLvykhwIWHPa4tfeDhzOr3uhwQfyNtzw7mz-Q9_E/s1600/Phantasm_attack_8.gif"},
+    {"id": "eco_luz",                 "nome": "Eco da Luz",                   "raridade": "raro",     "gif": "https://i.pinimg.com/originals/25/83/b2/2583b2768cb33f0165e3a88ac3debbde.gif"},
+    {"id": "cientista_louco",         "nome": "Cientista Louco",              "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f7/45/05/f74505bee8fec82f0eb6e925c61b35f2.gif"},
+    {"id": "brutal",                  "nome": "O Brutal",                     "raridade": "raro",     "gif": "https://i.pinimg.com/originals/fd/1f/8a/fd1f8aa84a2d1b1d1486c68613216d9d.gif"},
+    {"id": "cavaleiro_sinistro",      "nome": "Cavaleiro do Sinistro",        "raridade": "raro",     "gif": "https://i.pinimg.com/originals/1c/3a/9b/1c3a9bc1c91135ff036d1d168d15e474.gif"},
+
+    # ── Épicas ──────────────────────────────────────────────────────────
+    {"id": "heroina_esmeraldas",      "nome": "Heroína das Esmeraldas",       "raridade": "epico",    "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
+    {"id": "robin_dourado",           "nome": "Robin Dourado",                "raridade": "epico",    "gif": "https://i.pinimg.com/originals/fc/26/21/fc26214b7e21990e483df07f8ee616e8.gif"},
+    {"id": "buda_eco",                "nome": "Buda do Eco",                  "raridade": "epico",    "gif": "https://i.pinimg.com/originals/de/cc/64/decc640148693d24cbccfce9262d16ae.gif"},
+    {"id": "monstro_portao",          "nome": "O Monstro do Portão",          "raridade": "epico",    "gif": "https://i.pinimg.com/originals/1f/4a/d7/1f4ad7fd9917093bc7463394497fd920.gif"},
+    {"id": "ultimo_atlanta",          "nome": "Último de Atlanta",            "raridade": "epico",    "gif": "https://i.pinimg.com/originals/84/a6/8b/84a68ba244c9034c52dcb8002f90a87f.gif"},
+    {"id": "guerreiro_trovao",        "nome": "Guerreiro do Trovão",          "raridade": "epico",    "gif": "https://i.pinimg.com/originals/6b/2c/21/6b2c2173d12ddf1f2adae8f0064f772d.gif"},
+
+    # ── Lendárias ───────────────────────────────────────────────────────
+    {"id": "ultimo_guerreiro",        "nome": "O Último Guerreiro",           "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/da5bb9cc8fab68c2c3cabe68a7cc7a10cd277939be96-bBi4DQ"},
+    {"id": "lyria_governante",        "nome": "Lyria, a Governante",          "raridade": "lendario", "gif": "https://i.pinimg.com/originals/9e/88/99/9e88991126a8bdd32a89e43ae683f3b4.gif"},
+    {"id": "kaiju_eco",               "nome": "Kaiju do Eco",                 "raridade": "lendario", "gif": "https://i.pinimg.com/originals/02/ef/09/02ef09d38f7435de3a2e8d26508a17ec.gif"},
+    {"id": "protetor_portao_inferno", "nome": "Protetor do Portão do Inferno","raridade": "lendario", "gif": "https://i.pinimg.com/originals/6d/bc/58/6dbc588871368635891ea6a5f12d3cf2.gif"},
+    {"id": "magmata",                 "nome": "O Magmata",                    "raridade": "lendario", "gif": "https://i.redd.it/0jk54f0ocjwy.gif"},
 ]
 
 # Detecta a frase em qualquer lugar da mensagem (com ou sem acento), desde
@@ -8998,10 +9214,21 @@ async def _iniciar_batalha_apos_aceite(
 
 
 def _sortear_criaturas():
-    """Sorteia 2 criaturas diferentes: uma pro desafiante, outra pro desafiado."""
-    if len(_BATALHA_CRIATURAS) >= 2:
-        return random.sample(_BATALHA_CRIATURAS, 2)
-    return [random.choice(_BATALHA_CRIATURAS), random.choice(_BATALHA_CRIATURAS)]
+    """Sorteia 2 criaturas diferentes: uma pro desafiante, outra pro desafiado.
+    O sorteio é PONDERADO pela raridade — Comuns saem com muito mais frequência
+    que Raras, e Lendárias são as mais difíceis de aparecer (e, por tabela,
+    de desbloquear)."""
+    if len(_BATALHA_CRIATURAS) < 2:
+        return [random.choice(_BATALHA_CRIATURAS), random.choice(_BATALHA_CRIATURAS)]
+
+    pool = list(_BATALHA_CRIATURAS)
+    pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
+    escolhidas = []
+    for _ in range(2):
+        idx = random.choices(range(len(pool)), weights=pesos, k=1)[0]
+        escolhidas.append(pool.pop(idx))
+        pesos.pop(idx)
+    return escolhidas
 
 
 async def _executar_batalha(
@@ -9074,6 +9301,13 @@ async def _executar_batalha(
     dados_vencedor["vitorias"] = dados_vencedor.get("vitorias", 0) + 1
     dados_perdedor["derrotas"] = dados_perdedor.get("derrotas", 0) + 1
 
+    # ── Desbloqueio de criatura — SÓ quem venceu destrava a criatura que invocou.
+    # O perdedor não ganha a mesma criatura desbloqueada por tê-la usado. ──
+    dados_vencedor.setdefault("criaturas", [])
+    criatura_e_nova = criatura_vencedora["id"] not in dados_vencedor["criaturas"]
+    if criatura_e_nova:
+        dados_vencedor["criaturas"].append(criatura_vencedora["id"])
+
     xp_roubado = 0
     percentual = 0.0
     if xp_perdedor_antes > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
@@ -9116,12 +9350,26 @@ async def _executar_batalha(
         f"{dados_perdedor['derrotas']} derrotas`"
     )
 
+    info_raridade_vencedora = _RARIDADES[criatura_vencedora["raridade"]]
+    if criatura_e_nova:
+        texto_desbloqueio = (
+            f"🆕 **{vencedor.display_name}** desbloqueou "
+            f"{info_raridade_vencedora['emoji']} **{criatura_vencedora['nome']}** "
+            f"(*{info_raridade_vencedora['label']}*) na Enciclopédia! Use `.criaturas` pra conferir. 📖"
+        )
+    else:
+        texto_desbloqueio = (
+            f"{info_raridade_vencedora['emoji']} **{criatura_vencedora['nome']}** já fazia parte "
+            f"da coleção de **{vencedor.display_name}**."
+        )
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
             f"**{criatura_vencedora['nome']}** ({vencedor.mention}) derrota "
             f"**{criatura_perdedora['nome']}** ({perdedor.mention})!\n\n"
             f"{texto_roubo}\n\n"
+            f"{texto_desbloqueio}\n\n"
             f"{texto_placar}\n\n"
             f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
             f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
@@ -9200,6 +9448,39 @@ async def _processar_desafio(message: discord.Message) -> None:
     asyncio.create_task(_apagar_mensagem_depois(convite))
 
 # ══════════════════════════════════════════════════════════════════════
+
+
+@bot.command(name="criaturas")
+async def cmd_criaturas(ctx, membro: discord.Member = None):
+    """Mostra a coleção de criaturas desbloqueadas de alguém na Arena de
+    Batalhas (ou de quem usou o comando, se ninguém for mencionado).
+    Uso: .criaturas [@alguém]"""
+    alvo = membro or ctx.author
+    dados = xp_stats[alvo.id]
+    desbloqueadas = set(dados.get("criaturas", []))
+
+    embed = discord.Embed(
+        title=f"📖 Coleção de Criaturas — {alvo.display_name}",
+        description=(
+            f"🔓 **{len(desbloqueadas)}/{len(_BATALHA_CRIATURAS)}** criaturas desbloqueadas até agora!\n"
+            "Vença batalhas invocando as que faltam pra completar a coleção. ⚔️"
+        ),
+        color=0x9b59b6,
+    )
+
+    for raridade in _ORDEM_RARIDADES:
+        info = _RARIDADES[raridade]
+        linhas = [
+            f"{'🔓' if c['id'] in desbloqueadas else '🔒'} {c['nome']}"
+            for c in _BATALHA_CRIATURAS
+            if c["raridade"] == raridade
+        ]
+        if linhas:
+            embed.add_field(name=f"{info['emoji']} {info['label']}", value="\n".join(linhas), inline=False)
+
+    embed.set_thumbnail(url=alvo.display_avatar.url)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — confira também a 📖 Enciclopédia no canal de ranking")
+    await ctx.send(embed=embed)
 
 
 @bot.command(name="surpresachat")

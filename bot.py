@@ -8197,7 +8197,8 @@ def _emoji_da_cor(chave: str) -> str:
 #     "elegivel": bool (já mandou mensagem em algum dos 3 canais de _XP_CANAIS_RANKING?),
 #     "cor": str (chave em _CORES_QUADRADO — cor escolhida pra o próprio quadradinho),
 #     "vitorias": int (vitórias na Arena de Batalhas), "derrotas": int (derrotas na Arena de Batalhas),
-#     "criaturas": list[str] (ids das criaturas já desbloqueadas na Enciclopédia, vencendo batalhas com elas),
+#     "criaturas": list[str] (ids das criaturas já desbloqueadas na Enciclopédia — começa com as
+#                  ⚪ Comuns de graça, e ganha novas como recompensa ao vencer batalhas),
 # }
 xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": []})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
@@ -8753,8 +8754,9 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "Escreva `Eu te desafio @alguém` em qualquer canal. A pessoa desafiada "
             f"tem `{_BATALHA_TEMPO_ACEITE}s` pra **aceitar** ou **recusar** no botão que aparece.\n\n"
             "**2️⃣ A batalha**\n"
-            "Se aceitar, cada lado invoca uma criatura aleatória (dentre as disponíveis) "
-            "e elas se enfrentam num combate dramático. O vencedor é sorteado — pode ser qualquer um dos dois.\n\n"
+            "Se aceitar, cada lado invoca uma criatura aleatória **dentre as que já desbloqueou** — "
+            "ninguém invoca o que não possui! — e elas se enfrentam num combate dramático. "
+            "O vencedor é sorteado — pode ser qualquer um dos dois.\n\n"
             "**3️⃣ O roubo de XP**\n"
             f"Quem vence PODE roubar uma fatia do XP total de quem perdeu: um dado decide entre "
             f"`{_BATALHA_ROUBO_MIN * 100:.0f}%` e `{_BATALHA_ROUBO_MAX * 100:.0f}%`. "
@@ -8762,9 +8764,11 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
             "**4️⃣ Desbloqueando criaturas**\n"
             "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico ou 🟡 Lendário — e quanto mais "
-            "rara, menos ela costuma aparecer no sorteio. Quem **vence** a batalha destrava a criatura que "
-            "invocou pra sua coleção pra sempre; quem perde não leva essa criatura. Veja a lista completa "
-            "na 📖 **Enciclopédia** (mensagem fixa aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
+            "rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as ⚪ Comuns "
+            "desbloqueadas; as demais só saem **de recompensa** pra quem **vence** uma batalha — o jogo "
+            "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
+            "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
+            "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
             "**5️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
@@ -8854,8 +8858,9 @@ def _montar_embed_enciclopedia() -> discord.Embed:
         description=(
             "🌟 **Celestia:** Toda criatura que já apareceu (ou pode aparecer) na Arena de "
             "Batalhas mora aqui!! 😆📖✨\n"
-            "🌑 **Aeon:** ...vença uma batalha invocando uma criatura pra desbloqueá-la de vez "
-            "na sua coleção. Quem perde não a leva. 🖤🌑\n\n"
+            "🌑 **Aeon:** ...todo mundo começa com as ⚪ Comuns. Só dá pra invocar em batalha o que "
+            "você já tem — vença combates e, de recompensa, você pode destravar uma criatura nova "
+            "pra coleção. 🖤🌑\n\n"
             "👇 Use o menu abaixo pra ver os detalhes (e a imagem) de cada uma, e conferir "
             "**só pra você** se já desbloqueou ou não."
         ),
@@ -8903,8 +8908,7 @@ class EnciclopediaSelect(discord.ui.Select):
             await interaction.response.send_message("⚠️ Criatura não encontrada.", ephemeral=True)
             return
 
-        dados = xp_stats[interaction.user.id]
-        desbloqueada = criatura["id"] in dados.get("criaturas", [])
+        desbloqueada = criatura["id"] in set(_garantir_criaturas_iniciais(interaction.user.id))
         info_raridade = _RARIDADES[criatura["raridade"]]
 
         if desbloqueada:
@@ -8912,7 +8916,8 @@ class EnciclopediaSelect(discord.ui.Select):
         else:
             status = (
                 "🔒 **Você ainda não desbloqueou essa criatura.** "
-                "Vença uma batalha enquanto ela for a invocada pra destravá-la!"
+                "Vença batalhas usando as que você já tem — como recompensa, "
+                "há chance dela ser sorteada e ir pra sua coleção!"
             )
 
         embed = discord.Embed(
@@ -9308,6 +9313,19 @@ _BATALHA_CRIATURAS = [
     {"id": "magmata",                 "nome": "O Magmata",                    "raridade": "lendario", "gif": "https://i.redd.it/0jk54f0ocjwy.gif"},
 ]
 
+def _garantir_criaturas_iniciais(user_id: int) -> list:
+    """Garante que a pessoa tenha ao menos as criaturas ⚪ Comuns já
+    desbloqueadas — é o "kit inicial" de todo mundo, pra sempre ter algo
+    pra invocar numa batalha mesmo antes de vencer a primeira vez.
+    Só concede na primeira vez (lista vazia); depois disso o progresso
+    (raras, épicas, lendárias) fica só por conta de vitórias."""
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    if not dados["criaturas"]:
+        dados["criaturas"] = [c["id"] for c in _BATALHA_CRIATURAS if c["raridade"] == "comum"]
+    return dados["criaturas"]
+
+
 # Detecta a frase em qualquer lugar da mensagem (com ou sem acento), desde
 # que tenha alguém mencionado junto.
 _BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf", re.IGNORECASE)
@@ -9450,22 +9468,26 @@ async def _iniciar_batalha_apos_aceite(
         _batalha_canal_ativo.discard(canal.id)
 
 
-def _sortear_criaturas():
-    """Sorteia 2 criaturas diferentes: uma pro desafiante, outra pro desafiado.
-    O sorteio é PONDERADO pela raridade — Comuns saem com muito mais frequência
-    que Raras, e Lendárias são as mais difíceis de aparecer (e, por tabela,
-    de desbloquear)."""
-    if len(_BATALHA_CRIATURAS) < 2:
-        return [random.choice(_BATALHA_CRIATURAS), random.choice(_BATALHA_CRIATURAS)]
-
-    pool = list(_BATALHA_CRIATURAS)
+def _sortear_uma_criatura(user_id: int) -> dict:
+    """Sorteia 1 criatura para essa pessoa invocar — SOMENTE dentre as que
+    ela já desbloqueou (ninguém pode invocar o que ainda não possui). O
+    sorteio continua PONDERADO pela raridade — entre as que ela tem, Comuns
+    saem com mais frequência que Raras, e assim por diante."""
+    desbloqueadas = set(_garantir_criaturas_iniciais(user_id))
+    pool = [c for c in _BATALHA_CRIATURAS if c["id"] in desbloqueadas]
+    if not pool:
+        # segurança: nunca deveria cair aqui, já que _garantir_criaturas_iniciais
+        # sempre concede as Comuns antes da batalha começar.
+        pool = [c for c in _BATALHA_CRIATURAS if c["raridade"] == "comum"] or list(_BATALHA_CRIATURAS)
     pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
-    escolhidas = []
-    for _ in range(2):
-        idx = random.choices(range(len(pool)), weights=pesos, k=1)[0]
-        escolhidas.append(pool.pop(idx))
-        pesos.pop(idx)
-    return escolhidas
+    return random.choices(pool, weights=pesos, k=1)[0]
+
+
+def _sortear_criaturas(desafiante_id: int, desafiado_id: int):
+    """Sorteia a criatura de cada lado da batalha, cada uma dentre APENAS o
+    que aquela pessoa já tem desbloqueado — nunca uma criatura que ela ainda
+    não possui."""
+    return _sortear_uma_criatura(desafiante_id), _sortear_uma_criatura(desafiado_id)
 
 
 async def _executar_batalha(
@@ -9473,7 +9495,7 @@ async def _executar_batalha(
 ) -> None:
     """Roda a sequência dramática da batalha inteira: abertura, revelação das
     duas criaturas, suspense e conclusão (com ou sem roubo de XP)."""
-    criatura_desafiante, criatura_desafiado = _sortear_criaturas()
+    criatura_desafiante, criatura_desafiado = _sortear_criaturas(desafiante.id, desafiado.id)
 
     # ── Abertura ──────────────────────────────────────────────────────────
     embed_abertura = discord.Embed(
@@ -9538,12 +9560,18 @@ async def _executar_batalha(
     dados_vencedor["vitorias"] = dados_vencedor.get("vitorias", 0) + 1
     dados_perdedor["derrotas"] = dados_perdedor.get("derrotas", 0) + 1
 
-    # ── Desbloqueio de criatura — SÓ quem venceu destrava a criatura que invocou.
-    # O perdedor não ganha a mesma criatura desbloqueada por tê-la usado. ──
+    # ── Desbloqueio de criatura — como os dois só podem invocar criaturas que
+    # JÁ possuem, a criatura usada na batalha nunca é nova pra quem venceu.
+    # A recompensa da vitória é diferente: o vencedor tem chance de destravar
+    # uma criatura NOVA (sorteada por raridade, dentre as que ainda não tem)
+    # pra sua coleção. Quem perde não ganha nada disso. ──
     dados_vencedor.setdefault("criaturas", [])
-    criatura_e_nova = criatura_vencedora["id"] not in dados_vencedor["criaturas"]
-    if criatura_e_nova:
-        dados_vencedor["criaturas"].append(criatura_vencedora["id"])
+    _nao_possuidas = [c for c in _BATALHA_CRIATURAS if c["id"] not in dados_vencedor["criaturas"]]
+    criatura_nova = None
+    if _nao_possuidas:
+        _pesos_novas = [_RARIDADES[c["raridade"]]["peso"] for c in _nao_possuidas]
+        criatura_nova = random.choices(_nao_possuidas, weights=_pesos_novas, k=1)[0]
+        dados_vencedor["criaturas"].append(criatura_nova["id"])
 
     xp_roubado = 0
     percentual = 0.0
@@ -9587,17 +9615,17 @@ async def _executar_batalha(
         f"{dados_perdedor['derrotas']} derrotas`"
     )
 
-    info_raridade_vencedora = _RARIDADES[criatura_vencedora["raridade"]]
-    if criatura_e_nova:
+    if criatura_nova is not None:
+        info_raridade_nova = _RARIDADES[criatura_nova["raridade"]]
         texto_desbloqueio = (
-            f"🆕 **{vencedor.display_name}** desbloqueou "
-            f"{info_raridade_vencedora['emoji']} **{criatura_vencedora['nome']}** "
-            f"(*{info_raridade_vencedora['label']}*) na Enciclopédia! Use `.criaturas` pra conferir. 📖"
+            f"🆕 De recompensa, **{vencedor.display_name}** desbloqueou "
+            f"{info_raridade_nova['emoji']} **{criatura_nova['nome']}** "
+            f"(*{info_raridade_nova['label']}*) na Enciclopédia! Use `.criaturas` pra conferir. 📖"
         )
     else:
         texto_desbloqueio = (
-            f"{info_raridade_vencedora['emoji']} **{criatura_vencedora['nome']}** já fazia parte "
-            f"da coleção de **{vencedor.display_name}**."
+            f"🏅 **{vencedor.display_name}** já desbloqueou todas as criaturas existentes — "
+            "coleção completa!"
         )
 
     embed_resultado = discord.Embed(
@@ -9693,8 +9721,7 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
     Batalhas (ou de quem usou o comando, se ninguém for mencionado).
     Uso: .criaturas [@alguém]"""
     alvo = membro or ctx.author
-    dados = xp_stats[alvo.id]
-    desbloqueadas = set(dados.get("criaturas", []))
+    desbloqueadas = set(_garantir_criaturas_iniciais(alvo.id))
 
     embed = discord.Embed(
         title=f"📖 Coleção de Criaturas — {alvo.display_name}",

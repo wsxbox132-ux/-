@@ -8390,11 +8390,13 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
 
 
 def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
-    # ⚠️ Destravado: o ranking não depende mais do cargo CARGO_XP_ID.
-    # Entra aqui TODO MUNDO que já mandou mensagem em pelo menos um dos 3
-    # canais de _XP_CANAIS_RANKING (flag "elegivel"), independente de cargo.
-    # Só precisa ainda estar no servidor (quem sai é removido de xp_stats
-    # pelo on_member_remove, então nem chega a aparecer aqui).
+    # ⚠️ Destravado: não depende mais de cargo. A ÚNICA condição pra entrar
+    # no ranking é ter mandado UMA mensagem em pelo menos um dos canais
+    # elegíveis (_XP_CANAIS_RANKING, que inclui o chat geral em _XP_CANAL_1)
+    # — a partir daí a pessoa JÁ aparece aqui na hora, mesmo ainda no Nível 0
+    # com pouco ou nenhum XP. Sem limite de posições: aparece todo mundo que
+    # se qualificar, não só um "top N". Só precisa ainda estar no servidor
+    # (quem sai é removido de xp_stats pelo on_member_remove).
     linhas = []
     for uid, dados in xp_stats.items():
         if not dados.get("elegivel"):
@@ -8408,18 +8410,36 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
         derrotas = dados.get("derrotas", 0)
         linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas))
 
-    linhas.sort(key=lambda x: x[1], reverse=True)
+    # Empate (comum agora, já que muita gente pode estar zerada no Nível 0)
+    # é resolvido por nome, pra ordem ficar estável entre atualizações.
+    linhas.sort(key=lambda x: (-x[1], x[0].display_name.lower()))
 
     medalhas = ["🥇", "🥈", "🥉"]
     descricao_linhas = []
+    LIMITE_DESCRICAO = 3900  # margem de segurança abaixo do limite real (4096) do Discord
+    total = len(linhas)
     if linhas:
+        largura_rank = max(2, len(str(total)))
+        tamanho_acumulado = 0
+        mostrados = 0
         for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas) in enumerate(linhas):
-            prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
+            prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>{largura_rank}}`"
             barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=cor_emoji)
-            descricao_linhas.append(
+            linha = (
                 f"{prefixo} **{membro.display_name}** — Nível `{nivel}` {barra} "
                 f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)\n"
                 f"┗ ⚔️ Vitórias: `{vitorias}` | Derrotas: `{derrotas}`"
+            )
+            if tamanho_acumulado + len(linha) + 1 > LIMITE_DESCRICAO:
+                break
+            descricao_linhas.append(linha)
+            tamanho_acumulado += len(linha) + 1
+            mostrados += 1
+
+        if mostrados < total:
+            descricao_linhas.append(
+                f"\n*...e mais `{total - mostrados}` pessoa(s) no ranking — a lista "
+                "ficou grande demais pra caber numa única mensagem!* 📜"
             )
     else:
         descricao_linhas.append(
@@ -8969,13 +8989,15 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
         return
 
     membro = membro or ctx.author
-    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False, "cor": _COR_PADRAO})
-    nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
-    barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=_emoji_da_cor(dados.get("cor", _COR_PADRAO)))
+    dados_calc = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False, "cor": _COR_PADRAO})
+    nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados_calc["xp"])
+    barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=_emoji_da_cor(dados_calc.get("cor", _COR_PADRAO)))
 
+    # Entra no ranking quem já mandou mensagem em algum dos canais elegíveis
+    # (_XP_CANAIS_RANKING, que inclui o chat geral) — nem que seja só uma.
     status_ranking = (
         "✅ Aparece no ranking fixo"
-        if dados.get("elegivel")
+        if dados_calc.get("elegivel")
         else f"❌ Ainda não aparece — mande uma mensagem em <#{_XP_CANAL_1}>, "
              f"<#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}>"
     )
@@ -8985,7 +9007,7 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
         description=(
             f"**Nível:** `{nivel}`\n"
             f"**Progresso:** {barra} `{xp_no_nivel}/{xp_necessario}`\n"
-            f"**XP total:** `{dados['xp']}`\n"
+            f"**XP total:** `{dados_calc['xp']}`\n"
             f"**Status no ranking:** {status_ranking}"
         ),
         color=0xe8d5f5

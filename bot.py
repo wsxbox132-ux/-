@@ -1740,7 +1740,10 @@ async def on_ready():
 
     # Envia o painel de anjos automaticamente em todos os servidores
     for guild in bot.guilds:
-        await _enviar_painel_anjos(guild)
+        try:
+            await _enviar_painel_anjos(guild)
+        except Exception as e:
+            print(f"[on_ready] ERRO ao enviar painel de anjos em '{guild.name}': {e!r}")
 
     # Inicia a task de bom dia / boa noite automáticos
     if not verificar_hora_mensagens.is_running():
@@ -8309,10 +8312,15 @@ async def _atualizar_ranking_xp() -> None:
 
     guild = bot.guilds[0] if bot.guilds else None
     if guild is None:
+        print("[ranking-xp] ERRO: bot não está em nenhum servidor ainda.")
         return
 
     canal = guild.get_channel(CANAL_XP_ID)
     if canal is None:
+        print(
+            f"[ranking-xp] ERRO: canal com ID {CANAL_XP_ID} não encontrado em "
+            f"'{guild.name}'. Confira se o ID do canal Ranking-01 está certo."
+        )
         return
 
     embed = _montar_embed_ranking_xp(guild)
@@ -8331,14 +8339,17 @@ async def _atualizar_ranking_xp() -> None:
         try:
             await mensagem.edit(embed=embed)
             _xp_ranking_message_id = mensagem.id
-        except discord.HTTPException:
+        except discord.HTTPException as e:
+            print(f"[ranking-xp] ERRO ao editar mensagem de ranking: {e!r}")
             mensagem = None
 
     if mensagem is None:
         try:
             nova = await canal.send(embed=embed)
             _xp_ranking_message_id = nova.id
-        except discord.HTTPException:
+            print(f"[ranking-xp] Mensagem de ranking criada em #{canal.name} (id {nova.id}).")
+        except discord.HTTPException as e:
+            print(f"[ranking-xp] ERRO ao enviar mensagem de ranking em #{canal.name}: {e!r}")
             return
 
     await _salvar_xp_stats()

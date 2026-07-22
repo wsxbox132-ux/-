@@ -8755,6 +8755,135 @@ _BATALHA_CHANCE_SEM_ROUBO = 0.15    # 15% de chance do vencedor não levar XP NE
 _BATALHA_ROUBO_MIN = 0.01           # 1%  — mínimo que o dado pode sortear
 _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
 
+_BATALHA_TEMPO_ACEITE = 60          # segundos que o desafiado tem pra aceitar/recusar
+_BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sumir sozinha
+
+
+async def _apagar_mensagem_depois(mensagem: discord.Message, segundos: int = _BATALHA_TEMPO_SOMEM) -> None:
+    """Espera alguns segundos e apaga a mensagem sozinha, ignorando erros
+    se ela já não existir mais (apagada, canal sumiu, etc.)."""
+    await asyncio.sleep(segundos)
+    try:
+        await mensagem.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+
+def _embed_status_desafio(
+    desafiante: discord.Member, desafiado: discord.Member, estado: str
+) -> discord.Embed:
+    """Monta o embed do convite de desafio, num dos estados: pendente, aceito,
+    recusado ou expirado."""
+    if estado == "pendente":
+        titulo = "⚔️ Um desafio foi lançado!"
+        descricao = (
+            f"🌑 **Aeon:** ...{desafiante.mention} desafiou {desafiado.mention} para uma batalha. "
+            f"As sombras aguardam a resposta. 🖤🌑\n"
+            f"🌟 **Celestia:** {desafiado.mention}, VOCÊ ACEITA?! 😆🌟✨ "
+            f"*aponta pros botões* Tem `{_BATALHA_TEMPO_ACEITE}s` pra decidir!!"
+        )
+        cor = 0x2b2b3b
+    elif estado == "aceito":
+        titulo = "✅ Desafio aceito!"
+        descricao = (
+            f"🌟 **Celestia:** {desafiado.mention} TOPOU!! 😱🌟✨ *vibra* A batalha vai começar...\n"
+            f"🌑 **Aeon:** ...que as sombras testemunhem o combate. 🖤🌑"
+        )
+        cor = 0x4bbf73
+    elif estado == "recusado":
+        titulo = "🏳️ Desafio recusado"
+        descricao = (
+            f"🌑 **Aeon:** ...{desafiado.mention} recuou. As trevas respeitam a escolha. 🖤🌑\n"
+            f"🌟 **Celestia:** Tudo bem, {desafiante.mention}!! Talvez na próxima!! 🌸"
+        )
+        cor = 0x888888
+    else:  # expirado
+        titulo = "⌛ Desafio expirado"
+        descricao = (
+            f"🌑 **Aeon:** ...{desafiado.mention} não respondeu a tempo. O desafio se dissolve nas sombras. 🖤🌑\n"
+            f"🌟 **Celestia:** Que pena!! Talvez {desafiante.mention} tente de novo depois!! 🌸"
+        )
+        cor = 0x888888
+
+    embed = discord.Embed(title=titulo, description=descricao, color=cor)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    return embed
+
+
+class DesafioView(discord.ui.View):
+    """Botões de Aceitar/Recusar que aparecem no convite de desafio.
+    Só o desafiado pode usá-los, e o convite expira sozinho depois de
+    _BATALHA_TEMPO_ACEITE segundos se ninguém responder."""
+
+    def __init__(self, desafiante: discord.Member, desafiado: discord.Member):
+        super().__init__(timeout=_BATALHA_TEMPO_ACEITE)
+        self.desafiante = desafiante
+        self.desafiado = desafiado
+        self.respondido = False
+        self.mensagem: discord.Message = None  # setada logo após o send()
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="⚔️ Aceitar", style=discord.ButtonStyle.success)
+    async def aceitar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.desafiado.id:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio não é seu pra aceitar!! 🌸😅", ephemeral=True
+            )
+            return
+
+        self.respondido = True
+        self._travar_botoes()
+        await interaction.response.edit_message(
+            embed=_embed_status_desafio(self.desafiante, self.desafiado, "aceito"),
+            view=self,
+        )
+        self.stop()
+        asyncio.create_task(_iniciar_batalha_apos_aceite(interaction.channel, self.desafiante, self.desafiado))
+
+    @discord.ui.button(label="🏳️ Recusar", style=discord.ButtonStyle.danger)
+    async def recusar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.desafiado.id:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio não é seu pra recusar!! 🌸😅", ephemeral=True
+            )
+            return
+
+        self.respondido = True
+        self._travar_botoes()
+        await interaction.response.edit_message(
+            embed=_embed_status_desafio(self.desafiante, self.desafiado, "recusado"),
+            view=self,
+        )
+        self.stop()
+        _batalha_canal_ativo.discard(interaction.channel.id)
+
+    async def on_timeout(self):
+        if self.respondido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            await self.mensagem.edit(
+                embed=_embed_status_desafio(self.desafiante, self.desafiado, "expirado"),
+                view=self,
+            )
+        except discord.HTTPException:
+            pass
+        _batalha_canal_ativo.discard(self.mensagem.channel.id)
+
+
+async def _iniciar_batalha_apos_aceite(
+    canal: discord.TextChannel, desafiante: discord.Member, desafiado: discord.Member
+) -> None:
+    """Chamada quando o desafiado aceita — roda a batalha e, no final (ou em
+    caso de erro), libera o canal pra um novo desafio poder ser lançado."""
+    try:
+        await _executar_batalha(canal, desafiante, desafiado)
+    finally:
+        _batalha_canal_ativo.discard(canal.id)
+
 
 def _sortear_criaturas():
     """Sorteia 2 criaturas diferentes: uma pro desafiante, outra pro desafiado."""
@@ -8782,7 +8911,8 @@ async def _executar_batalha(
         color=0x2b2b3b,
     )
     embed_abertura.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
-    await canal.send(embed=embed_abertura)
+    msg_abertura = await canal.send(embed=embed_abertura)
+    asyncio.create_task(_apagar_mensagem_depois(msg_abertura))
     await asyncio.sleep(2)
 
     # ── Criatura do desafiante ───────────────────────────────────────────
@@ -8792,7 +8922,8 @@ async def _executar_batalha(
         color=0xff4444,
     )
     embed_c1.set_image(url=criatura_desafiante["gif"])
-    await canal.send(embed=embed_c1)
+    msg_c1 = await canal.send(embed=embed_c1)
+    asyncio.create_task(_apagar_mensagem_depois(msg_c1))
     await asyncio.sleep(2.5)
 
     # ── Criatura do desafiado ────────────────────────────────────────────
@@ -8802,7 +8933,8 @@ async def _executar_batalha(
         color=0x4488ff,
     )
     embed_c2.set_image(url=criatura_desafiado["gif"])
-    await canal.send(embed=embed_c2)
+    msg_c2 = await canal.send(embed=embed_c2)
+    asyncio.create_task(_apagar_mensagem_depois(msg_c2))
     await asyncio.sleep(3)
 
     # ── Suspense antes do resultado ──────────────────────────────────────
@@ -8874,7 +9006,8 @@ async def _executar_batalha(
     )
     embed_resultado.set_thumbnail(url=vencedor.display_avatar.url)
     embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
-    await canal.send(embed=embed_resultado)
+    msg_resultado = await canal.send(embed=embed_resultado)
+    asyncio.create_task(_apagar_mensagem_depois(msg_resultado))
 
 
 async def _processar_desafio(message: discord.Message) -> None:
@@ -8934,10 +9067,12 @@ async def _processar_desafio(message: discord.Message) -> None:
     _batalha_ultimo_desafio[desafiante.id] = agora
     _batalha_canal_ativo.add(message.channel.id)
 
-    try:
-        await _executar_batalha(message.channel, desafiante, desafiado)
-    finally:
-        _batalha_canal_ativo.discard(message.channel.id)
+    view = DesafioView(desafiante, desafiado)
+    convite = await message.channel.send(
+        embed=_embed_status_desafio(desafiante, desafiado, "pendente"), view=view
+    )
+    view.mensagem = convite
+    asyncio.create_task(_apagar_mensagem_depois(convite))
 
 # ══════════════════════════════════════════════════════════════════════
 

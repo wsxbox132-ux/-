@@ -8455,12 +8455,14 @@ def _montar_embeds_ranking_xp(guild: discord.Guild) -> list:
         return [embed]
 
     LIMITE_DESCRICAO = 3900  # margem de segurança abaixo do limite real (4096) do Discord
+    ITENS_POR_PAGINA = 10    # quebra a cada 10 pessoas — assim as setinhas ◀ ▶ sempre têm o que navegar, mesmo com poucos membros
     total = len(linhas)
     largura_rank = max(2, len(str(total)))
     medalhas = ["🥇", "🥈", "🥉"]
 
-    # Quebra as linhas em páginas: cada página só recebe mais uma linha se
-    # ainda couber dentro do limite de caracteres — senão abre página nova.
+    # Quebra as linhas em páginas de até ITENS_POR_PAGINA pessoas. O limite
+    # de caracteres continua valendo como proteção extra (só entra em jogo
+    # se, por algum motivo raro, 10 linhas não couberem no embed).
     paginas_linhas = [[]]
     tamanho_atual = 0
     for i, (membro, xp_total, nivel, xp_no_nivel, xp_necessario, cor_emoji, vitorias, derrotas) in enumerate(linhas):
@@ -8471,7 +8473,9 @@ def _montar_embeds_ranking_xp(guild: discord.Guild) -> list:
             f"`{xp_no_nivel}/{xp_necessario}` XP (total: `{xp_total}`)\n"
             f"┗ ⚔️ Vitórias: `{vitorias}` | Derrotas: `{derrotas}`"
         )
-        if tamanho_atual + len(linha) + 1 > LIMITE_DESCRICAO and paginas_linhas[-1]:
+        pagina_cheia_por_quantidade = len(paginas_linhas[-1]) >= ITENS_POR_PAGINA
+        pagina_cheia_por_tamanho = tamanho_atual + len(linha) + 1 > LIMITE_DESCRICAO
+        if paginas_linhas[-1] and (pagina_cheia_por_quantidade or pagina_cheia_por_tamanho):
             paginas_linhas.append([])
             tamanho_atual = 0
         paginas_linhas[-1].append(linha)

@@ -1828,6 +1828,40 @@ async def on_member_join(member: discord.Member):
 
 
 @bot.event
+async def on_member_remove(member: discord.Member):
+    """Quando alguém sai do servidor (ou é expulso/banido), remove a pessoa
+    do ranking de nível — não faz sentido continuar aparecendo lá se não
+    tá mais no servidor. Também limpa qualquer aviso de level-up pendente
+    dela e atualiza o ranking fixo na hora."""
+    if member.bot:
+        return
+
+    try:
+        dados = xp_stats.pop(member.id, None)
+        _xp_ultimo_ganho.pop(member.id, None)
+
+        if dados is None:
+            return
+
+        # Apaga o aviso de level-up dessa pessoa, se ainda estiver de pé
+        antigo_id = dados.get("level_message_id")
+        if antigo_id:
+            canal_xp = member.guild.get_channel(CANAL_XP_ID)
+            if canal_xp is not None:
+                try:
+                    antiga = await canal_xp.fetch_message(antigo_id)
+                    await antiga.delete()
+                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    pass
+
+        await _salvar_xp_stats()
+        await _atualizar_ranking_xp()
+        print(f"[ranking-xp] {member} ({member.id}) saiu do servidor — removido(a) do ranking.")
+    except Exception as e:
+        print(f"[ranking-xp] ERRO ao remover {member} ({member.id}) do ranking: {e!r}")
+
+
+@bot.event
 async def on_voice_state_update(
     member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
 ):
@@ -8302,7 +8336,8 @@ async def _anunciar_level_up(guild: discord.Guild, membro: discord.Member, nivel
 
 
 async def _processar_xp_mensagem(message: discord.Message) -> None:
-    """Dá XP pra quem tem o cargo de XP (com cooldown) e cuida do level-up, se acontecer.
+    """Dá XP pra qualquer pessoa que mandar mensagem (com cooldown) e cuida do
+    level-up, se acontecer. Não exige nenhum cargo — vale pra todo mundo.
 
     Mensagens nos 3 canais de _XP_CANAIS_RANKING valem xp cheio (ou bônus, no
     canal bônus) e são o que faz a pessoa "destravar" a aparição no ranking.
@@ -8312,9 +8347,10 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
     if message.guild is None or message.author.bot:
         return
 
-    cargo_xp = message.guild.get_role(CARGO_XP_ID)
-    if not cargo_xp or cargo_xp not in message.author.roles:
-        return
+    # ⚠️ Destravado: NÃO exige mais o cargo CARGO_XP_ID. Qualquer pessoa que
+    # mandar mensagem no servidor participa do ranking normalmente — ganha
+    # XP e, se mandar em um dos _XP_CANAIS_RANKING, fica "elegivel" e passa
+    # a aparecer no ranking fixo do canal CANAL_XP_ID.
 
     agora = time.time()
     uid = message.author.id
@@ -8354,21 +8390,17 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
 
 
 def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
-    cargo_xp = guild.get_role(CARGO_XP_ID)
-    membros_xp = cargo_xp.members if cargo_xp else []
-
+    # ⚠️ Destravado: o ranking não depende mais do cargo CARGO_XP_ID.
+    # Entra aqui TODO MUNDO que já mandou mensagem em pelo menos um dos 3
+    # canais de _XP_CANAIS_RANKING (flag "elegivel"), independente de cargo.
+    # Só precisa ainda estar no servidor (quem sai é removido de xp_stats
+    # pelo on_member_remove, então nem chega a aparecer aqui).
     linhas = []
-    for membro in membros_xp:
-        if membro.bot:
-            continue
-        # Só entra no ranking quem JÁ mandou mensagem em pelo menos um dos 3
-        # canais de _XP_CANAIS_RANKING (flag "elegivel"). Ganhar xp em outros
-        # canais do servidor não é suficiente sozinho — a pessoa precisa ter
-        # participado nos canais principais pelo menos uma vez.
-        if membro.id not in xp_stats:
-            continue
-        dados = xp_stats[membro.id]
+    for uid, dados in xp_stats.items():
         if not dados.get("elegivel"):
+            continue
+        membro = guild.get_member(uid)
+        if membro is None or membro.bot:
             continue
         nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
         cor_emoji = _emoji_da_cor(dados.get("cor", _COR_PADRAO))
@@ -8901,17 +8933,12 @@ _XP_POR_TICK_CALL = 2   # xp ganho a cada 1 min em call de voz — reforço leve
 
 async def _processar_xp_call(guild: discord.Guild) -> None:
     """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
-    quem está numa call de voz agora e tem o cargo de xp. É só um reforço —
-    bem menos do que mandar mensagem nos canais principais, mas já soma algo."""
-    cargo_xp = guild.get_role(CARGO_XP_ID)
-    if not cargo_xp:
-        return
-
+    quem está numa call de voz agora. É só um reforço — bem menos do que
+    mandar mensagem nos canais principais, mas já soma algo. Destravado pra
+    todo mundo, sem exigir cargo."""
     for canal_voz in guild.voice_channels:
         for membro in canal_voz.members:
             if membro.bot:
-                continue
-            if cargo_xp not in membro.roles:
                 continue
 
             dados = xp_stats[membro.id]
@@ -8942,11 +8969,6 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
         return
 
     membro = membro or ctx.author
-    cargo_xp = ctx.guild.get_role(CARGO_XP_ID)
-    if not cargo_xp or cargo_xp not in membro.roles:
-        await ctx.send(f"⚠️ {membro.mention} não participa do ranking de nível (não tem o cargo necessário).")
-        return
-
     dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False, "cor": _COR_PADRAO})
     nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
     barra = _barra_progresso(xp_no_nivel, xp_necessario, cor_emoji=_emoji_da_cor(dados.get("cor", _COR_PADRAO)))

@@ -8092,17 +8092,38 @@ _carregar_anjo_stats()
 # sempre UM aviso de nível por pessoa, sempre o mais recente.
 # Guarda tudo em xp_ranking_data.json (mesma pasta persistente do Anjo) pra
 # sobreviver a reinícios.
+#
+# Regras de canais:
+#   • Os 3 canais em _XP_CANAIS_RANKING dão XP "cheio" (ou bônus, no canal
+#     bônus) — e mandar mensagem neles é o que faz a pessoa PASSAR A
+#     APARECER no ranking (flag "elegivel" salva por pessoa).
+#   • Qualquer outro canal do servidor também dá XP, só que bem menos
+#     (_XP_MULTIPLICADOR_OUTROS), e sozinho NÃO destrava a aparição no
+#     ranking — só conta se a pessoa já tiver mandado mensagem em algum
+#     dos 3 canais principais alguma vez.
 # ══════════════════════════════════════════════════════════════════════
 
 _XP_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "xp_ranking_data.json")
 
 # Configuração de ganho de XP — ajuste à vontade
-_XP_MIN_POR_MSG       = 15   # xp mínimo ganho por mensagem válida
-_XP_MAX_POR_MSG       = 25   # xp máximo ganho por mensagem válida
+_XP_MIN_POR_MSG       = 15   # xp mínimo ganho por mensagem válida (canais normais/principais)
+_XP_MAX_POR_MSG       = 25   # xp máximo ganho por mensagem válida (canais normais/principais)
 _XP_COOLDOWN_SEGUNDOS = 60   # tempo mínimo entre ganhos de xp da mesma pessoa
 
-# xp_stats[user_id] = {"xp": int (total acumulado), "nivel": int, "level_message_id": int|None}
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None})
+# Canais que valem XP "cheio" e que destravam a aparição no ranking
+_XP_CANAL_1        = 1284257046740602901
+_XP_CANAL_BONUS    = 1284258192414740490   # este dá XP extra (bônus)
+_XP_CANAL_3        = 1284258354964856903
+_XP_CANAIS_RANKING = {_XP_CANAL_1, _XP_CANAL_BONUS, _XP_CANAL_3}
+
+_XP_MULTIPLICADOR_BONUS  = 1.6    # canal bônus: 60% a mais de xp por mensagem
+_XP_MULTIPLICADOR_OUTROS = 0.35   # qualquer outro canal do servidor: bem menos xp (35% do normal)
+
+# xp_stats[user_id] = {
+#     "xp": int (total acumulado), "nivel": int, "level_message_id": int|None,
+#     "elegivel": bool (já mandou mensagem em algum dos 3 canais de _XP_CANAIS_RANKING?),
+# }
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None  # ID da mensagem de ranking já postada (editada, não duplicada)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
@@ -8144,6 +8165,7 @@ def _carregar_xp_stats() -> None:
                 "xp":               valores.get("xp", 0),
                 "nivel":            valores.get("nivel", 0),
                 "level_message_id": valores.get("level_message_id"),
+                "elegivel":         valores.get("elegivel", False),
             }
         _xp_ranking_message_id = dados.get("ranking_message_id")
     except (json.JSONDecodeError, OSError, ValueError):
@@ -8210,7 +8232,13 @@ async def _anunciar_level_up(guild: discord.Guild, membro: discord.Member, nivel
 
 
 async def _processar_xp_mensagem(message: discord.Message) -> None:
-    """Dá XP pra quem tem o cargo de XP (com cooldown) e cuida do level-up, se acontecer."""
+    """Dá XP pra quem tem o cargo de XP (com cooldown) e cuida do level-up, se acontecer.
+
+    Mensagens nos 3 canais de _XP_CANAIS_RANKING valem xp cheio (ou bônus, no
+    canal bônus) e são o que faz a pessoa "destravar" a aparição no ranking.
+    Mensagens em qualquer outro canal do servidor ainda dão xp, só que bem
+    menos, e sozinhas não fazem a pessoa aparecer no ranking.
+    """
     if message.guild is None or message.author.bot:
         return
 
@@ -8225,16 +8253,34 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
         return
     _xp_ultimo_ganho[uid] = agora
 
-    ganho = random.randint(_XP_MIN_POR_MSG, _XP_MAX_POR_MSG)
+    canal_id = message.channel.id
+    if canal_id == _XP_CANAL_BONUS:
+        multiplicador = _XP_MULTIPLICADOR_BONUS
+    elif canal_id in _XP_CANAIS_RANKING:
+        multiplicador = 1.0
+    else:
+        multiplicador = _XP_MULTIPLICADOR_OUTROS
+
+    ganho = max(1, round(random.randint(_XP_MIN_POR_MSG, _XP_MAX_POR_MSG) * multiplicador))
+
     dados = xp_stats[uid]
     nivel_antigo = dados["nivel"]
     dados["xp"] += ganho
+
+    if canal_id in _XP_CANAIS_RANKING:
+        dados["elegivel"] = True
 
     nivel_novo, _, _ = _calcular_nivel(dados["xp"])
     dados["nivel"] = nivel_novo
 
     if nivel_novo > nivel_antigo:
         await _anunciar_level_up(message.guild, message.author, nivel_novo)
+
+    # Salva em disco a cada ganho de xp (e não só a cada 1 min pelo loop de
+    # ranking) — assim, mesmo que o Railway derrube o bot de repente, o
+    # máximo que se perde é o ganho da própria mensagem que ainda não deu
+    # tempo de salvar, nunca o histórico inteiro.
+    asyncio.create_task(_salvar_xp_stats())
 
 
 def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
@@ -8245,12 +8291,15 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
     for membro in membros_xp:
         if membro.bot:
             continue
-        # Só entra no ranking quem JÁ interagiu pelo menos uma vez (mandou
-        # mensagem e ganhou xp). Assim o ranking nasce vazio quando o bot liga
-        # e vai preenchendo sozinho conforme as pessoas forem interagindo.
+        # Só entra no ranking quem JÁ mandou mensagem em pelo menos um dos 3
+        # canais de _XP_CANAIS_RANKING (flag "elegivel"). Ganhar xp em outros
+        # canais do servidor não é suficiente sozinho — a pessoa precisa ter
+        # participado nos canais principais pelo menos uma vez.
         if membro.id not in xp_stats:
             continue
         dados = xp_stats[membro.id]
+        if not dados.get("elegivel"):
+            continue
         nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
         linhas.append((membro, dados["xp"], nivel, xp_no_nivel, xp_necessario))
 
@@ -8268,8 +8317,9 @@ def _montar_embed_ranking_xp(guild: discord.Guild) -> discord.Embed:
             )
     else:
         descricao_linhas.append(
-            "*Ninguém entrou no ranking ainda — mande uma mensagem no servidor "
-            "pra começar a ganhar XP!* 💬"
+            "*Ninguém entrou no ranking ainda — mande uma mensagem em "
+            f"<#{_XP_CANAL_1}>, <#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}> "
+            "pra começar a aparecer aqui!* 💬"
         )
 
     embed = discord.Embed(
@@ -8372,16 +8422,24 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
         await ctx.send(f"⚠️ {membro.mention} não participa do ranking de nível (não tem o cargo necessário).")
         return
 
-    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0})
+    dados = xp_stats.get(membro.id, {"xp": 0, "nivel": 0, "elegivel": False})
     nivel, xp_no_nivel, xp_necessario = _calcular_nivel(dados["xp"])
     barra = _barra_progresso(xp_no_nivel, xp_necessario)
+
+    status_ranking = (
+        "✅ Aparece no ranking fixo"
+        if dados.get("elegivel")
+        else f"❌ Ainda não aparece — mande uma mensagem em <#{_XP_CANAL_1}>, "
+             f"<#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}>"
+    )
 
     embed = discord.Embed(
         title=f"⭐ Nível de {membro.display_name}",
         description=(
             f"**Nível:** `{nivel}`\n"
             f"**Progresso:** {barra} `{xp_no_nivel}/{xp_necessario}`\n"
-            f"**XP total:** `{dados['xp']}`"
+            f"**XP total:** `{dados['xp']}`\n"
+            f"**Status no ranking:** {status_ranking}"
         ),
         color=0xe8d5f5
     )

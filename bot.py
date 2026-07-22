@@ -8194,9 +8194,26 @@ async def _salvar_xp_stats() -> None:
         pass
 
 
+async def _apagar_level_up_depois(mensagem: discord.Message, user_id: int) -> None:
+    """Espera 1 minuto e apaga a mensagem de level-up sozinha — não fica esperando
+    a pessoa subir de nível de novo pra sumir."""
+    await asyncio.sleep(60)
+    try:
+        await mensagem.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+    # Se essa ainda for a referência salva como "aviso atual" dessa pessoa,
+    # limpa pra não tentar apagar a mesma mensagem de novo depois.
+    dados = xp_stats.get(user_id)
+    if dados and dados.get("level_message_id") == mensagem.id:
+        dados["level_message_id"] = None
+        asyncio.create_task(_salvar_xp_stats())
+
+
 async def _anunciar_level_up(guild: discord.Guild, membro: discord.Member, nivel_novo: int) -> None:
     """Manda o aviso de novo nível no canal de XP, apagando antes o aviso do nível
-    anterior dessa mesma pessoa (assim só existe sempre um aviso, o mais recente)."""
+    anterior dessa mesma pessoa (assim só existe sempre um aviso, o mais recente),
+    e some sozinho depois de 1 minuto."""
     canal = guild.get_channel(CANAL_XP_ID)
     if canal is None:
         return
@@ -8227,6 +8244,7 @@ async def _anunciar_level_up(guild: discord.Guild, membro: discord.Member, nivel
     try:
         nova = await canal.send(embed=embed)
         dados["level_message_id"] = nova.id
+        asyncio.create_task(_apagar_level_up_depois(nova, membro.id))
     except discord.HTTPException:
         pass
 
@@ -8405,8 +8423,42 @@ async def _atualizar_ranking_xp() -> None:
     await _salvar_xp_stats()
 
 
+_XP_POR_TICK_CALL = 2   # xp ganho a cada 1 min em call de voz — reforço leve, bem menos que mandar mensagem
+
+
+async def _processar_xp_call(guild: discord.Guild) -> None:
+    """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
+    quem está numa call de voz agora e tem o cargo de xp. É só um reforço —
+    bem menos do que mandar mensagem nos canais principais, mas já soma algo."""
+    cargo_xp = guild.get_role(CARGO_XP_ID)
+    if not cargo_xp:
+        return
+
+    for canal_voz in guild.voice_channels:
+        for membro in canal_voz.members:
+            if membro.bot:
+                continue
+            if cargo_xp not in membro.roles:
+                continue
+
+            dados = xp_stats[membro.id]
+            nivel_antigo = dados["nivel"]
+            dados["xp"] += _XP_POR_TICK_CALL
+
+            nivel_novo, _, _ = _calcular_nivel(dados["xp"])
+            dados["nivel"] = nivel_novo
+
+            if nivel_novo > nivel_antigo:
+                await _anunciar_level_up(guild, membro, nivel_novo)
+
+
 @tasks.loop(minutes=1)
 async def loop_ranking_xp():
+    for guild in bot.guilds:
+        try:
+            await _processar_xp_call(guild)
+        except Exception as e:
+            print(f"[ranking-xp] ERRO ao processar xp de call em '{guild.name}': {e!r}")
     await _atualizar_ranking_xp()
 
 

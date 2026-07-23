@@ -9971,7 +9971,7 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
 # de 5 minutos que DOBRA o xp ganho em call e em mensagem nesse período.
 # ══════════════════════════════════════════════════════════════════════
 
-_BAU_GIF = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSpknu7VeT9L_JU-Q93Hn8kmAdNZ9IPJhbmEWECjJZXKQ&s=10"
+_BAU_GIF = "https://static2.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/be/e0/WQOIGADT.gif"
 _BAU_CANAL_ID = 1284257046740602901  # mesmo canal do chat geral (_XP_CANAL_1)
 
 _BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster — o prêmio mais raro/difícil
@@ -10035,6 +10035,7 @@ class BauView(discord.ui.View):
             color=0xf5c542,
             timestamp=discord.utils.utcnow(),
         )
+        embed_resultado.set_image(url=_BAU_GIF)
         embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
         await interaction.response.edit_message(embed=embed_resultado, view=self)
         self.stop()

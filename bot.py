@@ -9122,12 +9122,18 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
     quem está numa call de voz agora. É só um reforço — bem menos do que
     mandar mensagem nos canais principais, mas já soma algo. Destravado pra
     todo mundo, sem exigir cargo. Calls privadas (_XP_CALLS_PRIVADAS) não
-    pontuam — quem está nelas é ignorado."""
+    pontuam — quem está nelas é ignorado. Quem está mutado (silenciado por
+    si mesmo ou pelo servidor) também não pontua — só ganha quem está de
+    fato participando da call com o microfone aberto."""
     for canal_voz in guild.voice_channels:
         if canal_voz.id in _XP_CALLS_PRIVADAS:
             continue
         for membro in canal_voz.members:
             if membro.bot:
+                continue
+
+            estado_voz = membro.voice
+            if estado_voz is not None and (estado_voz.self_mute or estado_voz.mute):
                 continue
 
             dados = xp_stats[membro.id]

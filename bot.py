@@ -10123,6 +10123,434 @@ async def cmd_bau(ctx):
     await canal.send(embed=embed, view=BauView())
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOSS — o Dragão do Caos
+# Comando .boss (só o Reality/CRIADOR_ID pode ativar) invoca uma fera
+# mítica gigantesca no canal _BOSS_CANAL_ID. O chat escolhe entre encarar
+# sozinho (bem arriscado, só 5% de chance) ou chamar todo mundo pra lutar
+# junto (mais gente = mais chance, mas ainda é um boss difícil de verdade).
+# Cada pessoa convoca a criatura mais forte que já tem desbloqueada. Quem
+# vence ganha entre 20% e 60% de XP a mais; quem perde não perde NADA —
+# só o gostinho amargo da derrota. Todas as mensagens do evento somem
+# sozinhas depois de 1 minuto.
+# ══════════════════════════════════════════════════════════════════════
+
+# ⚠️ Esse gif é um link temporário do CDN do Discord (parâmetros ?ex=...),
+# que expira sozinho depois de um tempo (geralmente ~24h-48h). Se ele
+# parar de aparecer no embed, pegue um link novo (clique direito na
+# imagem no Discord > Copiar link) e troque aqui embaixo — ou, melhor
+# ainda, suba o gif num host permanente (imgur, ibb.co etc.) pra nunca
+# mais precisar trocar.
+_BOSS_DRAGAO_CAOS_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1529955698690228294/gif-ezgif.com-optimize.gif?ex=6a63d1c7&is=6a628047&hm=7ce47d57d6827c7b60f48d9bb849950abdfe7893b460ef32a5a6755650ecc065"
+
+_BOSS_CANAL_ID = 1284257046740602901   # mesmo canal do chat geral (_XP_CANAL_1) — só aparece aqui
+
+_BOSS_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
+_BOSS_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
+
+_BOSS_CHANCE_SOLO = 0.05   # 5% — enfrentar sozinho é quase suicídio
+
+# Batalha em grupo: começa numa base baixa, sobe um pouco por participante
+# e um pouco mais conforme a raridade das criaturas convocadas — mas nunca
+# passa de _BOSS_CHANCE_GRUPO_MAX, pra continuar sendo um boss difícil
+# mesmo com o servidor inteiro batalhando junto.
+_BOSS_CHANCE_GRUPO_BASE      = 0.12
+_BOSS_CHANCE_GRUPO_MAX       = 0.70
+_BOSS_BONUS_POR_PARTICIPANTE = 0.035
+_BOSS_BONUS_RARIDADE_CRIATURA = {
+    "comum": 0.0, "raro": 0.01, "epico": 0.02, "lendario": 0.035, "mitico": 0.07,
+}
+
+_BOSS_XP_GANHO_MIN = 0.20   # 20% — mínimo de XP que quem vence pode ganhar
+_BOSS_XP_GANHO_MAX = 0.60   # 60% — máximo de XP que quem vence pode ganhar
+_BOSS_XP_GANHO_SEM_XP = (30, 80)   # recompensa fixa pra quem ainda não tem XP acumulado
+
+_boss_ativo_no_canal: set = set()   # channel_id -> impede 2 boss ao mesmo tempo no mesmo canal
+
+
+def _boss_criatura_mais_forte(user_id: int) -> dict:
+    """Retorna a criatura de MAIOR raridade que essa pessoa já desbloqueou —
+    é ela que a pessoa convoca pra lutar contra o boss."""
+    desbloqueadas = set(_garantir_criaturas_iniciais(user_id))
+    for raridade in _ORDEM_RARIDADES:   # já vem do mais raro pro mais comum
+        candidatas = [c for c in _BATALHA_CRIATURAS if c["raridade"] == raridade and c["id"] in desbloqueadas]
+        if candidatas:
+            return random.choice(candidatas)
+    # segurança: nunca deveria cair aqui, todo mundo tem ao menos as Comuns
+    return random.choice([c for c in _BATALHA_CRIATURAS if c["raridade"] == "comum"])
+
+
+def _boss_chance_grupo(convocacoes: list) -> float:
+    """Calcula a chance de vitória do grupo: base + um bônus por pessoa +
+    um bônus pela raridade de cada criatura convocada, sempre travado no
+    teto de _BOSS_CHANCE_GRUPO_MAX pra continuar sendo um boss difícil."""
+    chance = _BOSS_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS_BONUS_POR_PARTICIPANTE
+    for _membro, criatura in convocacoes:
+        chance += _BOSS_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+    return min(chance, _BOSS_CHANCE_GRUPO_MAX)
+
+
+def _boss_calcular_ganho_xp(user_id: int) -> tuple:
+    """Sorteia quanto de XP essa pessoa ganha por vencer o boss: entre 20%
+    e 60% do XP que ela já tem — ou uma recompensa fixa se ainda não tiver
+    XP nenhum acumulado (pra ninguém sair de mãos vazias)."""
+    dados = xp_stats[user_id]
+    xp_atual = dados.get("xp", 0)
+    if xp_atual > 0:
+        percentual = random.uniform(_BOSS_XP_GANHO_MIN, _BOSS_XP_GANHO_MAX)
+        ganho = max(1, round(xp_atual * percentual))
+    else:
+        percentual = 0.0
+        ganho = random.randint(*_BOSS_XP_GANHO_SEM_XP)
+    return ganho, percentual
+
+
+async def _boss_premiar_vencedores(guild: discord.Guild, vencedores: list) -> list:
+    """Aplica o ganho de XP de cada vencedor, atualiza nível e dispara o
+    aviso de level up quando for o caso. Devolve uma lista de (membro,
+    ganho, percentual) pra montar o texto de resultado."""
+    resultados = []
+    for membro in vencedores:
+        dados = xp_stats[membro.id]
+        nivel_antigo = dados["nivel"]
+        ganho, percentual = _boss_calcular_ganho_xp(membro.id)
+        dados["xp"] += ganho
+        dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+        if dados["nivel"] > nivel_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
+        resultados.append((membro, ganho, percentual))
+
+    asyncio.create_task(_salvar_xp_stats())
+    asyncio.create_task(_atualizar_ranking_xp())
+    return resultados
+
+
+async def _boss_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
+    """Roda o confronto solo contra o Dragão do Caos: só 5% de chance de
+    vitória — e se perder, não perde XP nenhum, só o orgulho."""
+    try:
+        criatura = _boss_criatura_mais_forte(membro.id)
+        info_raridade = _RARIDADES[criatura["raridade"]]
+
+        embed_convocacao = discord.Embed(
+            title="🗡️ Um desafiante solitário se apresenta!",
+            description=(
+                f"🌑 **Aeon:** ...{membro.mention} decidiu enfrentar o Dragão do Caos sozinho. "
+                f"Coragem ou loucura — as sombras ainda não sabem dizer. 🖤🐉\n"
+                f"🌟 **Celestia:** {membro.display_name} convoca {info_raridade['emoji']} "
+                f"**{criatura['nome']}**!! Boa sorte, vai precisar de muita!! 😳🌟✨"
+            ),
+            color=info_raridade["cor"],
+        )
+        embed_convocacao.set_thumbnail(url=criatura["gif"])
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        aviso = await canal.send("🐉💥 *O Dragão do Caos ruge e avança sobre o desafiante...* 💥🐉")
+        await asyncio.sleep(2.5)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        venceu = random.random() < _BOSS_CHANCE_SOLO
+
+        if venceu:
+            resultados = await _boss_premiar_vencedores(canal.guild, [membro])
+            _, ganho, percentual = resultados[0]
+            descricao = (
+                f"🏆 **INACREDITÁVEL!!** {membro.mention} e {info_raridade['emoji']} **{criatura['nome']}** "
+                f"derrubaram o **Dragão do Caos** sozinhos!! Só 5% de chance e AINDA ASSIM conseguiram!! 🐉💥\n\n"
+                f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`)\n\n"
+                f"🌑 **Aeon:** ...impossível. E ainda assim, aconteceu. As sombras se curvam. 🖤🌑\n"
+                f"🌟 **Celestia:** EU NÃO ACREDITO NO QUE EU VI!!! 😭🌟🤍✨ LENDA VIVA!!!"
+            )
+            cor = 0xf5c542
+        else:
+            descricao = (
+                f"💀 O **Dragão do Caos** foi forte demais — {info_raridade['emoji']} **{criatura['nome']}** caiu "
+                f"em batalha, e {membro.mention} não conseguiu sozinho dessa vez.\n\n"
+                f"🍃 Nenhum XP foi perdido — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...era esperado. Poucos sobrevivem à ousadia sozinhos. 🖤🌑\n"
+                f"🌟 **Celestia:** Não desanima!! 🌸😢 Da próxima, chama a galera pra ir junto!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — O Dragão do Caos")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+async def _boss_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
+    """Roda o confronto em grupo contra o Dragão do Caos: cada participante
+    convoca a criatura mais forte que já desbloqueou, e a chance de vitória
+    cresce com o número (e a força) das criaturas convocadas."""
+    try:
+        convocacoes = [(p, _boss_criatura_mais_forte(p.id)) for p in participantes]
+
+        linhas = [
+            f"{_RARIDADES[c['raridade']]['emoji']} **{p.display_name}** convoca **{c['nome']}**"
+            for p, c in convocacoes
+        ]
+        embed_convocacao = discord.Embed(
+            title=f"⚔️ {len(convocacoes)} guerreiro(a)s entram em campo!",
+            description=(
+                "🌟 **Celestia:** OLHA SÓ ESSE TIME!! 😱🌟✨ Vai ser INTENSO!!\n\n"
+                + "\n".join(linhas)
+            ),
+            color=0xff4444,
+        )
+        embed_convocacao.set_image(url=_BOSS_DRAGAO_CAOS_GIF)
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        aviso = await canal.send("🐉💥 *O Dragão do Caos solta um rugido ensurdecedor e avança...* 💥🐉")
+        await asyncio.sleep(2.5)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        chance = _boss_chance_grupo(convocacoes)
+        venceu = random.random() < chance
+
+        if venceu:
+            resultados = await _boss_premiar_vencedores(canal.guild, participantes)
+            texto_ganhos = "\n".join(
+                f"✨ {membro.mention} +`{ganho}` XP (`{percentual * 100:.1f}%`)"
+                for membro, ganho, percentual in resultados
+            )
+            descricao = (
+                f"🏆 **VITÓRIA!!** O time de `{len(participantes)}` guerreiro(a)s derrubou o "
+                f"**Dragão do Caos**!! (chance da batalha: `{chance * 100:.0f}%`) 🐉💥\n\n"
+                f"{texto_ganhos}\n\n"
+                f"🌑 **Aeon:** ...juntos, as sombras não têm chance contra vocês. 🖤🌑\n"
+                f"🌟 **Celestia:** EQUIPE DOS SONHOS!!! 😭🌟🤍✨ VOCÊS ARRASARAM DEMAIS!!"
+            )
+            cor = 0xf5c542
+        else:
+            mencoes = ", ".join(p.mention for p in participantes)
+            descricao = (
+                f"💀 Mesmo com `{len(participantes)}` guerreiro(a)s juntos (`{chance * 100:.0f}%` de chance), "
+                f"o **Dragão do Caos** foi forte demais dessa vez. {mencoes} não conseguiram.\n\n"
+                f"🍃 Ninguém perdeu XP — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...nem sempre a união é suficiente. As sombras respeitam a tentativa. 🖤🌑\n"
+                f"🌟 **Celestia:** Vamos tentar de novo da próxima vez!! 🌸💫 Vocês foram corajosos!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — O Dragão do Caos")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+class BossRecrutamentoView(discord.ui.View):
+    """Botão único de 'Quero Participar!' que fica ativo por
+    _BOSS_TEMPO_RECRUTAMENTO segundos, juntando o time que vai enfrentar o
+    boss em conjunto. Quando o tempo acaba, a batalha começa sozinha."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS_TEMPO_RECRUTAMENTO)
+        self.canal = canal
+        self.participantes: dict = {}   # user_id -> discord.Member
+        self.mensagem: discord.Message = None
+
+    @discord.ui.button(label="⚔️ Quero Participar!", style=discord.ButtonStyle.success)
+    async def participar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if interaction.user.id in self.participantes:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já tá na lista, guerreiro(a)!! 😆🌸", ephemeral=True
+            )
+            return
+
+        self.participantes[interaction.user.id] = interaction.user
+        button.label = f"⚔️ Quero Participar! ({len(self.participantes)})"
+        await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            if self.mensagem:
+                await self.mensagem.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+        participantes = list(self.participantes.values())
+        if not participantes:
+            try:
+                msg = await self.canal.send(
+                    "🌑 **Aeon:** ...ninguém teve coragem de se juntar a tempo. "
+                    "O Dragão do Caos ruge e desaparece de volta nas sombras. 🖤🐉"
+                )
+                asyncio.create_task(_apagar_mensagem_depois(msg))
+            finally:
+                _boss_ativo_no_canal.discard(self.canal.id)
+            return
+
+        asyncio.create_task(_boss_batalha_grupo(self.canal, participantes))
+
+
+class BossEscolhaView(discord.ui.View):
+    """Botões de 'Todos Juntos' e 'Eu Consigo Sozinho' que aparecem quando o
+    Dragão do Caos surge. A PRIMEIRA escolha feita (por qualquer pessoa)
+    decide o caminho dessa aparição do boss."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS_TEMPO_ESCOLHA)
+        self.canal = canal
+        self.decidido = False
+        self.mensagem: discord.Message = None
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="🤝 Todos Juntos", style=discord.ButtonStyle.primary)
+    async def todos_juntos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🤝 O CHAMADO FOI FEITO!",
+            description=(
+                f"🌟 **Celestia:** {interaction.user.mention} decidiu enfrentar o Dragão do Caos "
+                f"EM GRUPO!! 😱🌟✨\n"
+                f"🌑 **Aeon:** ...quem tiver coragem, clique no botão abaixo. `{_BOSS_TEMPO_RECRUTAMENTO}s` "
+                f"pra se juntar ao time. 🖤🐉"
+            ),
+            color=0xff8800,
+        )
+        embed.set_image(url=_BOSS_DRAGAO_CAOS_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        view_recrutamento = BossRecrutamentoView(self.canal)
+        msg_recrutamento = await self.canal.send(
+            "🐉 Time contra o **Dragão do Caos** — clique pra participar!",
+            view=view_recrutamento,
+        )
+        view_recrutamento.mensagem = msg_recrutamento
+        asyncio.create_task(_apagar_mensagem_depois(msg_recrutamento))
+
+    @discord.ui.button(label="🗡️ Eu Consigo Sozinho", style=discord.ButtonStyle.danger)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🗡️ DESAFIO SOLITÁRIO ACEITO!",
+            description=(
+                f"🌑 **Aeon:** ...{interaction.user.mention} escolheu enfrentar o Dragão do Caos "
+                f"sozinho. Coragem, ou loucura. 🖤🐉\n"
+                f"🌟 **Celestia:** SÓ 5% DE CHANCE?! 😰🌟 Boa sorte, vai precisar de MUITA!!"
+            ),
+            color=0xff4444,
+        )
+        embed.set_image(url=_BOSS_DRAGAO_CAOS_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        asyncio.create_task(_boss_batalha_solo(self.canal, interaction.user))
+
+    async def on_timeout(self):
+        if self.decidido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            embed = discord.Embed(
+                title="🐉 O Dragão do Caos se foi...",
+                description=(
+                    "🌑 **Aeon:** ...ninguém teve coragem de decidir a tempo. As sombras engolem "
+                    "o dragão de volta... por enquanto. 🖤🐉"
+                ),
+                color=0x888888,
+            )
+            await self.mensagem.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+        _boss_ativo_no_canal.discard(self.canal.id)
+
+
+@bot.command(name="boss")
+async def cmd_boss(ctx):
+    """🐉 Invoca o Dragão do Caos no canal do chat geral — só o Reality
+    (CRIADOR_ID) pode chamar. O chat escolhe entre encarar sozinho (5% de
+    chance) ou juntar um time (mais gente = mais chance, mas ainda é um
+    boss bem difícil). Uso: .boss"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BOSS_CANAL_ID)
+    if canal is None:
+        return
+
+    if canal.id in _boss_ativo_no_canal:
+        aviso = await ctx.send(
+            "🌟 **Celestia:** Já tem um Dragão do Caos ativo por lá!! Espera esse terminar!! 😅🌸"
+        )
+        asyncio.create_task(_apagar_mensagem_depois(aviso))
+        return
+
+    _boss_ativo_no_canal.add(canal.id)
+
+    embed = discord.Embed(
+        title="🐉 UM BOSS APARECEU!!",
+        description=(
+            "🌑 **Aeon:** ...as sombras se rasgam. Algo antigo, furioso e imenso acaba de acordar. "
+            "**O Dragão do Caos** chegou. 🖤🐉\n\n"
+            "🌟 **Celestia:** AAAAAA CORRE TODO MUNDO!! 😱🌟🔥 ...ou fica e enfrenta!! Será que "
+            "vocês são capazes de encará-lo sozinhos, ou só na base do trabalho em equipe?? "
+            "Escolham com cuidado — ele é BEM difícil!! ✨\n\n"
+            f"⏳ Vocês têm `{_BOSS_TEMPO_ESCOLHA}s` pra decidir."
+        ),
+        color=0x8b0000,
+    )
+    embed.set_image(url=_BOSS_DRAGAO_CAOS_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Ameaça no Horizonte")
+
+    view = BossEscolhaView(canal)
+    msg = await canal.send(embed=embed, view=view)
+    view.mensagem = msg
+    asyncio.create_task(_apagar_mensagem_depois(msg))
+
+
 @bot.command(name="surpresachat")
 async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""

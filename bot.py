@@ -8861,8 +8861,8 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "🌑 **Aeon:** ...todo mundo começa com as ⚪ Comuns. Só dá pra invocar em batalha o que "
             "você já tem — vença combates e, de recompensa, você pode destravar uma criatura nova "
             "pra coleção. 🖤🌑\n\n"
-            "👇 Use o menu abaixo pra ver os detalhes (e a imagem) de cada uma, e conferir "
-            "**só pra você** se já desbloqueou ou não."
+            "👇 Use os menus abaixo (um pra cada raridade) pra ver os detalhes (e a imagem) de cada "
+            "uma, e conferir **só pra você** se já desbloqueou ou não."
         ),
         color=0x9b59b6,
     )
@@ -8881,25 +8881,33 @@ def _montar_embed_enciclopedia() -> discord.Embed:
 
 
 class EnciclopediaSelect(discord.ui.Select):
-    """Menu de seleção com todas as criaturas. Ao escolher uma, a pessoa recebe
-    (de forma privada) a imagem, a raridade e se JÁ desbloqueou aquela criatura."""
+    """Menu de seleção com as criaturas de UMA raridade. Ao escolher uma, a
+    pessoa recebe (de forma privada) a imagem, a raridade e se JÁ desbloqueou
+    aquela criatura.
 
-    def __init__(self):
+    Existe um select por raridade (em vez de um único com todas as criaturas)
+    porque o Discord só permite até 25 opções por menu — dividindo por
+    raridade, cada menu tem bastante folga pra coleção continuar crescendo."""
+
+    def __init__(self, raridade: str):
+        self.raridade = raridade
+        info = _RARIDADES[raridade]
+        criaturas_da_raridade = [c for c in _BATALHA_CRIATURAS if c["raridade"] == raridade][:25]
         options = [
             discord.SelectOption(
                 label=c["nome"][:100],
                 value=c["id"],
-                description=_RARIDADES[c["raridade"]]["label"],
-                emoji=_RARIDADES[c["raridade"]]["emoji"],
+                description=info["label"],
+                emoji=info["emoji"],
             )
-            for c in _BATALHA_CRIATURAS
+            for c in criaturas_da_raridade
         ]
         super().__init__(
-            placeholder="📖 Escolha uma criatura para ver os detalhes...",
+            placeholder=f"{info['emoji']} Ver criaturas {info['label']}s...",
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="enciclopedia_criaturas_select",
+            custom_id=f"enciclopedia_criaturas_select_{raridade}",
         )
 
     async def callback(self, interaction: discord.Interaction):
@@ -8931,12 +8939,15 @@ class EnciclopediaSelect(discord.ui.Select):
 
 
 class EnciclopediaView(discord.ui.View):
-    """View persistente (sobrevive a reinícios do bot) com o menu de seleção
-    de criaturas da Enciclopédia."""
+    """View persistente (sobrevive a reinícios do bot) com um menu de seleção
+    de criaturas por raridade — um select pra Lendárias, um pra Épicas,
+    um pra Raras e um pra Comuns."""
 
     def __init__(self):
         super().__init__(timeout=None)
-        self.add_item(EnciclopediaSelect())
+        for raridade in _ORDEM_RARIDADES:
+            if any(c["raridade"] == raridade for c in _BATALHA_CRIATURAS):
+                self.add_item(EnciclopediaSelect(raridade))
 
 
 async def _achar_mensagem_enciclopedia(canal: discord.TextChannel):
@@ -9288,6 +9299,7 @@ _BATALHA_CRIATURAS = [
     {"id": "desconectado",            "nome": "O Desconectado",               "raridade": "comum",    "gif": "https://64.media.tumblr.com/e59c49cc960b3af010126aa2185f9af4/tumblr_o2ukydWovF1rznluto3_250.gif"},
     {"id": "rino_acabado",            "nome": "Rino, o Acabado",              "raridade": "comum",    "gif": "https://33.media.tumblr.com/fc4838c3660618bf7dd87103de60871b/tumblr_inline_nzsz2t9ltH1s38bty_500.gif"},
     {"id": "plebeu",                  "nome": "O Plebeu",                     "raridade": "comum",    "gif": "https://i.pinimg.com/originals/1c/9f/2b/1c9f2b392f039b76b7f3a68039730d21.gif"},
+    {"id": "bandido",                 "nome": "Bandido",                      "raridade": "comum",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/343/519/original/rafael-francoi-neutral-inxikrahsoldier-preview.gif?1654628639"},
 
     # ── Raras ───────────────────────────────────────────────────────────
     {"id": "cavaleiro_elemental",     "nome": "Cavaleiro Elemental",          "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
@@ -9296,6 +9308,7 @@ _BATALHA_CRIATURAS = [
     {"id": "cientista_louco",         "nome": "Cientista Louco",              "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f7/45/05/f74505bee8fec82f0eb6e925c61b35f2.gif"},
     {"id": "brutal",                  "nome": "O Brutal",                     "raridade": "raro",     "gif": "https://i.pinimg.com/originals/fd/1f/8a/fd1f8aa84a2d1b1d1486c68613216d9d.gif"},
     {"id": "cavaleiro_sinistro",      "nome": "Cavaleiro do Sinistro",        "raridade": "raro",     "gif": "https://i.pinimg.com/originals/1c/3a/9b/1c3a9bc1c91135ff036d1d168d15e474.gif"},
+    {"id": "kreging",                 "nome": "Kreging",                      "raridade": "raro",     "gif": "https://64.media.tumblr.com/3211afe2da2effd51671993d42cecc81/tumblr_oomh73qHh21qciqqno5_250.gif"},
 
     # ── Épicas ──────────────────────────────────────────────────────────
     {"id": "heroina_esmeraldas",      "nome": "Heroína das Esmeraldas",       "raridade": "epico",    "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
@@ -9304,6 +9317,8 @@ _BATALHA_CRIATURAS = [
     {"id": "monstro_portao",          "nome": "O Monstro do Portão",          "raridade": "epico",    "gif": "https://i.pinimg.com/originals/1f/4a/d7/1f4ad7fd9917093bc7463394497fd920.gif"},
     {"id": "ultimo_atlanta",          "nome": "Último de Atlanta",            "raridade": "epico",    "gif": "https://i.pinimg.com/originals/84/a6/8b/84a68ba244c9034c52dcb8002f90a87f.gif"},
     {"id": "guerreiro_trovao",        "nome": "Guerreiro do Trovão",          "raridade": "epico",    "gif": "https://i.pinimg.com/originals/6b/2c/21/6b2c2173d12ddf1f2adae8f0064f772d.gif"},
+    {"id": "anti_elemento",           "nome": "O Anti-Elemento",              "raridade": "epico",    "gif": "https://i.pinimg.com/originals/d1/ee/0e/d1ee0eed40bd9a2052e4b0ce55e741d9.gif"},
+    {"id": "vortex",                  "nome": "O Vórtex",                     "raridade": "epico",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/342/679/original/rafael-francoi-build-epic-01.gif?1654627256"},
 
     # ── Lendárias ───────────────────────────────────────────────────────
     {"id": "ultimo_guerreiro",        "nome": "O Último Guerreiro",           "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/da5bb9cc8fab68c2c3cabe68a7cc7a10cd277939be96-bBi4DQ"},
@@ -9311,6 +9326,7 @@ _BATALHA_CRIATURAS = [
     {"id": "kaiju_eco",               "nome": "Kaiju do Eco",                 "raridade": "lendario", "gif": "https://i.pinimg.com/originals/02/ef/09/02ef09d38f7435de3a2e8d26508a17ec.gif"},
     {"id": "protetor_portao_inferno", "nome": "Protetor do Portão do Inferno","raridade": "lendario", "gif": "https://i.pinimg.com/originals/6d/bc/58/6dbc588871368635891ea6a5f12d3cf2.gif"},
     {"id": "magmata",                 "nome": "O Magmata",                    "raridade": "lendario", "gif": "https://i.redd.it/0jk54f0ocjwy.gif"},
+    {"id": "vreg_entre_mundos",       "nome": "Vreg, Entre Mundos",           "raridade": "lendario", "gif": "https://cdna.artstation.com/p/assets/images/images/050/343/134/original/rafael-francoi-boss-f4-preview.gif?1654628012"},
 ]
 
 def _garantir_criaturas_iniciais(user_id: int) -> list:

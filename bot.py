@@ -8241,6 +8241,16 @@ def _calcular_nivel(xp_total: int):
         nivel += 1
 
 
+def _xp_total_para_nivel(nivel: int) -> int:
+    """Inverso de _calcular_nivel: quanto de XP total é preciso acumular pra
+    estar bem no COMEÇO de um nível específico (0 xp dentro dele). Usado
+    pelo `.darlevel` pra definir manualmente o nível de alguém."""
+    total = 0
+    for n in range(max(nivel, 0)):
+        total += _xp_necessario_para_nivel(n)
+    return total
+
+
 def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: str = "🟪") -> str:
     necessario = max(necessario, 1)
     preenchido = max(0, min(tamanho, round((atual / necessario) * tamanho)))
@@ -9217,6 +9227,41 @@ async def cmd_nivel(ctx, membro: discord.Member = None):
     embed.set_thumbnail(url=membro.display_avatar.url)
     embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Nível")
     await ctx.send(embed=embed)
+
+
+@bot.command(name="darlevel")
+async def cmd_dar_level(ctx, membro: discord.Member = None, nivel: int = None):
+    """Define manualmente o nível de alguém no ranking de XP (ajusta o XP
+    dela pro início desse nível). Só o Reality pode usar.
+    Uso: .darlevel @membro <nível>"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if membro is None or nivel is None:
+        await ctx.send("⚠️ Uso correto: `.darlevel @membro <nível>`\nExemplo: `.darlevel @Fulano 10`")
+        return
+
+    if nivel < 0:
+        await ctx.send("⚠️ O nível não pode ser negativo.")
+        return
+
+    dados = xp_stats[membro.id]
+    nivel_antigo = dados["nivel"]
+
+    dados["xp"] = _xp_total_para_nivel(nivel)
+    dados["nivel"] = nivel
+    dados["elegivel"] = True  # já que ganhou um nível "oficial", passa a aparecer no ranking fixo
+
+    await _salvar_xp_stats()
+    await _atualizar_ranking_xp()
+
+    if nivel > nivel_antigo and ctx.guild is not None:
+        await _anunciar_level_up(ctx.guild, membro, nivel)
+
+    await ctx.send(
+        f"✅ **{membro.display_name}** agora está no **nível `{nivel}`** "
+        f"(`{dados['xp']}` XP) — ranking já atualizado."
+    )
 
 
 @bot.command(name="xpdebug")

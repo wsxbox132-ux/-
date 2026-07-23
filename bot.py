@@ -8372,9 +8372,16 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
     Mensagens nos 3 canais de _XP_CANAIS_RANKING valem xp cheio (ou bônus, no
     canal bônus) e são o que faz a pessoa "destravar" a aparição no ranking.
     Mensagens em qualquer outro canal do servidor ainda dão xp, só que bem
-    menos, e sozinhas não fazem a pessoa aparecer no ranking.
+    menos, e sozinhas não fazem a pessoa aparecer no ranking. Calls privadas
+    (_XP_CALLS_PRIVADAS) são exceção total: nada de xp por lá.
     """
     if message.guild is None or message.author.bot:
+        return
+
+    # Calls privadas (_XP_CALLS_PRIVADAS) não pontuam de jeito nenhum — nem
+    # xp de call, nem xp de mensagem mandada por lá. Sai antes até de gastar
+    # o cooldown, pra não prejudicar o próximo ganho de xp da pessoa.
+    if message.channel.id in _XP_CALLS_PRIVADAS:
         return
 
     # ⚠️ Destravado: NÃO exige mais o cargo CARGO_XP_ID. Qualquer pessoa que

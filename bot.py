@@ -9148,6 +9148,13 @@ async def _atualizar_ranking_xp() -> None:
 
 _XP_POR_TICK_CALL = 2   # xp ganho a cada 1 min em call de voz — reforço leve, bem menos que mandar mensagem
 
+# Calls com xp bônus — canal_id -> multiplicador aplicado em cima do
+# _XP_POR_TICK_CALL normal. Qualquer call que não estiver aqui usa o valor
+# padrão (1x). Não afeta calls privadas, essas continuam sem xp nenhum.
+_XP_CALLS_MULTIPLICADOR = {
+    1284260386635251713: 3.0,   # o triplo de xp por minuto comparado às outras calls
+}
+
 
 async def _processar_xp_call(guild: discord.Guild) -> None:
     """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
@@ -9168,10 +9175,11 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
             if estado_voz is not None and (estado_voz.self_mute or estado_voz.mute):
                 continue
 
-            ganho_call = _XP_POR_TICK_CALL
+            ganho_call = _XP_POR_TICK_CALL * _XP_CALLS_MULTIPLICADOR.get(canal_voz.id, 1.0)
             # 🎁 Booster de XP do Baú — se estiver ativo, dobra o ganho por um tempo
             if time.time() < _xp_booster_ate.get(membro.id, 0):
                 ganho_call *= _BAU_BOOSTER_MULTIPLICADOR
+            ganho_call = max(1, round(ganho_call))
 
             dados = xp_stats[membro.id]
             nivel_antigo = dados["nivel"]

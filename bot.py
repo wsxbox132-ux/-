@@ -7377,7 +7377,7 @@ CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets sã
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
 
 # ── Sistema de XP / Ranking de Nível (estilo Lorrita) ───────────────────────
-CANAL_XP_ID = 1529543505267916942  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
+CANAL_XP_ID = 1529852809850130583  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
 CARGO_XP_ID = 1290029716241256600  # cargo dos membros que participam do ranking de XP
 IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
 
@@ -8168,6 +8168,18 @@ _XP_CANAIS_RANKING = {_XP_CANAL_1, _XP_CANAL_BONUS, _XP_CANAL_3}
 
 _XP_MULTIPLICADOR_BONUS  = 1.6    # canal bônus: 60% a mais de xp por mensagem
 _XP_MULTIPLICADOR_OUTROS = 0.35   # qualquer outro canal do servidor: bem menos xp (35% do normal)
+
+# Calls privadas — quem está numa dessas calls de voz NÃO ganha xp de call
+# (_XP_POR_TICK_CALL). Não afeta xp de mensagem, só o tick de call.
+_XP_CALLS_PRIVADAS = {
+    1390460781941751848,
+    1289963328248217672,
+    1503862574251507813,
+    1284260414850470030,
+    1299047064029892708,
+    1299047106870378506,
+    1299047207957430292,
+}
 
 # ── Personalização de cor do quadradinho no ranking ─────────────────────────
 # Cada pessoa pode escolher a cor do próprio "quadradinho" (o quadrado que
@@ -9109,8 +9121,11 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
     """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
     quem está numa call de voz agora. É só um reforço — bem menos do que
     mandar mensagem nos canais principais, mas já soma algo. Destravado pra
-    todo mundo, sem exigir cargo."""
+    todo mundo, sem exigir cargo. Calls privadas (_XP_CALLS_PRIVADAS) não
+    pontuam — quem está nelas é ignorado."""
     for canal_voz in guild.voice_channels:
+        if canal_voz.id in _XP_CALLS_PRIVADAS:
+            continue
         for membro in canal_voz.members:
             if membro.bot:
                 continue
@@ -9207,6 +9222,81 @@ async def cmd_xp_debug(ctx):
     if len(texto) > 1900:
         texto = texto[:1900] + "\n... (cortado)"
     await ctx.send(f"🔍 **Diagnóstico do Ranking de XP**\n{texto}")
+
+
+class ReiniciarRankingView(discord.ui.View):
+    """View de confirmação do reset total do ranking de interação (XP).
+    Só o Reality (CRIADOR_ID) pode confirmar ou cancelar — qualquer outra
+    pessoa que clicar recebe um aviso de acesso negado."""
+
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != CRIADOR_ID:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+                "🌟 **Celestia:** Só o Reality pode confirmar isso!! 🌸🤍✨",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="✅ Confirmar reset",
+        style=discord.ButtonStyle.danger,
+        custom_id="reiniciar_ranking_confirmar"
+    )
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global _xp_ranking_pagina_atual
+
+        xp_stats.clear()
+        _xp_ultimo_ganho.clear()
+        _xp_ranking_pagina_atual = 0
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content="♻️ **Ranking de interação reiniciado — todo mundo voltou a 0.**",
+            embed=None,
+            view=self
+        )
+        self.stop()
+
+        guild = interaction.guild or (bot.guilds[0] if bot.guilds else None)
+        if guild is not None:
+            await _atualizar_ranking_xp()
+
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.secondary,
+        custom_id="reiniciar_ranking_cancelar"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ Reset cancelado.", embed=None, view=self)
+        self.stop()
+
+
+@bot.command(name="reiniciarranking")
+async def cmd_reiniciar_ranking(ctx):
+    """Reseta TODO o ranking de interação (xp, nível, criaturas, vitórias e
+    derrotas) de volta a 0. Só o Reality pode usar. Uso: .reiniciarranking"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    embed = discord.Embed(
+        title="♻️ Reiniciar Ranking de Interação",
+        description=(
+            "Isso vai **zerar TUDO** — xp, nível, criaturas desbloqueadas, "
+            "vitórias e derrotas de **todo mundo** no ranking.\n\n"
+            "Tem certeza?"
+        ),
+        color=0xff4444
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Nível")
+    await ctx.send(embed=embed, view=ReiniciarRankingView())
 
 
 @bot.command(name="xpbackfill")

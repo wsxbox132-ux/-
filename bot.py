@@ -10287,6 +10287,23 @@ async def _boss_batalha_solo(canal: discord.TextChannel, membro: discord.Member)
         _boss_ativo_no_canal.discard(canal.id)
 
 
+def _boss_cards_criaturas(convocacoes: list) -> list:
+    """Monta um mini-embed pra CADA criatura convocada, com miniatura (igual
+    ao que acontece no desafio solo) — assim dá pra ver o time inteiro de
+    verdade, não só os nomes em texto. Discord aceita até 10 embeds por
+    mensagem, então isso é enviado em lotes de 10 quando o grupo é grande."""
+    cards = []
+    for membro, criatura in convocacoes:
+        info = _RARIDADES[criatura["raridade"]]
+        card = discord.Embed(
+            description=f"{info['emoji']} **{membro.display_name}** convoca **{criatura['nome']}** (*{info['label']}*)",
+            color=info["cor"],
+        )
+        card.set_thumbnail(url=criatura["gif"])
+        cards.append(card)
+    return cards
+
+
 async def _boss_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
     """Roda o confronto em grupo contra o Dragão do Caos: cada participante
     convoca a criatura mais forte que já desbloqueou, e a chance de vitória
@@ -10294,21 +10311,23 @@ async def _boss_batalha_grupo(canal: discord.TextChannel, participantes: list) -
     try:
         convocacoes = [(p, _boss_criatura_mais_forte(p.id)) for p in participantes]
 
-        linhas = [
-            f"{_RARIDADES[c['raridade']]['emoji']} **{p.display_name}** convoca **{c['nome']}**"
-            for p, c in convocacoes
-        ]
-        embed_convocacao = discord.Embed(
+        embed_cabecalho = discord.Embed(
             title=f"⚔️ {len(convocacoes)} guerreiro(a)s entram em campo!",
-            description=(
-                "🌟 **Celestia:** OLHA SÓ ESSE TIME!! 😱🌟✨ Vai ser INTENSO!!\n\n"
-                + "\n".join(linhas)
-            ),
+            description="🌟 **Celestia:** OLHA SÓ ESSE TIME!! 😱🌟✨ Vai ser INTENSO!!",
             color=0xff4444,
         )
-        embed_convocacao.set_image(url=_BOSS_DRAGAO_CAOS_GIF)
-        msg1 = await canal.send(embed=embed_convocacao)
+        cards = _boss_cards_criaturas(convocacoes)
+
+        # 1º lote: cabeçalho + até 9 cards (10 embeds é o limite do Discord por
+        # mensagem). O resto (grupos grandes) sai em mensagens seguintes.
+        lote = [embed_cabecalho] + cards[:9]
+        restante = cards[9:]
+        msg1 = await canal.send(embeds=lote)
         asyncio.create_task(_apagar_mensagem_depois(msg1))
+        while restante:
+            msg_extra = await canal.send(embeds=restante[:10])
+            asyncio.create_task(_apagar_mensagem_depois(msg_extra))
+            restante = restante[10:]
         await asyncio.sleep(3)
 
         aviso = await canal.send("🐉💥 *O Dragão do Caos solta um rugido ensurdecedor e avança...* 💥🐉")

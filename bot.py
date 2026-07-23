@@ -8777,13 +8777,19 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
             "**4️⃣ Desbloqueando criaturas**\n"
-            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico ou 🟡 Lendário — e quanto mais "
+            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário ou 🐉 Mítico — e quanto mais "
             "rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as ⚪ Comuns "
-            "desbloqueadas; as demais só saem **de recompensa** pra quem **vence** uma batalha — o jogo "
+            "desbloqueadas; as demais (até Lendário) só saem **de recompensa** pra quem **vence** uma batalha — o jogo "
             "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
             "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
             "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
-            "**5️⃣ Pra poder batalhar**\n"
+            "**5️⃣ 🐉 Míticos — os dragões**\n"
+            "Uma raridade à parte: bestas quase imbatíveis, com "
+            f"`{_MITICO_CHANCE_VITORIA * 100:.0f}%` de chance de vencer qualquer criatura de raridade menor. "
+            "Mítico contra Mítico, aí sim é sorteio puro (50/50) igual aos outros. Mas são raríssimos de "
+            f"conseguir: não entram no sorteio normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias "
+            f"suas, rola uma chance de só `{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
+            "**6️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -8874,7 +8880,10 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "Batalhas mora aqui!! 😆📖✨\n"
             "🌑 **Aeon:** ...todo mundo começa com as ⚪ Comuns. Só dá pra invocar em batalha o que "
             "você já tem — vença combates e, de recompensa, você pode destravar uma criatura nova "
-            "pra coleção. 🖤🌑\n\n"
+            "pra coleção. 🖤🌑\n"
+            "🌟 **Celestia:** E os 🐉 MÍTICOS são OUTRO NÍVEL!! 😱✨ Quase imbatíveis contra qualquer "
+            "raridade menor, mas RARÍSSIMOS de conseguir — só numa chance bem pequena a cada várias "
+            "vitórias!!\n\n"
             "👇 Use os menus abaixo (um pra cada raridade) pra ver os detalhes (e a imagem) de cada "
             "uma, e conferir **só pra você** se já desbloqueou ou não."
         ),
@@ -9384,8 +9393,9 @@ _RARIDADES = {
     "raro":     {"label": "Raro",     "emoji": "🔵", "cor": 0x3498db, "peso": 25},
     "epico":    {"label": "Épico",    "emoji": "🟣", "cor": 0x9b59b6, "peso": 15},
     "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
+    "mitico":   {"label": "Mítico",   "emoji": "🐉", "cor": 0xe0115f, "peso": 5},
 }
-_ORDEM_RARIDADES = ("lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+_ORDEM_RARIDADES = ("mitico", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
 
 # Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
 # um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
@@ -9425,6 +9435,23 @@ _BATALHA_CRIATURAS = [
     {"id": "protetor_portao_inferno", "nome": "Protetor do Portão do Inferno","raridade": "lendario", "gif": "https://i.pinimg.com/originals/6d/bc/58/6dbc588871368635891ea6a5f12d3cf2.gif"},
     {"id": "magmata",                 "nome": "O Magmata",                    "raridade": "lendario", "gif": "https://i.redd.it/0jk54f0ocjwy.gif"},
     {"id": "vreg_entre_mundos",       "nome": "Vreg, Entre Mundos",           "raridade": "lendario", "gif": "https://cdna.artstation.com/p/assets/images/images/050/343/134/original/rafael-francoi-boss-f4-preview.gif?1654628012"},
+
+    # ── Míticas ─────────────────────────────────────────────────────────
+    # Dragões. Não entram no sorteio normal de recompensa (esse é o pool
+    # de _nao_possuidas em _executar_batalha, que já os exclui) — só saem
+    # pelo desbloqueio especial a cada _MITICO_VITORIAS_INTERVALO vitórias,
+    # com _MITICO_CHANCE_DESBLOQUEIO de chance. Em batalha, vencem quase
+    # sempre (_MITICO_CHANCE_VITORIA) contra qualquer criatura de raridade
+    # menor; Mítico contra Mítico é sorteio puro (50/50).
+    {"id": "dragao_mar",              "nome": "Dragão do Mar",                 "raridade": "mitico",   "gif": "https://i.pinimg.com/originals/03/80/19/0380195ac5aa62eca14b4361eb30189e.gif"},
+    {"id": "dragao_oriente",          "nome": "Dragão do Oriente",             "raridade": "mitico",   "gif": "https://i.pinimg.com/originals/62/9e/1f/629e1fd48d0176d8fb7bf77714387ee4.gif"},
+    {"id": "dragao_caos",             "nome": "Dragão do Caos",                "raridade": "mitico",   "gif": "https://media.tenor.com/KvbrKEFBVncAAAAM/monseter-hunter.gif"},
+    {"id": "dragao_prisma",           "nome": "Dragão de Prisma",              "raridade": "mitico",   "gif": "https://cdn.weasyl.com/static/media/06/de/94/06de947946dab12a282995a2535af120b36450e6bc7f8b652ac5970277647027.gif"},
+    {"id": "dragao_serpente",         "nome": "Dragão Serpente",               "raridade": "mitico",   "gif": "https://cdnb.artstation.com/p/assets/images/images/039/804/307/original/camila-xiao-tokens-of-natura-sea-dragon-pixel-art-creature-for-game-card-pixel-artist-2x.gif?1626976782"},
+    {"id": "dragao_aco",              "nome": "Dragão de Aço",                 "raridade": "mitico",   "gif": "https://i.pinimg.com/originals/a6/5a/41/a65a41bea0d8cac396f6309bdcb7408c.gif"},
+    {"id": "dragao_ilusao",           "nome": "Dragão da Ilusão",              "raridade": "mitico",   "gif": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSIGoiDbh34-18M4L2FNgcAeTs_5ZhRrh6RwD1OevEFRg&s=10"},
+    {"id": "dragao_harpia",           "nome": "Dragão Harpia",                 "raridade": "mitico",   "gif": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSac9SxVwY95I-M4FAiSTIfyflL3HKOewRthGaww-BcVQ&s=10"},
+    {"id": "dragao_cavernas",         "nome": "Dragão das Cavernas",           "raridade": "mitico",   "gif": "https://64.media.tumblr.com/68dc30d0eb6ff98966ce3e03a2d7d8cc/tumblr_nzuesoPOWL1qciqqno5_540.gif"},
 ]
 
 def _garantir_criaturas_iniciais(user_id: int) -> list:
@@ -9451,6 +9478,18 @@ _batalha_canal_ativo: set = set()   # channel_id -> impede 2 batalhas rolando ao
 _BATALHA_CHANCE_SEM_ROUBO = 0.15    # 15% de chance do vencedor não levar XP NENHUM
 _BATALHA_ROUBO_MIN = 0.01           # 1%  — mínimo que o dado pode sortear
 _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
+
+# ── Regras especiais da raridade 🐉 Mítico (dragões) ──────────────────────
+# Bestas absurdamente fortes: quase imbatíveis contra qualquer raridade
+# abaixo delas, mas se encontrarem outra Mítica pela frente o resultado
+# volta a ser sorteio puro (nenhuma vantagem de uma Mítica sobre a outra).
+_MITICO_CHANCE_VITORIA = 0.99        # chance de uma Mítica vencer uma criatura de raridade menor
+
+# E são raríssimas de desbloquear: não entram no sorteio normal de
+# recompensa — só há uma checagem especial a cada N vitórias, com uma
+# chance bem pequena de sair uma Mítica nova.
+_MITICO_VITORIAS_INTERVALO = 10      # a cada quantas vitórias rola a chance de Mítica
+_MITICO_CHANCE_DESBLOQUEIO = 0.01    # 1% de chance nessa rolagem
 
 _BATALHA_TEMPO_ACEITE = 60          # segundos que o desafiado tem pra aceitar/recusar
 _BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sumir sozinha
@@ -9657,8 +9696,21 @@ async def _executar_batalha(
     except discord.HTTPException:
         pass
 
-    # ── Sorteia o vencedor (50/50) ───────────────────────────────────────
-    if random.random() < 0.5:
+    # ── Sorteia o vencedor ────────────────────────────────────────────────
+    # Regra normal (nenhum lado é Mítico, ou os dois são): sorteio puro 50/50.
+    # Se só um lado for 🐉 Mítico, ele vence quase sempre (_MITICO_CHANCE_VITORIA)
+    # — dragões são bestas absurdas contra qualquer raridade menor.
+    mitico_desafiante = criatura_desafiante["raridade"] == "mitico"
+    mitico_desafiado = criatura_desafiado["raridade"] == "mitico"
+
+    if mitico_desafiante and not mitico_desafiado:
+        chance_desafiante_vence = _MITICO_CHANCE_VITORIA
+    elif mitico_desafiado and not mitico_desafiante:
+        chance_desafiante_vence = 1.0 - _MITICO_CHANCE_VITORIA
+    else:
+        chance_desafiante_vence = 0.5
+
+    if random.random() < chance_desafiante_vence:
         vencedor, criatura_vencedora = desafiante, criatura_desafiante
         perdedor, criatura_perdedora = desafiado, criatura_desafiado
     else:
@@ -9678,14 +9730,37 @@ async def _executar_batalha(
     # JÁ possuem, a criatura usada na batalha nunca é nova pra quem venceu.
     # A recompensa da vitória é diferente: o vencedor tem chance de destravar
     # uma criatura NOVA (sorteada por raridade, dentre as que ainda não tem)
-    # pra sua coleção. Quem perde não ganha nada disso. ──
+    # pra sua coleção. Quem perde não ganha nada disso.
+    # 🐉 Míticas ficam de fora desse sorteio normal — elas têm uma checagem
+    # especial própria logo abaixo, bem mais rara. ──
     dados_vencedor.setdefault("criaturas", [])
-    _nao_possuidas = [c for c in _BATALHA_CRIATURAS if c["id"] not in dados_vencedor["criaturas"]]
+    _nao_possuidas = [
+        c for c in _BATALHA_CRIATURAS
+        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] != "mitico"
+    ]
     criatura_nova = None
     if _nao_possuidas:
         _pesos_novas = [_RARIDADES[c["raridade"]]["peso"] for c in _nao_possuidas]
         criatura_nova = random.choices(_nao_possuidas, weights=_pesos_novas, k=1)[0]
         dados_vencedor["criaturas"].append(criatura_nova["id"])
+
+    # ── 🐉 Desbloqueio Mítico — só rola a cada _MITICO_VITORIAS_INTERVALO
+    # vitórias do vencedor, e mesmo aí só com _MITICO_CHANCE_DESBLOQUEIO de
+    # chance. São bestas absurdas (quase 99% de vitória contra qualquer
+    # raridade menor; Mítico x Mítico é sorteio puro), então o jogo as torna
+    # raríssimas de conseguir também. ──
+    criatura_mitica_nova = None
+    if (
+        dados_vencedor["vitorias"] % _MITICO_VITORIAS_INTERVALO == 0
+        and random.random() < _MITICO_CHANCE_DESBLOQUEIO
+    ):
+        _miticas_faltando = [
+            c for c in _BATALHA_CRIATURAS
+            if c["raridade"] == "mitico" and c["id"] not in dados_vencedor["criaturas"]
+        ]
+        if _miticas_faltando:
+            criatura_mitica_nova = random.choice(_miticas_faltando)
+            dados_vencedor["criaturas"].append(criatura_mitica_nova["id"])
 
     xp_roubado = 0
     percentual = 0.0
@@ -9729,18 +9804,28 @@ async def _executar_batalha(
         f"{dados_perdedor['derrotas']} derrotas`"
     )
 
+    partes_desbloqueio = []
     if criatura_nova is not None:
         info_raridade_nova = _RARIDADES[criatura_nova["raridade"]]
-        texto_desbloqueio = (
+        partes_desbloqueio.append(
             f"🆕 De recompensa, **{vencedor.display_name}** desbloqueou "
             f"{info_raridade_nova['emoji']} **{criatura_nova['nome']}** "
             f"(*{info_raridade_nova['label']}*) na Enciclopédia! Use `.criaturas` pra conferir. 📖"
         )
-    else:
-        texto_desbloqueio = (
-            f"🏅 **{vencedor.display_name}** já desbloqueou todas as criaturas existentes — "
-            "coleção completa!"
+    if criatura_mitica_nova is not None:
+        info_raridade_mitica = _RARIDADES[criatura_mitica_nova["raridade"]]
+        partes_desbloqueio.append(
+            f"🐉✨ **SORTE RARÍSSIMA!!** Só {_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}% de chance a cada "
+            f"{_MITICO_VITORIAS_INTERVALO} vitórias, e **{vencedor.display_name}** acabou de desbloquear "
+            f"{info_raridade_mitica['emoji']} **{criatura_mitica_nova['nome']}** "
+            f"(*{info_raridade_mitica['label']}*)!! 🐉✨"
         )
+    if not partes_desbloqueio:
+        partes_desbloqueio.append(
+            f"🏅 **{vencedor.display_name}** já desbloqueou todas as criaturas normais existentes "
+            "— só falta a sorte grande de alguma 🐉 Mítica agora!"
+        )
+    texto_desbloqueio = "\n\n".join(partes_desbloqueio)
 
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",

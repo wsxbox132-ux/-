@@ -8406,6 +8406,10 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
 
     ganho = max(1, round(random.randint(_XP_MIN_POR_MSG, _XP_MAX_POR_MSG) * multiplicador))
 
+    # 🎁 Booster de XP do Baú — se estiver ativo, dobra o ganho por um tempo
+    if agora < _xp_booster_ate.get(uid, 0):
+        ganho *= _BAU_BOOSTER_MULTIPLICADOR
+
     dados = xp_stats[uid]
     nivel_antigo = dados["nivel"]
     dados["xp"] += ganho
@@ -9154,9 +9158,14 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
             if estado_voz is not None and (estado_voz.self_mute or estado_voz.mute):
                 continue
 
+            ganho_call = _XP_POR_TICK_CALL
+            # 🎁 Booster de XP do Baú — se estiver ativo, dobra o ganho por um tempo
+            if time.time() < _xp_booster_ate.get(membro.id, 0):
+                ganho_call *= _BAU_BOOSTER_MULTIPLICADOR
+
             dados = xp_stats[membro.id]
             nivel_antigo = dados["nivel"]
-            dados["xp"] += _XP_POR_TICK_CALL
+            dados["xp"] += ganho_call
 
             nivel_novo, _, _ = _calcular_nivel(dados["xp"])
             dados["nivel"] = nivel_novo
@@ -9951,6 +9960,121 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
     embed.set_thumbnail(url=alvo.display_avatar.url)
     embed.set_footer(text="🌑 Aeon & ☀️ Celestia — confira também a 📖 Enciclopédia no canal de ranking")
     await ctx.send(embed=embed)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# BAÚ — evento de recompensa surpresa
+# Comando .bau (só o Reality/CRIADOR_ID pode ativar) joga um baú com botão
+# no canal _BAU_CANAL_ID. A PRIMEIRA pessoa que clicar leva o prêmio: na
+# maioria das vezes um % de XP a mais (sorteado entre 1% e 20% do XP atual
+# dela); bem mais raro (e esse é o prêmio mais difícil de sair) um booster
+# de 5 minutos que DOBRA o xp ganho em call e em mensagem nesse período.
+# ══════════════════════════════════════════════════════════════════════
+
+_BAU_GIF = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSpknu7VeT9L_JU-Q93Hn8kmAdNZ9IPJhbmEWECjJZXKQ&s=10"
+_BAU_CANAL_ID = 1284257046740602901  # mesmo canal do chat geral (_XP_CANAL_1)
+
+_BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster — o prêmio mais raro/difícil
+_BAU_XP_MIN = 0.01            # 1%  — mínimo de xp que o dado pode sortear
+_BAU_XP_MAX = 0.20            # 20% — máximo de xp que o dado pode sortear
+_BAU_BOOSTER_MINUTOS = 5
+_BAU_BOOSTER_MULTIPLICADOR = 2
+
+_xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp em dobro expira
+
+
+class BauView(discord.ui.View):
+    """View do baú — só a PRIMEIRA pessoa que clicar leva o prêmio; quem
+    clicar depois disso só recebe um aviso de que já foi levado."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.aberto = False
+
+    @discord.ui.button(label="🔓 Abrir o Baú", style=discord.ButtonStyle.success, custom_id="bau_abrir")
+    async def abrir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.aberto:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...tarde demais. Alguém já levou. 🖤🌑", ephemeral=True
+            )
+            return
+        self.aberto = True
+
+        membro = interaction.user
+        dados = xp_stats[membro.id]
+
+        if random.random() < _BAU_CHANCE_BOOSTER:
+            # ── Prêmio raro: booster de 5 min que dobra xp de call e mensagem ──
+            _xp_booster_ate[membro.id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+            texto_premio = (
+                f"⚡✨ **PRÊMIO RARÍSSIMO!!** {membro.mention} ativou um **Booster de XP** — "
+                f"pelos próximos `{_BAU_BOOSTER_MINUTOS} minutos`, todo xp de call e de mensagem vem "
+                f"em **dobro**! ⚡✨"
+            )
+        else:
+            percentual = random.uniform(_BAU_XP_MIN, _BAU_XP_MAX)
+            nivel_antigo = dados["nivel"]
+            ganho = max(5, round(dados["xp"] * percentual))
+            dados["xp"] += ganho
+            dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+            texto_premio = (
+                f"💰 O baú sorteou **`{percentual * 100:.1f}%`**! {membro.mention} ganhou **`{ganho}` XP**!"
+            )
+            if dados["nivel"] > nivel_antigo and interaction.guild is not None:
+                asyncio.create_task(_anunciar_level_up(interaction.guild, membro, dados["nivel"]))
+
+        asyncio.create_task(_salvar_xp_stats())
+        asyncio.create_task(_atualizar_ranking_xp())
+
+        for item in self.children:
+            item.disabled = True
+
+        embed_resultado = discord.Embed(
+            title="🪙 Baú Aberto!",
+            description=texto_premio,
+            color=0xf5c542,
+            timestamp=discord.utils.utcnow(),
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
+        await interaction.response.edit_message(embed=embed_resultado, view=self)
+        self.stop()
+
+
+@bot.command(name="bau")
+async def cmd_bau(ctx):
+    """Joga um baú de recompensa no canal do chat geral — a primeira pessoa
+    que clicar no botão leva o prêmio. Só o Reality pode usar. A própria
+    mensagem do comando some logo em seguida. Uso: .bau"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BAU_CANAL_ID)
+    if canal is None:
+        return
+
+    embed = discord.Embed(
+        title="🪙 Um Baú Apareceu!",
+        description=(
+            "🌟 **Celestia:** AAAAA UM BAÚ MISTERIOSO!! 😱✨ *pula em volta dele* Quem clicar primeiro "
+            "LEVA O PRÊMIO!!\n"
+            "🌑 **Aeon:** ...corram. As sombras não esperam por ninguém. 🖤🌑\n\n"
+            f"🎁 Prêmio: entre `{_BAU_XP_MIN * 100:.0f}%` e `{_BAU_XP_MAX * 100:.0f}%` de XP a mais — "
+            f"ou, bem mais raro, um **Booster de {_BAU_BOOSTER_MINUTOS} min** que dobra o xp de call e "
+            "de mensagem!"
+        ),
+        color=0xf5c542,
+    )
+    embed.set_image(url=_BAU_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
+    await canal.send(embed=embed, view=BauView())
 
 
 @bot.command(name="surpresachat")

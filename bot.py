@@ -1784,6 +1784,10 @@ async def on_ready():
     if not loop_ranking_xp.is_running():
         loop_ranking_xp.start()
 
+    # Inicia a checagem periódica de ovos incubando (recompensa do .ovo)
+    if not loop_checar_ovos.is_running():
+        loop_checar_ovos.start()
+
     # Registra as setinhas ◀ ▶ do ranking como view persistente (sobrevive a reinícios)
     bot.add_view(RankingXPView(total_paginas=2))
 
@@ -1880,6 +1884,16 @@ async def on_voice_state_update(
     # Booster de Call também vale para QUALQUER membro, independente de cargo —
     # roda isolado pra nunca quebrar a lógica do ranking do Anjo abaixo.
     asyncio.create_task(_processar_call_booster_voice(member, before, after))
+
+    # 🥚 Ovo pendente — soma/pausa o tempo de call enquanto tiver um esperando
+    # pra chocar. Também vale pra QUALQUER membro, roda isolado da mesma forma.
+    if member.id in _ovos_pendentes:
+        entrou_em_call = before.channel is None and after.channel is not None
+        saiu_da_call = before.channel is not None and after.channel is None
+        if entrou_em_call:
+            _ovo_iniciar_contagem(member.id)
+        elif saiu_da_call:
+            _ovo_pausar_contagem(member.id)
 
     try:
         if member.bot:
@@ -11271,8 +11285,153 @@ async def cmd_boss(ctx):
     asyncio.create_task(_apagar_mensagem_depois(msg))
 
 
+
 # ══════════════════════════════════════════════════════════════════════
-# BOSS 2 — Dourakhar, o Arauto da Morte (NÍVEL MÍTICO)
+# OVO — recompensa manual por vencer o Dragão do Caos
+# Comando `.ovo <ID ou @membro>` (só o Reality/CRIADOR_ID pode usar) dá um
+# 🥚 ovo pendente pra alguém. O ovo choca sozinho quando a pessoa acumular
+# `_OVO_TEMPO_CHOCAR_SEGUNDOS` numa call — não precisa ser de uma vez só,
+# o tempo soma mesmo se ela sair e voltar depois. Ao chocar, sai uma
+# criatura aleatória (mesma lógica de recompensa das batalhas: prioriza
+# uma que ela ainda não tem, ponderada por raridade, nunca Mítica) e o
+# nascimento é anunciado no canal `_OVO_CANAL_ID`.
+# ⚠️ `_ovos_pendentes` fica só em memória (igual o booster do baú) — um
+# reinício do bot perde os ovos ainda chocando.
+# ══════════════════════════════════════════════════════════════════════
+
+_OVO_CANAL_ID = _XP_CANAL_1              # 1284257046740602901 — onde o nascimento é anunciado
+_OVO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60      # 5 minutos acumulados numa call pra chocar
+_OVO_CHECAGEM_INTERVALO_SEGUNDOS = 20    # de quanto em quanto tempo confere quem já bateu a meta
+
+# user_id -> {"tempo_acumulado": float, "entrou_em": float|None}
+_ovos_pendentes: dict = {}
+
+
+def _ovo_tempo_atual(user_id: int) -> float:
+    """Tempo total (já acumulado + sessão em andamento, se houver) que essa
+    pessoa já passou numa call desde que ganhou o ovo pendente."""
+    ovo = _ovos_pendentes.get(user_id)
+    if ovo is None:
+        return 0.0
+    total = ovo["tempo_acumulado"]
+    if ovo["entrou_em"] is not None:
+        total += time.time() - ovo["entrou_em"]
+    return total
+
+
+def _ovo_iniciar_contagem(user_id: int) -> None:
+    """Chamada quando alguém com ovo pendente entra numa call — marca o
+    início da sessão atual (se não tiver uma já rodando)."""
+    ovo = _ovos_pendentes.get(user_id)
+    if ovo is not None and ovo["entrou_em"] is None:
+        ovo["entrou_em"] = time.time()
+
+
+def _ovo_pausar_contagem(user_id: int) -> None:
+    """Chamada quando alguém com ovo pendente sai da call — soma o tempo
+    dessa sessão no acumulado e pausa a contagem até ela voltar."""
+    ovo = _ovos_pendentes.get(user_id)
+    if ovo is not None and ovo["entrou_em"] is not None:
+        ovo["tempo_acumulado"] += time.time() - ovo["entrou_em"]
+        ovo["entrou_em"] = None
+
+
+async def _ovo_chocar(user_id: int) -> None:
+    """Choca o ovo dessa pessoa: sorteia e concede uma criatura nova pra
+    coleção dela, e anuncia no canal _OVO_CANAL_ID."""
+    _ovos_pendentes.pop(user_id, None)
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    _nao_possuidas = [
+        c for c in _BATALHA_CRIATURAS
+        if c["id"] not in dados["criaturas"] and c["raridade"] != "mitico"
+    ]
+    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] != "mitico"]
+    pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
+    criatura_nascida = random.choices(pool, weights=pesos, k=1)[0]
+    if criatura_nascida["id"] not in dados["criaturas"]:
+        dados["criaturas"].append(criatura_nascida["id"])
+    asyncio.create_task(_salvar_xp_stats())
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return
+    canal = guild.get_channel(_OVO_CANAL_ID)
+    if canal is None:
+        return
+
+    membro = guild.get_member(user_id)
+    mencao = membro.mention if membro else f"<@{user_id}>"
+    info_raridade = _RARIDADES[criatura_nascida["raridade"]]
+
+    embed = discord.Embed(
+        title="🥚✨ O Ovo Chocou!",
+        description=(
+            f"🌟 **Celestia:** AAAAA {mencao} SEU OVO CHOCOU!! 😍🌸✨ *pula de alegria* "
+            "Depois de tanto tempo na call, olha só quem nasceu...\n"
+            f"🌑 **Aeon:** ...{info_raridade['emoji']} **{criatura_nascida['nome']}** "
+            f"(*{info_raridade['label']}*). As sombras aprovam. 🖤🌑\n\n"
+            "Use `.criaturas` pra conferir sua coleção. 📖"
+        ),
+        color=info_raridade["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_thumbnail(url=criatura_nascida["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Incubadora de Ovos")
+    await canal.send(embed=embed)
+
+
+@tasks.loop(seconds=_OVO_CHECAGEM_INTERVALO_SEGUNDOS)
+async def loop_checar_ovos():
+    """Roda a cada _OVO_CHECAGEM_INTERVALO_SEGUNDOS: confere se algum ovo
+    pendente já bateu a meta de tempo em call — assim ele choca na hora,
+    sem precisar esperar a pessoa sair da call pra descobrir."""
+    for user_id in list(_ovos_pendentes.keys()):
+        try:
+            if _ovo_tempo_atual(user_id) >= _OVO_TEMPO_CHOCAR_SEGUNDOS:
+                await _ovo_chocar(user_id)
+        except Exception as e:
+            print(f"[ovo] ERRO ao chocar ovo de {user_id}: {e!r}")
+
+
+@bot.command(name="ovo")
+async def cmd_ovo(ctx, alvo_id: int = None):
+    """Dá um 🥚 ovo pendente pra alguém — recompensa por vencer o Dragão
+    do Caos. O ovo choca sozinho quando a pessoa acumular
+    `_OVO_TEMPO_CHOCAR_SEGUNDOS` numa call. Só o Reality pode usar.
+    Uso: .ovo <ID ou @membro>"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        await ctx.send("⚠️ **Uso correto:** `.ovo <ID ou @membro>`")
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    membro = guild.get_member(alvo_id) if guild else None
+    if membro is None and guild:
+        try:
+            membro = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            await ctx.send(f"❌ Membro com ID `{alvo_id}` não encontrado no servidor.")
+            return
+
+    _ovos_pendentes[alvo_id] = {"tempo_acumulado": 0.0, "entrou_em": None}
+    # Se a pessoa já estiver numa call agora mesmo, a contagem já começa valendo.
+    if membro is not None and membro.voice is not None and membro.voice.channel is not None:
+        _ovo_iniciar_contagem(alvo_id)
+
+    mencao = membro.mention if membro else f"`{alvo_id}`"
+    await ctx.send(
+        f"🐉💥 **Venceu do Dragão!** {mencao} agora tem direito a um **🥚 ovo aleatório**!! "
+        f"Fique `{_OVO_TEMPO_CHOCAR_SEGUNDOS // 60} min` numa call pra ele chocar — "
+        "o tempo soma mesmo se você sair e voltar depois."
+    )
+
+
 # Comando .boss2 (só o Reality/CRIADOR_ID pode ativar) invoca o boss mais
 # difícil já criado — Dourakhar, o Arauto da Morte. Mesma lógica do Dragão
 # do Caos (encarar sozinho ou chamar o time todo), mas TUDO mais difícil:

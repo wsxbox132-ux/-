@@ -10762,6 +10762,448 @@ async def cmd_boss(ctx):
     asyncio.create_task(_apagar_mensagem_depois(msg))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOSS 2 — Dourakhar, o Arauto da Morte (NÍVEL MÍTICO)
+# Comando .boss2 (só o Reality/CRIADOR_ID pode ativar) invoca o boss mais
+# difícil já criado — Dourakhar, o Arauto da Morte. Mesma lógica do Dragão
+# do Caos (encarar sozinho ou chamar o time todo), mas TUDO mais difícil:
+# menos chance de vitória em qualquer cenário, mesmo com mais gente lutando
+# junto. Em compensação, quem vencer ganha um pouco mais de XP que no boss 1
+# E ainda leva um Booster de XP de 5 minutos (xp de call/mensagem em dobro).
+# ══════════════════════════════════════════════════════════════════════
+
+# ⚠️ Esses gifs são links temporários do CDN do Discord (parâmetros ?ex=...),
+# que expiram sozinhos depois de um tempo (geralmente ~24h-48h). Se pararem
+# de aparecer nos embeds, pegue links novos (clique direito na imagem no
+# Discord > Copiar link) e troque aqui embaixo — ou, melhor ainda, subam
+# os gifs num host permanente (imgur, ibb.co etc.) pra nunca mais precisar trocar.
+_BOSS2_DOURAKHAR_INTRO_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530317596254142494/PixVerse_V6_Image_Text_720P_anime_se_mexendo_t1-ezgif.com-video-to-gif-converter.gif?ex=6a6522d2&is=6a63d152&hm=29fa9a7986126b02b81c108189d53806326f6ae1aabf5525267b297ac2fd63fd"
+_BOSS2_DOURAKHAR_BATALHA_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530318926171476251/ezgif.com-video-to-gif-converter.gif?ex=6a65240f&is=6a63d28f&hm=d985c992e00eb66802330e6c13b6b3012c0998455cc6c18cbed1e3a66de9a21a"
+
+_BOSS2_CANAL_ID = _BOSS_CANAL_ID   # mesmo canal do boss 1 — só aparece aqui
+
+_BOSS2_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
+_BOSS2_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
+
+_BOSS2_CHANCE_SOLO = 0.02   # 2% — nível mítico, enfrentar sozinho é praticamente suicídio (menos que o boss 1)
+
+# Batalha em grupo: base mais baixa e teto mais baixo que o boss 1 — mesma
+# lógica (mais gente = mais chance, criaturas raras dão bônus extra), mas
+# Dourakhar continua sendo bem mais difícil de derrubar mesmo com o
+# servidor inteiro lutando junto.
+_BOSS2_CHANCE_GRUPO_BASE      = 0.08
+_BOSS2_CHANCE_GRUPO_MAX       = 0.55
+_BOSS2_BONUS_POR_PARTICIPANTE = 0.025
+_BOSS2_BONUS_RARIDADE_CRIATURA = {
+    "comum": 0.0, "raro": 0.008, "epico": 0.015, "lendario": 0.025, "mitico": 0.05,
+}
+
+_BOSS2_XP_GANHO_MIN = 0.25   # 25% — mínimo de XP que quem vence pode ganhar (um pouco melhor que o boss 1)
+_BOSS2_XP_GANHO_MAX = 0.70   # 70% — máximo de XP que quem vence pode ganhar
+_BOSS2_XP_GANHO_SEM_XP = (40, 100)   # recompensa fixa pra quem ainda não tem XP acumulado
+
+
+def _boss2_chance_grupo(convocacoes: list) -> float:
+    """Calcula a chance de vitória do grupo contra Dourakhar: base + um
+    bônus por pessoa + um bônus pela raridade de cada criatura convocada,
+    sempre travado no teto de _BOSS2_CHANCE_GRUPO_MAX — mais baixo que o
+    do boss 1, porque Dourakhar é nível mítico."""
+    chance = _BOSS2_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS2_BONUS_POR_PARTICIPANTE
+    for _membro, criatura in convocacoes:
+        chance += _BOSS2_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+    return min(chance, _BOSS2_CHANCE_GRUPO_MAX)
+
+
+def _boss2_calcular_ganho_xp(user_id: int) -> tuple:
+    """Sorteia quanto de XP essa pessoa ganha por vencer Dourakhar: entre
+    25% e 70% do XP que ela já tem — um pouco melhor que o boss 1 — ou uma
+    recompensa fixa se ainda não tiver XP nenhum acumulado."""
+    dados = xp_stats[user_id]
+    xp_atual = dados.get("xp", 0)
+    if xp_atual > 0:
+        percentual = random.uniform(_BOSS2_XP_GANHO_MIN, _BOSS2_XP_GANHO_MAX)
+        ganho = max(1, round(xp_atual * percentual))
+    else:
+        percentual = 0.0
+        ganho = random.randint(*_BOSS2_XP_GANHO_SEM_XP)
+    return ganho, percentual
+
+
+async def _boss2_premiar_vencedores(guild: discord.Guild, vencedores: list) -> list:
+    """Aplica o ganho de XP de cada vencedor, ativa o Booster de XP de 5
+    minutos (xp de call/mensagem em dobro — mesmo mecanismo do Baú) pra
+    cada um deles, atualiza nível e dispara o aviso de level up quando for
+    o caso. Devolve uma lista de (membro, ganho, percentual) pra montar o
+    texto de resultado."""
+    resultados = []
+    for membro in vencedores:
+        dados = xp_stats[membro.id]
+        nivel_antigo = dados["nivel"]
+        ganho, percentual = _boss2_calcular_ganho_xp(membro.id)
+        dados["xp"] += ganho
+        dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+        if dados["nivel"] > nivel_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
+        # 🎁 Bônus exclusivo de Dourakhar: Booster de XP de 5 minutos pra quem venceu
+        _xp_booster_ate[membro.id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+        resultados.append((membro, ganho, percentual))
+
+    asyncio.create_task(_salvar_xp_stats())
+    asyncio.create_task(_atualizar_ranking_xp())
+    return resultados
+
+
+async def _boss2_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
+    """Roda o confronto solo contra Dourakhar: só 2% de chance de vitória —
+    e se perder, não perde XP nenhum, só o orgulho."""
+    try:
+        criatura = _boss_criatura_mais_forte(membro.id)
+        info_raridade = _RARIDADES[criatura["raridade"]]
+
+        embed_convocacao = discord.Embed(
+            title="☠️ Um desafiante solitário ousa se apresentar!",
+            description=(
+                f"🌑 **Aeon:** ...{membro.mention} decidiu encarar Dourakhar sozinho. As sombras "
+                f"nem sabem se isso é coragem ou uma despedida. 🖤💀\n"
+                f"🌟 **Celestia:** {membro.display_name} convoca {info_raridade['emoji']} "
+                f"**{criatura['nome']}**!! É NÍVEL MÍTICO, tenham cuidado!! 😳🌟✨"
+            ),
+            color=info_raridade["cor"],
+        )
+        embed_convocacao.set_thumbnail(url=criatura["gif"])
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "💀 **Dourakhar:** *\"Sozinho, mortal? Ousado... ou simplesmente tolo. "
+                "Vamos ver qual dos dois é a verdade.\"*"
+            ),
+            color=0x2c0140,
+        )
+        embed_batalha.set_image(url=_BOSS2_DOURAKHAR_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        venceu = random.random() < _BOSS2_CHANCE_SOLO
+
+        if venceu:
+            resultados = await _boss2_premiar_vencedores(canal.guild, [membro])
+            _, ganho, percentual = resultados[0]
+            descricao = (
+                f"🏆 **LENDÁRIO DE VERDADE!!** {membro.mention} e {info_raridade['emoji']} **{criatura['nome']}** "
+                f"derrubaram **DOURAKHAR, O ARAUTO DA MORTE**, SOZINHOS!! Só 2% de chance!! 💀⚔️\n\n"
+                f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`) + ⚡ **Booster de XP {_BAU_BOOSTER_MINUTOS}min**!\n\n"
+                f"🌑 **Aeon:** ...impossível. A própria Morte hesitou. As sombras não têm palavras. 🖤💀\n"
+                f"🌟 **Celestia:** EU. NÃO. ACREDITO. 😭🌟🤍✨ ISSO VAI VIRAR LENDA NO SERVIDOR INTEIRO!!"
+            )
+            cor = 0xf5c542
+        else:
+            descricao = (
+                f"💀 **Dourakhar:** *\"...como eu previa.\"* {info_raridade['emoji']} **{criatura['nome']}** caiu "
+                f"em batalha, e {membro.mention} não conseguiu sozinho dessa vez.\n\n"
+                f"🍃 Nenhum XP foi perdido — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...era esperado. Poucos ousam, menos ainda sobrevivem. 🖤🌑\n"
+                f"🌟 **Celestia:** Não desanima!! 🌸😢 Contra esse aqui, é MUITO melhor ir em grupo!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Dourakhar, o Arauto da Morte")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+async def _boss2_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
+    """Roda o confronto em grupo contra Dourakhar: cada participante
+    convoca a criatura mais forte que já desbloqueou, e a chance de vitória
+    cresce com o número (e a força) das criaturas convocadas — mas nível
+    mítico continua sendo bem mais difícil que o boss 1."""
+    try:
+        convocacoes = [(p, _boss_criatura_mais_forte(p.id)) for p in participantes]
+
+        embed_cabecalho = discord.Embed(
+            title=f"⚔️ {len(convocacoes)} guerreiro(a)s ousam encarar a Morte!",
+            description="🌟 **Celestia:** ESSE TIME TÁ INDO CONTRA O NÍVEL MÍTICO!! 😱🌟✨ Boa sorte pra todos!!",
+            color=0x2c0140,
+        )
+        cards = _boss_cards_criaturas(convocacoes)
+
+        # 1º lote: cabeçalho + até 9 cards (10 embeds é o limite do Discord por
+        # mensagem). O resto (grupos grandes) sai em mensagens seguintes.
+        lote = [embed_cabecalho] + cards[:9]
+        restante = cards[9:]
+        msg1 = await canal.send(embeds=lote)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        while restante:
+            msg_extra = await canal.send(embeds=restante[:10])
+            asyncio.create_task(_apagar_mensagem_depois(msg_extra))
+            restante = restante[10:]
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "💀 **Dourakhar:** *\"Um exército de formigas ainda é só um punhado de formigas... "
+                "mas ao menos vocês me trazem entretenimento antes do fim. Venham.\"*"
+            ),
+            color=0x2c0140,
+        )
+        embed_batalha.set_image(url=_BOSS2_DOURAKHAR_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        chance = _boss2_chance_grupo(convocacoes)
+        venceu = random.random() < chance
+
+        if venceu:
+            resultados = await _boss2_premiar_vencedores(canal.guild, participantes)
+            texto_ganhos = "\n".join(
+                f"✨ {membro.mention} +`{ganho}` XP (`{percentual * 100:.1f}%`) ⚡"
+                for membro, ganho, percentual in resultados
+            )
+            descricao = (
+                f"🏆 **VITÓRIA HISTÓRICA!!** O time de `{len(participantes)}` guerreiro(a)s derrubou "
+                f"**DOURAKHAR, O ARAUTO DA MORTE**!! (chance da batalha: `{chance * 100:.0f}%`) 💀⚔️\n\n"
+                f"{texto_ganhos}\n\n"
+                f"⚡ Todos os vencedores também ganharam um **Booster de XP de {_BAU_BOOSTER_MINUTOS} minutos** "
+                f"(xp de call e mensagem em dobro)!\n\n"
+                f"🌑 **Aeon:** ...até a Morte tem seus limites, ao que parece. As sombras se curvam a vocês. 🖤💀\n"
+                f"🌟 **Celestia:** VOCÊS DERROTARAM O NÍVEL MÍTICO!!! 😭🌟🤍✨ ISSO AQUI VAI FICAR NA HISTÓRIA DO SERVIDOR!!"
+            )
+            cor = 0xf5c542
+        else:
+            mencoes = ", ".join(p.mention for p in participantes)
+            descricao = (
+                f"💀 **Dourakhar:** *\"...como eu disse. Formigas.\"* Mesmo com `{len(participantes)}` "
+                f"guerreiro(a)s juntos (`{chance * 100:.0f}%` de chance), o Arauto da Morte foi forte demais "
+                f"dessa vez. {mencoes} não conseguiram.\n\n"
+                f"🍃 Ninguém perdeu XP — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...nível mítico não perdoa fácil. As sombras respeitam a tentativa. 🖤🌑\n"
+                f"🌟 **Celestia:** Vamos treinar e tentar de novo!! 🌸💫 Vocês foram MUITO corajosos!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Dourakhar, o Arauto da Morte")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+class Boss2RecrutamentoView(discord.ui.View):
+    """Botão único de 'Quero Participar!' que fica ativo por
+    _BOSS2_TEMPO_RECRUTAMENTO segundos, juntando o time que vai enfrentar
+    Dourakhar em conjunto. Quando o tempo acaba, a batalha começa sozinha."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS2_TEMPO_RECRUTAMENTO)
+        self.canal = canal
+        self.participantes: dict = {}   # user_id -> discord.Member
+        self.mensagem: discord.Message = None
+
+    @discord.ui.button(label="⚔️ Quero Participar!", style=discord.ButtonStyle.success)
+    async def participar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if interaction.user.id in self.participantes:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já tá na lista, guerreiro(a)!! 😆🌸", ephemeral=True
+            )
+            return
+
+        self.participantes[interaction.user.id] = interaction.user
+        button.label = f"⚔️ Quero Participar! ({len(self.participantes)})"
+        await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            if self.mensagem:
+                await self.mensagem.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+        participantes = list(self.participantes.values())
+        if not participantes:
+            try:
+                msg = await self.canal.send(
+                    "🌑 **Aeon:** ...ninguém teve coragem de se juntar a tempo. "
+                    "Dourakhar sorri e se dissolve de volta nas sombras... por enquanto. 🖤💀"
+                )
+                asyncio.create_task(_apagar_mensagem_depois(msg))
+            finally:
+                _boss_ativo_no_canal.discard(self.canal.id)
+            return
+
+        asyncio.create_task(_boss2_batalha_grupo(self.canal, participantes))
+
+
+class Boss2EscolhaView(discord.ui.View):
+    """Botões de 'Todos Juntos' e 'Eu Consigo Sozinho' que aparecem quando
+    Dourakhar surge. A PRIMEIRA escolha feita (por qualquer pessoa) decide
+    o caminho dessa aparição do boss."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS2_TEMPO_ESCOLHA)
+        self.canal = canal
+        self.decidido = False
+        self.mensagem: discord.Message = None
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="🤝 Todos Juntos", style=discord.ButtonStyle.primary)
+    async def todos_juntos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🤝 O CHAMADO FOI FEITO!",
+            description=(
+                f"🌟 **Celestia:** {interaction.user.mention} decidiu enfrentar Dourakhar "
+                f"EM GRUPO!! 😱🌟✨\n"
+                f"🌑 **Aeon:** ...quem tiver coragem, clique no botão abaixo. `{_BOSS2_TEMPO_RECRUTAMENTO}s` "
+                f"pra se juntar ao time. 🖤💀"
+            ),
+            color=0xff8800,
+        )
+        embed.set_image(url=_BOSS2_DOURAKHAR_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        view_recrutamento = Boss2RecrutamentoView(self.canal)
+        msg_recrutamento = await self.canal.send(
+            "💀 Time contra **Dourakhar, o Arauto da Morte** — clique pra participar!",
+            view=view_recrutamento,
+        )
+        view_recrutamento.mensagem = msg_recrutamento
+        asyncio.create_task(_apagar_mensagem_depois(msg_recrutamento))
+
+    @discord.ui.button(label="🗡️ Eu Consigo Sozinho", style=discord.ButtonStyle.danger)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🗡️ DESAFIO SOLITÁRIO ACEITO!",
+            description=(
+                f"🌑 **Aeon:** ...{interaction.user.mention} escolheu encarar Dourakhar sozinho. "
+                f"Isso não é coragem, isso é ousadia pura. 🖤💀\n"
+                f"🌟 **Celestia:** SÓ 2% DE CHANCE?!?! 😰🌟 É NÍVEL MÍTICO, TEM CERTEZA?!"
+            ),
+            color=0xff4444,
+        )
+        embed.set_image(url=_BOSS2_DOURAKHAR_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        asyncio.create_task(_boss2_batalha_solo(self.canal, interaction.user))
+
+    async def on_timeout(self):
+        if self.decidido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            embed = discord.Embed(
+                title="💀 Dourakhar se dissolve nas sombras...",
+                description=(
+                    "🌑 **Aeon:** ...ninguém teve coragem de decidir a tempo. O Arauto da Morte "
+                    "se retira... por enquanto. 🖤💀"
+                ),
+                color=0x888888,
+            )
+            await self.mensagem.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+        _boss_ativo_no_canal.discard(self.canal.id)
+
+
+@bot.command(name="boss2")
+async def cmd_boss2(ctx):
+    """💀 Invoca Dourakhar, o Arauto da Morte — o boss de NÍVEL MÍTICO, mais
+    difícil que o Dragão do Caos. Só o Reality (CRIADOR_ID) pode chamar.
+    O chat escolhe entre encarar sozinho (2% de chance) ou juntar um time
+    (mais gente = mais chance, mas ainda assim MUITO mais difícil que o
+    boss 1). Quem vencer ganha um pouco mais de XP que no boss 1 e também
+    leva um Booster de XP de 5 minutos. Uso: .boss2"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BOSS2_CANAL_ID)
+    if canal is None:
+        return
+
+    if canal.id in _boss_ativo_no_canal:
+        aviso = await ctx.send(
+            "🌟 **Celestia:** Já tem um boss ativo por lá!! Espera esse terminar!! 😅🌸"
+        )
+        asyncio.create_task(_apagar_mensagem_depois(aviso))
+        return
+
+    _boss_ativo_no_canal.add(canal.id)
+
+    embed = discord.Embed(
+        title="☠️ NÍVEL MÍTICO — O ARAUTO DA MORTE DESPERTOU!!",
+        description=(
+            "🌑 **Aeon:** ...o próprio ar fica mais frio. Isso não é como o Dragão do Caos. "
+            "Isso é... diferente. Isso é o fim de tudo, caminhando. 🖤💀\n\n"
+            "💀 **Dourakhar:** *\"Mortais... sintam o cheiro da própria finitude. Eu sou "
+            "**Dourakhar**, o Arauto da Morte, e vim colher o que já me pertence.\"*\n\n"
+            "🌟 **Celestia:** GENTE ISSO AQUI É NÍVEL **MÍTICO**!! 😨🌟 MUITO mais perigoso "
+            "que o Dragão do Caos!! Pensem bem antes de decidir — sozinho ou em grupo?? ✨\n\n"
+            f"⏳ Vocês têm `{_BOSS2_TEMPO_ESCOLHA}s` pra decidir."
+        ),
+        color=0x2c0140,
+    )
+    embed.set_image(url=_BOSS2_DOURAKHAR_INTRO_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Nível Mítico: Dourakhar, o Arauto da Morte")
+
+    view = Boss2EscolhaView(canal)
+    msg = await canal.send(embed=embed, view=view)
+    view.mensagem = msg
+    asyncio.create_task(_apagar_mensagem_depois(msg))
+
+
 @bot.command(name="surpresachat")
 async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""

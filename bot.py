@@ -8192,22 +8192,39 @@ _XP_CALLS_PRIVADAS = {
 # se preenche na barra de progresso) através do menu que fica abaixo do
 # ranking fixo. A cor da parte vazia da barra continua sempre branca.
 _COR_PADRAO = "roxo"
+
+# Cargo de Booster do servidor — só quem tem esse cargo pode escolher as
+# cores especiais (marcadas com "booster": True) lá embaixo.
+_CARGO_BOOSTER_CORES_ID = 1284279730287280189
+
 _CORES_QUADRADO = {
-    "roxo":     {"emoji": "🟪", "label": "Roxo (padrão)"},
-    "azul":     {"emoji": "🟦", "label": "Azul"},
-    "vermelho": {"emoji": "🟥", "label": "Vermelho"},
-    "verde":    {"emoji": "🟩", "label": "Verde"},
-    "amarelo":  {"emoji": "🟨", "label": "Amarelo"},
-    "laranja":  {"emoji": "🟧", "label": "Laranja"},
-    "marrom":   {"emoji": "🟫", "label": "Marrom"},
-    "preto":    {"emoji": "⬛", "label": "Preto"},
+    # ── Cores normais — disponíveis pra qualquer pessoa ──────────────────
+    "roxo":     {"emoji": "🟪", "label": "Roxo (padrão)", "booster": False},
+    "azul":     {"emoji": "🟦", "label": "Azul", "booster": False},
+    "vermelho": {"emoji": "🟥", "label": "Vermelho", "booster": False},
+    "verde":    {"emoji": "🟩", "label": "Verde", "booster": False},
+    "amarelo":  {"emoji": "🟨", "label": "Amarelo", "booster": False},
+    "laranja":  {"emoji": "🟧", "label": "Laranja", "booster": False},
+    "marrom":   {"emoji": "🟫", "label": "Marrom", "booster": False},
+    "preto":    {"emoji": "⬛", "label": "Preto", "booster": False},
+
+    # ── Cores especiais — exclusivas de quem tem o cargo de Booster ──────
+    # Em vez de um emoji só repetido, usam um "padrao" (lista de emojis)
+    # que vai ciclando/alternando a cada quadradinho preenchido.
+    "arco_iris": {"padrao": ["🟥", "🟧", "🟨", "🟩", "🟦", "🟪"], "emoji": "🌈", "label": "🌈 Arco-íris (Booster)", "booster": True},
+    "xadrez":    {"padrao": ["⬛", "⬜"], "emoji": "🏁", "label": "🏁 Xadrez (Booster)", "booster": True},
+    "dourado":   {"padrao": ["🟨", "⬛"], "emoji": "✨", "label": "✨ Dourado Cintilante (Booster)", "booster": True},
+    "gradiente": {"padrao": ["🟪", "🟦"], "emoji": "🌊", "label": "🌊 Gradiente Roxo-Azul (Booster)", "booster": True},
 }
 
 
-def _emoji_da_cor(chave: str) -> str:
-    """Devolve o emoji do quadradinho preenchido para a cor escolhida
-    (ou a cor padrão, se a chave for inválida/desconhecida)."""
-    return _CORES_QUADRADO.get(chave, _CORES_QUADRADO[_COR_PADRAO])["emoji"]
+def _emoji_da_cor(chave: str):
+    """Devolve o padrão de preenchimento do quadradinho pra cor escolhida:
+    uma LISTA de emojis pras cores especiais (arco-íris, xadrez...), que
+    ciclam a cada quadradinho, ou um emoji só (string) pras cores normais,
+    que se repete. Cai pra cor padrão se a chave for inválida/desconhecida."""
+    info = _CORES_QUADRADO.get(chave, _CORES_QUADRADO[_COR_PADRAO])
+    return info.get("padrao") or info["emoji"]
 
 
 # xp_stats[user_id] = {
@@ -8255,10 +8272,19 @@ def _xp_total_para_nivel(nivel: int) -> int:
     return total
 
 
-def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji: str = "🟪") -> str:
+def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji="🟪") -> str:
+    """Monta a barra de progresso. `cor_emoji` pode ser um emoji só (string,
+    repetido em todos os quadradinhos preenchidos — cores normais) ou uma
+    lista de emojis (cicla um por quadradinho, na ordem — cores especiais
+    tipo 🌈 Arco-íris ou 🏁 Xadrez)."""
     necessario = max(necessario, 1)
     preenchido = max(0, min(tamanho, round((atual / necessario) * tamanho)))
-    return cor_emoji * preenchido + "⬜" * (tamanho - preenchido)
+    if isinstance(cor_emoji, (list, tuple)):
+        padrao = list(cor_emoji) or ["🟪"]
+        parte_preenchida = "".join(padrao[i % len(padrao)] for i in range(preenchido))
+    else:
+        parte_preenchida = cor_emoji * preenchido
+    return parte_preenchida + "⬜" * (tamanho - preenchido)
 
 
 def _carregar_xp_stats() -> None:
@@ -8672,6 +8698,24 @@ class CorQuadradoSelect(discord.ui.Select):
             )
             return
 
+        # Cores especiais (arco-íris, xadrez, etc.) são exclusivas de quem
+        # tem o cargo de Booster do servidor.
+        if info.get("booster"):
+            cargo_booster = interaction.guild.get_role(_CARGO_BOOSTER_CORES_ID) if interaction.guild else None
+            tem_cargo = (
+                cargo_booster is not None
+                and isinstance(interaction.user, discord.Member)
+                and cargo_booster in interaction.user.roles
+            )
+            if not tem_cargo:
+                await interaction.response.send_message(
+                    f"💎 A cor **{info['label']}** é exclusiva de quem tem o cargo <@&{_CARGO_BOOSTER_CORES_ID}>! "
+                    "🌟 **Celestia:** Impulsiona o servidor que eu libero ela na hora pra você!! 🌈✨\n"
+                    "🌑 **Aeon:** ...as sombras não abrem exceção. Nem pra mim. 🖤🌑",
+                    ephemeral=True,
+                )
+                return
+
         dados = xp_stats[interaction.user.id]
         dados["cor"] = cor_escolhida
         asyncio.create_task(_salvar_xp_stats())
@@ -8705,6 +8749,8 @@ def _montar_embed_pergunta_cor() -> discord.Embed:
             "🌟 **Celestia:** Psiu!! Quer que o seu quadradinho no ranking tenha "
             "uma cor diferente?? 😆🌈✨ *aponta pro menu com empolgação*\n"
             "🌑 **Aeon:** ...escolha no menu abaixo. A cor é só sua — ninguém mais mexe nela. 🖤🌑\n\n"
+            f"💎 **Cores especiais** (🌈 Arco-íris, 🏁 Xadrez, ✨ Dourado Cintilante, 🌊 Gradiente) são "
+            f"exclusivas de quem tem o cargo <@&{_CARGO_BOOSTER_CORES_ID}>!\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "🎨 Selecione uma cor no menu para personalizar seu quadradinho.\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

@@ -1774,9 +1774,11 @@ async def on_ready():
     # ─────────────────────────────────────────────────────────────────────
 
     # ── Ranking de Nível (XP): setup ─────────────────────────────────────
-    global _xp_stats_lock
+    global _xp_stats_lock, _xp_ranking_update_lock
     if _xp_stats_lock is None:
         _xp_stats_lock = asyncio.Lock()
+    if _xp_ranking_update_lock is None:
+        _xp_ranking_update_lock = asyncio.Lock()
 
     if not loop_ranking_xp.is_running():
         loop_ranking_xp.start()
@@ -8243,6 +8245,7 @@ _xp_cor_message_id = None      # ID da mensagem com o menu de escolha de cor (fi
 _xp_batalha_info_message_id = None  # ID da mensagem explicando as batalhas (fica logo abaixo da de cor)
 _xp_enciclopedia_message_id = None  # ID da mensagem da Enciclopédia de Criaturas (fica por último, embaixo de tudo)
 _xp_stats_lock = None          # criado em on_ready (precisa de event loop rodando)
+_xp_ranking_update_lock = None # criado em on_ready — trava _atualizar_ranking_xp() pra nunca rodar 2x ao mesmo tempo (evita mensagens fixas duplicadas)
 
 
 def _xp_necessario_para_nivel(nivel: int) -> int:
@@ -9109,91 +9112,99 @@ async def _atualizar_ranking_xp() -> None:
     duplica). Todo mundo elegível aparece — inclusive quem está no Nível 0 —
     e se a lista ficar grande demais pra caber num único embed, as páginas
     extras ficam disponíveis pelas setinhas ◀ ▶ embaixo do ranking, sem
-    empilhar mensagem nenhuma."""
+    empilhar mensagem nenhuma.
+
+    ⚠️ Roda inteira dentro de um lock: essa função é chamada de vários
+    lugares diferentes (loop automático, level-up, troca de cor, baú,
+    batalhas...), às vezes via asyncio.create_task — sem o lock, duas
+    chamadas concorrentes podiam achar que a mensagem fixa ainda não existe
+    (porque nenhuma das duas tinha terminado de criar) e cada uma mandava
+    uma cópia nova, duplicando ranking/cor/batalha/enciclopédia no canal."""
     global _xp_ranking_message_id, _xp_ranking_pagina_atual
 
-    guild = bot.guilds[0] if bot.guilds else None
-    if guild is None:
-        print("[ranking-xp] ERRO: bot não está em nenhum servidor ainda.")
-        return
+    async with (_xp_ranking_update_lock or asyncio.Lock()):
+        guild = bot.guilds[0] if bot.guilds else None
+        if guild is None:
+            print("[ranking-xp] ERRO: bot não está em nenhum servidor ainda.")
+            return
 
-    canal = guild.get_channel(CANAL_XP_ID)
-    if canal is None:
-        print(
-            f"[ranking-xp] ERRO: canal com ID {CANAL_XP_ID} não encontrado em "
-            f"'{guild.name}'. Confira se o ID do canal Ranking-01 está certo."
-        )
-        return
+        canal = guild.get_channel(CANAL_XP_ID)
+        if canal is None:
+            print(
+                f"[ranking-xp] ERRO: canal com ID {CANAL_XP_ID} não encontrado em "
+                f"'{guild.name}'. Confira se o ID do canal Ranking-01 está certo."
+            )
+            return
 
-    embeds = _montar_embeds_ranking_xp(guild)
-    total_paginas = len(embeds)
+        embeds = _montar_embeds_ranking_xp(guild)
+        total_paginas = len(embeds)
 
-    # A página atual pode ter ficado fora do intervalo válido (ex: o total
-    # de páginas diminuiu porque alguém saiu do servidor) — trava dentro
-    # do limite pra nunca dar IndexError.
-    if _xp_ranking_pagina_atual >= total_paginas:
-        _xp_ranking_pagina_atual = total_paginas - 1
-    if _xp_ranking_pagina_atual < 0:
-        _xp_ranking_pagina_atual = 0
+        # A página atual pode ter ficado fora do intervalo válido (ex: o total
+        # de páginas diminuiu porque alguém saiu do servidor) — trava dentro
+        # do limite pra nunca dar IndexError.
+        if _xp_ranking_pagina_atual >= total_paginas:
+            _xp_ranking_pagina_atual = total_paginas - 1
+        if _xp_ranking_pagina_atual < 0:
+            _xp_ranking_pagina_atual = 0
 
-    embed_atual = embeds[_xp_ranking_pagina_atual]
-    view = RankingXPView(total_paginas=total_paginas)
+        embed_atual = embeds[_xp_ranking_pagina_atual]
+        view = RankingXPView(total_paginas=total_paginas)
 
-    mensagem = None
-    if _xp_ranking_message_id:
+        mensagem = None
+        if _xp_ranking_message_id:
+            try:
+                mensagem = await canal.fetch_message(_xp_ranking_message_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                mensagem = None
+
+        if mensagem is None:
+            # Procura no histórico — inclui achar páginas antigas empilhadas de
+            # antes das setinhas existirem, pra ficar só com a mais antiga (as
+            # extras são apagadas, já que agora tudo cabe numa mensagem só).
+            candidatas = await _achar_mensagens_ranking_xp(canal)
+            if candidatas:
+                mensagem, *extras = candidatas
+                for extra in extras:
+                    try:
+                        await extra.delete()
+                    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        pass
+
+        if mensagem:
+            try:
+                await mensagem.edit(embed=embed_atual, view=view)
+                _xp_ranking_message_id = mensagem.id
+            except discord.HTTPException as e:
+                print(f"[ranking-xp] ERRO ao editar mensagem do ranking: {e!r}")
+                mensagem = None
+
+        if mensagem is None:
+            try:
+                nova = await canal.send(embed=embed_atual, view=view)
+                _xp_ranking_message_id = nova.id
+                print(f"[ranking-xp] Mensagem do ranking criada em #{canal.name} (id {nova.id}).")
+            except discord.HTTPException as e:
+                print(f"[ranking-xp] ERRO ao enviar mensagem do ranking em #{canal.name}: {e!r}")
+
+        # Mantém o menu de escolha de cor sempre fixo logo abaixo do ranking
         try:
-            mensagem = await canal.fetch_message(_xp_ranking_message_id)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            mensagem = None
+            await _atualizar_pergunta_cor(canal)
+        except Exception as e:
+            print(f"[ranking-xp] ERRO ao atualizar mensagem de escolha de cor: {e!r}")
 
-    if mensagem is None:
-        # Procura no histórico — inclui achar páginas antigas empilhadas de
-        # antes das setinhas existirem, pra ficar só com a mais antiga (as
-        # extras são apagadas, já que agora tudo cabe numa mensagem só).
-        candidatas = await _achar_mensagens_ranking_xp(canal)
-        if candidatas:
-            mensagem, *extras = candidatas
-            for extra in extras:
-                try:
-                    await extra.delete()
-                except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    pass
-
-    if mensagem:
+        # Mantém a explicação da mecânica de batalhas fixa logo abaixo da de cor
         try:
-            await mensagem.edit(embed=embed_atual, view=view)
-            _xp_ranking_message_id = mensagem.id
-        except discord.HTTPException as e:
-            print(f"[ranking-xp] ERRO ao editar mensagem do ranking: {e!r}")
-            mensagem = None
+            await _atualizar_info_batalha(canal)
+        except Exception as e:
+            print(f"[ranking-xp] ERRO ao atualizar mensagem de explicação de batalha: {e!r}")
 
-    if mensagem is None:
+        # Mantém a Enciclopédia de Criaturas fixa por ÚLTIMO, embaixo de tudo
         try:
-            nova = await canal.send(embed=embed_atual, view=view)
-            _xp_ranking_message_id = nova.id
-            print(f"[ranking-xp] Mensagem do ranking criada em #{canal.name} (id {nova.id}).")
-        except discord.HTTPException as e:
-            print(f"[ranking-xp] ERRO ao enviar mensagem do ranking em #{canal.name}: {e!r}")
+            await _atualizar_enciclopedia(canal)
+        except Exception as e:
+            print(f"[ranking-xp] ERRO ao atualizar mensagem de enciclopédia: {e!r}")
 
-    # Mantém o menu de escolha de cor sempre fixo logo abaixo do ranking
-    try:
-        await _atualizar_pergunta_cor(canal)
-    except Exception as e:
-        print(f"[ranking-xp] ERRO ao atualizar mensagem de escolha de cor: {e!r}")
-
-    # Mantém a explicação da mecânica de batalhas fixa logo abaixo da de cor
-    try:
-        await _atualizar_info_batalha(canal)
-    except Exception as e:
-        print(f"[ranking-xp] ERRO ao atualizar mensagem de explicação de batalha: {e!r}")
-
-    # Mantém a Enciclopédia de Criaturas fixa por ÚLTIMO, embaixo de tudo
-    try:
-        await _atualizar_enciclopedia(canal)
-    except Exception as e:
-        print(f"[ranking-xp] ERRO ao atualizar mensagem de enciclopédia: {e!r}")
-
-    await _salvar_xp_stats()
+        await _salvar_xp_stats()
 
 
 _XP_POR_TICK_CALL = 2   # xp ganho a cada 1 min em call de voz — reforço leve, bem menos que mandar mensagem

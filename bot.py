@@ -8857,13 +8857,21 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
             "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
             "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
-            "**5️⃣ 🐉 Míticos — os dragões**\n"
-            "Uma raridade à parte: bestas quase imbatíveis, com "
-            f"`{_MITICO_CHANCE_VITORIA * 100:.0f}%` de chance de vencer qualquer criatura de raridade menor. "
-            "Mítico contra Mítico, aí sim é sorteio puro (50/50) igual aos outros. Mas são raríssimos de "
-            f"conseguir: não entram no sorteio normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias "
-            f"suas, rola uma chance de só `{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**6️⃣ Pra poder batalhar**\n"
+            "**5️⃣ ⚔️ Hierarquia de força das raridades**\n"
+            "Raridade mais alta = criatura mais forte, mas ninguém fica sem chance nenhuma! "
+            "A cada raridade de distância entre as duas criaturas, a chance da mais forte sobe um "
+            "degrau — só que a mais fraca **sempre** mantém uma chance real de dar a zebra:\n"
+            f"⚪↔🔵 **1 raridade de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[1]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[1])*100:.0f}%`\n"
+            f"⚪↔🟣 **2 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[2]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[2])*100:.0f}%`\n"
+            f"⚪↔🟡 **3 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[3]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[3])*100:.0f}%`\n"
+            f"⚪↔🐉 **4 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
+            f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
+            f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` — força bruta pura.\n\n"
+            "**6️⃣ 🐉 Míticos — os dragões**\n"
+            "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
+            f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
+            f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
+            "**7️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9693,9 +9701,10 @@ _BATALHA_CRIATURAS = [
     # Dragões. Não entram no sorteio normal de recompensa (esse é o pool
     # de _nao_possuidas em _executar_batalha, que já os exclui) — só saem
     # pelo desbloqueio especial a cada _MITICO_VITORIAS_INTERVALO vitórias,
-    # com _MITICO_CHANCE_DESBLOQUEIO de chance. Em batalha, vencem quase
-    # sempre (_MITICO_CHANCE_VITORIA) contra qualquer criatura de raridade
-    # menor; Mítico contra Mítico é sorteio puro (50/50).
+    # com _MITICO_CHANCE_DESBLOQUEIO de chance. Em batalha, seguem a
+    # hierarquia de força das raridades (_chance_vitoria_por_raridade): são
+    # a raridade mais forte de todas, mas o adversário sempre mantém uma
+    # chance mínima de dar a zebra; Mítico contra Mítico é sorteio puro (50/50).
     {"id": "dragao_mar",              "nome": "Dragão do Mar",                 "raridade": "mitico",   "gif": "https://i.pinimg.com/originals/03/80/19/0380195ac5aa62eca14b4361eb30189e.gif"},
     {"id": "dragao_oriente",          "nome": "Dragão do Oriente",             "raridade": "mitico",   "gif": "https://i.pinimg.com/originals/62/9e/1f/629e1fd48d0176d8fb7bf77714387ee4.gif"},
     {"id": "dragao_caos",             "nome": "Dragão do Caos",                "raridade": "mitico",   "gif": "https://media.tenor.com/KvbrKEFBVncAAAAM/monseter-hunter.gif"},
@@ -9732,15 +9741,43 @@ _BATALHA_CHANCE_SEM_ROUBO = 0.15    # 15% de chance do vencedor não levar XP NE
 _BATALHA_ROUBO_MIN = 0.01           # 1%  — mínimo que o dado pode sortear
 _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
 
-# ── Regras especiais da raridade 🐉 Mítico (dragões) ──────────────────────
-# Bestas absurdamente fortes: quase imbatíveis contra qualquer raridade
-# abaixo delas, mas se encontrarem outra Mítica pela frente o resultado
-# volta a ser sorteio puro (nenhuma vantagem de uma Mítica sobre a outra).
-_MITICO_CHANCE_VITORIA = 0.99        # chance de uma Mítica vencer uma criatura de raridade menor
+# ── Hierarquia de força das raridades ──────────────────────────────────────
+# Cada raridade tem uma força relativa (_ORDEM_RARIDADES, do mais forte pro
+# mais fraco: 🐉 Mítico > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum). Quanto
+# maior a distância de raridade entre duas criaturas, mais a balança pende
+# pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
+# Um ⚪ Comum sempre pode dar a zebra contra um 🟣 Épico, só que é raro.
+# Chave = quantos "degraus" de raridade separam as duas criaturas na
+# hierarquia (0 = mesma raridade, 4 = a maior distância possível).
+_CHANCE_VITORIA_POR_DEGRAU = {
+    0: 0.50,   # mesma raridade — força bruta pura, sorteio justo
+    1: 0.65,   # 1 degrau de diferença (ex: 🔵 Raro vs ⚪ Comum)
+    2: 0.78,   # 2 degraus de diferença (ex: 🟣 Épico vs ⚪ Comum)
+    3: 0.88,   # 3 degraus de diferença (ex: 🟡 Lendário vs ⚪ Comum)
+    4: 0.95,   # 4 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
+}
 
-# E são raríssimas de desbloquear: não entram no sorteio normal de
-# recompensa — só há uma checagem especial a cada N vitórias, com uma
-# chance bem pequena de sair uma Mítica nova.
+
+def _chance_vitoria_por_raridade(raridade_a: str, raridade_b: str) -> float:
+    """Devolve a chance de uma criatura de raridade `raridade_a` vencer uma
+    de raridade `raridade_b`, seguindo a hierarquia de força das raridades.
+    Quanto mais forte a raridade (e maior a distância entre elas), maior a
+    chance de vitória — mas o lado mais fraco sempre mantém uma chance real
+    de virar o jogo, por menor que seja."""
+    indice_a = _ORDEM_RARIDADES.index(raridade_a)   # 0 = 🐉 Mítico (mais forte) ... 4 = ⚪ Comum (mais fraco)
+    indice_b = _ORDEM_RARIDADES.index(raridade_b)
+    degrau = abs(indice_a - indice_b)
+    chance_do_mais_forte = _CHANCE_VITORIA_POR_DEGRAU.get(degrau, 0.95)
+    if indice_a < indice_b:      # A é a raridade mais forte
+        return chance_do_mais_forte
+    elif indice_a > indice_b:    # B é a raridade mais forte
+        return 1.0 - chance_do_mais_forte
+    return 0.5                   # mesma raridade
+
+
+# 🐉 Míticos continuam raríssimos de desbloquear: não entram no sorteio
+# normal de recompensa — só há uma checagem especial a cada N vitórias, com
+# uma chance bem pequena de sair uma Mítica nova.
 _MITICO_VITORIAS_INTERVALO = 10      # a cada quantas vitórias rola a chance de Mítica
 _MITICO_CHANCE_DESBLOQUEIO = 0.01    # 1% de chance nessa rolagem
 
@@ -9950,18 +9987,13 @@ async def _executar_batalha(
         pass
 
     # ── Sorteia o vencedor ────────────────────────────────────────────────
-    # Regra normal (nenhum lado é Mítico, ou os dois são): sorteio puro 50/50.
-    # Se só um lado for 🐉 Mítico, ele vence quase sempre (_MITICO_CHANCE_VITORIA)
-    # — dragões são bestas absurdas contra qualquer raridade menor.
-    mitico_desafiante = criatura_desafiante["raridade"] == "mitico"
-    mitico_desafiado = criatura_desafiado["raridade"] == "mitico"
-
-    if mitico_desafiante and not mitico_desafiado:
-        chance_desafiante_vence = _MITICO_CHANCE_VITORIA
-    elif mitico_desafiado and not mitico_desafiante:
-        chance_desafiante_vence = 1.0 - _MITICO_CHANCE_VITORIA
-    else:
-        chance_desafiante_vence = 0.5
+    # Segue a hierarquia de força das raridades (_chance_vitoria_por_raridade):
+    # quanto maior a diferença de raridade entre as duas criaturas, mais a
+    # balança pende pro lado mais forte — mas o lado mais fraco sempre
+    # mantém uma chance real de dar a zebra, por menor que seja.
+    chance_desafiante_vence = _chance_vitoria_por_raridade(
+        criatura_desafiante["raridade"], criatura_desafiado["raridade"]
+    )
 
     if random.random() < chance_desafiante_vence:
         vencedor, criatura_vencedora = desafiante, criatura_desafiante

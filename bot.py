@@ -8300,6 +8300,34 @@ def _barra_progresso(atual: int, necessario: int, tamanho: int = 10, cor_emoji="
     return parte_preenchida + "⬜" * (tamanho - preenchido)
 
 
+def _migrar_favorito(bruto) -> dict:
+    """Converte o formato salvo em disco pro formato atual do favorito.
+    Aceita: None (usuário novo), o formato NOVO (já com "cansacos"), ou o
+    formato ANTIGO (com "cansaco_id"/"cansaco_ate" únicos, de antes de dar
+    pra trocar de favorita com outra ainda descansando)."""
+    if not bruto:
+        return {"id": None, "usos": 0, "cansacos": {}}
+
+    if "cansacos" in bruto:
+        return {
+            "id":       bruto.get("id"),
+            "usos":     bruto.get("usos", 0),
+            "cansacos": dict(bruto.get("cansacos") or {}),
+        }
+
+    # Formato antigo — migra o único cansaço registrado (se ainda válido)
+    cansacos = {}
+    cansaco_id  = bruto.get("cansaco_id")
+    cansaco_ate = bruto.get("cansaco_ate")
+    if cansaco_id and cansaco_ate:
+        cansacos[cansaco_id] = cansaco_ate
+    return {
+        "id":       bruto.get("id"),
+        "usos":     bruto.get("usos", 0),
+        "cansacos": cansacos,
+    }
+
+
 def _carregar_xp_stats() -> None:
     """Carrega estatísticas de XP salvas em disco, se existirem. Roda antes do bot conectar."""
     global _xp_ranking_message_id, _xp_ranking_pagina_atual, _xp_cor_message_id, _xp_batalha_info_message_id, _xp_enciclopedia_message_id
@@ -9918,34 +9946,6 @@ _FAVORITO_USOS_ATE_CANSAR = 5           # quantas batalhas seguidas usando a fav
 _FAVORITO_COOLDOWN_SEGUNDOS = 30 * 60   # 30 min de descanso depois de cansar, até poder favoritar de novo
 
 _FAVORITO_PADRAO = {"id": None, "usos": 0, "cansacos": {}}
-
-
-def _migrar_favorito(bruto) -> dict:
-    """Converte o formato salvo em disco pro formato atual do favorito.
-    Aceita: None (usuário novo), o formato NOVO (já com "cansacos"), ou o
-    formato ANTIGO (com "cansaco_id"/"cansaco_ate" únicos, de antes de dar
-    pra trocar de favorita com outra ainda descansando)."""
-    if not bruto:
-        return {"id": None, "usos": 0, "cansacos": {}}
-
-    if "cansacos" in bruto:
-        return {
-            "id":       bruto.get("id"),
-            "usos":     bruto.get("usos", 0),
-            "cansacos": dict(bruto.get("cansacos") or {}),
-        }
-
-    # Formato antigo — migra o único cansaço registrado (se ainda válido)
-    cansacos = {}
-    cansaco_id  = bruto.get("cansaco_id")
-    cansaco_ate = bruto.get("cansaco_ate")
-    if cansaco_id and cansaco_ate:
-        cansacos[cansaco_id] = cansaco_ate
-    return {
-        "id":       bruto.get("id"),
-        "usos":     bruto.get("usos", 0),
-        "cansacos": cansacos,
-    }
 
 
 def _normalizar_texto(texto: str) -> str:

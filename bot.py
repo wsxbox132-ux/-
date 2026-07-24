@@ -8236,8 +8236,11 @@ def _emoji_da_cor(chave: str):
 #     "vitorias": int (vitórias na Arena de Batalhas), "derrotas": int (derrotas na Arena de Batalhas),
 #     "criaturas": list[str] (ids das criaturas já desbloqueadas na Enciclopédia — começa com as
 #                  ⚪ Comuns de graça, e ganha novas como recompensa ao vencer batalhas),
+#     "usos_criaturas": dict[str, int] (quantas vezes CADA criatura já foi invocada em batalha por
+#                  essa pessoa — é a partir daqui que se calcula o Nível de Capacidade dela, de 1 a 10;
+#                  ver _calcular_nivel_criatura),
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": []})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None   # ID da ÚNICA mensagem do ranking — navegada com as setinhas ◀ ▶, nunca duplicada
 _xp_ranking_pagina_atual: int = 0   # índice (0-based) da página do ranking sendo exibida agora
@@ -8308,6 +8311,7 @@ def _carregar_xp_stats() -> None:
                 "vitorias":         valores.get("vitorias", 0),
                 "derrotas":         valores.get("derrotas", 0),
                 "criaturas":        valores.get("criaturas", []),
+                "usos_criaturas":   valores.get("usos_criaturas", {}),
             }
         # Compatibilidade: versões antigas (antes das setinhas ◀ ▶) salvavam
         # "ranking_message_ids" — uma LISTA de páginas empilhadas. A versão
@@ -8857,7 +8861,14 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
             "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
             "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
-            "**5️⃣ ⚔️ Hierarquia de força das raridades**\n"
+            "**5️⃣ ⭐ Nível de Capacidade — quanto mais usa, mais forte fica**\n"
+            "Além da raridade, toda criatura tem um **Nível de Capacidade** individual (de 1 a "
+            f"{_NIVEL_CRIATURA_MAX}), que é **por pessoa**. Ela sempre começa no Nível 1, e cada vez que "
+            "você a invoca numa batalha — ganhando ou perdendo, não importa — ela ganha experiência e "
+            "pode subir de nível, até o teto. Ou seja: se duas pessoas tiverem a MESMA criatura, mas uma "
+            "já batalhou muito mais com ela, a mais usada leva vantagem no confronto, mesmo sendo a "
+            "mesma raridade. Confira o nível de cada uma sua com `.criaturas`.\n\n"
+            "**6️⃣ ⚔️ Hierarquia de força das raridades**\n"
             "Raridade mais alta = criatura mais forte, mas ninguém fica sem chance nenhuma! "
             "A cada raridade de distância entre as duas criaturas, a chance da mais forte sobe um "
             "degrau — só que a mais fraca **sempre** mantém uma chance real de dar a zebra:\n"
@@ -8866,12 +8877,13 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"⚪↔🟡 **3 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[3]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[3])*100:.0f}%`\n"
             f"⚪↔🐉 **4 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
-            f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` — força bruta pura.\n\n"
-            "**6️⃣ 🐉 Míticos — os dragões**\n"
+            f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
+            f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n\n"
+            "**7️⃣ 🐉 Míticos — os dragões**\n"
             "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
             f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**7️⃣ Pra poder batalhar**\n"
+            "**8️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9025,7 +9037,12 @@ class EnciclopediaSelect(discord.ui.Select):
         info_raridade = _RARIDADES[criatura["raridade"]]
 
         if desbloqueada:
-            status = "🔓 **Você já desbloqueou essa criatura!** Ela pode aparecer nas suas batalhas."
+            nivel_pessoal = _nivel_criatura(interaction.user.id, criatura["id"])
+            status = (
+                "🔓 **Você já desbloqueou essa criatura!** Ela pode aparecer nas suas batalhas.\n"
+                f"⭐ **Nível de Capacidade atual:** `{nivel_pessoal}/{_NIVEL_CRIATURA_MAX}` — "
+                "use ela em mais batalhas pra deixar cada vez mais forte."
+            )
         else:
             status = (
                 "🔒 **Você ainda não desbloqueou essa criatura.** "
@@ -9746,6 +9763,7 @@ def _garantir_criaturas_iniciais(user_id: int) -> list:
     (raras, épicas, lendárias) fica só por conta de vitórias."""
     dados = xp_stats[user_id]
     dados.setdefault("criaturas", [])
+    dados.setdefault("usos_criaturas", {})
     if not dados["criaturas"]:
         dados["criaturas"] = [c["id"] for c in _BATALHA_CRIATURAS if c["raridade"] == "comum"]
     return dados["criaturas"]
@@ -9795,6 +9813,81 @@ def _chance_vitoria_por_raridade(raridade_a: str, raridade_b: str) -> float:
     elif indice_a > indice_b:    # B é a raridade mais forte
         return 1.0 - chance_do_mais_forte
     return 0.5                   # mesma raridade
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CAPACIDADE DE NÍVEL — cada criatura, além da raridade, tem um Nível de
+# Capacidade individual (de 1 a 10) POR PESSOA. Toda criatura desbloqueada
+# começa no Nível 1; quanto mais vezes ela é invocada em batalha (ganhando
+# ou perdendo, não importa), mais ela "sobe de nível", até o teto de 10.
+# Isso significa que duas pessoas com a MESMA criatura (mesma raridade)
+# podem ter forças diferentes: quem mais batalhou com ela leva vantagem.
+# ══════════════════════════════════════════════════════════════════════
+
+_NIVEL_CRIATURA_MAX = 10
+
+# Quantos USOS ACUMULADOS são necessários pra estar em cada nível. Índice 0
+# (0 usos) já garante o Nível 1; índice 1 é o mínimo de usos pro Nível 2;
+# e assim por diante até o índice 9, mínimo pro Nível 10 (o teto). Os
+# degraus crescem aos poucos — fica mais rápido subir no começo e mais
+# custoso lá no topo, pra o Nível 10 realmente significar "muito usada".
+_NIVEL_CRIATURA_USOS_ACUMULADOS = [0, 3, 7, 12, 18, 25, 33, 42, 52, 63]
+
+# Quanto cada DEGRAU de diferença de nível pesa na chance de vitória (ex:
+# nível 1 vs nível 3 = 2 degraus de diferença). É um ajuste mais discreto
+# que o da raridade — o nível refina a disputa, não a domina.
+_NIVEL_CRIATURA_BONUS_POR_DEGRAU = 0.03
+
+# Trava de segurança: mesmo com raridade E nível somados a favor de um
+# lado, ninguém fica com 0% (ou 100%) de chance — sempre sobra uma brecha.
+_CHANCE_VITORIA_MINIMA = 0.05
+_CHANCE_VITORIA_MAXIMA = 0.95
+
+
+def _calcular_nivel_criatura(usos: int) -> int:
+    """Converte quantos usos uma criatura já teve no Nível de Capacidade
+    correspondente (1 a 10), de acordo com _NIVEL_CRIATURA_USOS_ACUMULADOS."""
+    nivel = 1
+    for indice, limite in enumerate(_NIVEL_CRIATURA_USOS_ACUMULADOS):
+        if usos >= limite:
+            nivel = indice + 1
+    return min(nivel, _NIVEL_CRIATURA_MAX)
+
+
+def _usos_criatura(user_id: int, criatura_id: str) -> int:
+    """Quantas vezes essa pessoa já usou essa criatura em batalha."""
+    dados = xp_stats[user_id]
+    dados.setdefault("usos_criaturas", {})
+    return dados["usos_criaturas"].get(criatura_id, 0)
+
+
+def _nivel_criatura(user_id: int, criatura_id: str) -> int:
+    """Nível de Capacidade atual (1 a 10) dessa criatura, PRA ESSA pessoa."""
+    return _calcular_nivel_criatura(_usos_criatura(user_id, criatura_id))
+
+
+def _registrar_uso_criatura(user_id: int, criatura_id: str) -> tuple:
+    """Soma mais 1 uso a essa criatura (pra essa pessoa) e devolve
+    (nivel_antigo, nivel_novo) — útil pra saber se ela acabou de subir
+    de Nível de Capacidade com esse uso."""
+    dados = xp_stats[user_id]
+    dados.setdefault("usos_criaturas", {})
+    usos_antes = dados["usos_criaturas"].get(criatura_id, 0)
+    nivel_antigo = _calcular_nivel_criatura(usos_antes)
+    usos_depois = usos_antes + 1
+    dados["usos_criaturas"][criatura_id] = usos_depois
+    nivel_novo = _calcular_nivel_criatura(usos_depois)
+    return nivel_antigo, nivel_novo
+
+
+def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: int) -> float:
+    """Chance da criatura A vencer a criatura B, combinando a hierarquia de
+    raridade (_chance_vitoria_por_raridade) com o ajuste fino do Nível de
+    Capacidade de cada uma: pra cada degrau de nível a mais, um pequeno
+    empurrão a mais na balança. Sempre travado entre 5% e 95%."""
+    chance_base = _chance_vitoria_por_raridade(criatura_a["raridade"], criatura_b["raridade"])
+    ajuste_nivel = (nivel_a - nivel_b) * _NIVEL_CRIATURA_BONUS_POR_DEGRAU
+    return max(_CHANCE_VITORIA_MINIMA, min(_CHANCE_VITORIA_MAXIMA, chance_base + ajuste_nivel))
 
 
 # 🐉 Míticos continuam raríssimos de desbloquear: não entram no sorteio
@@ -9962,6 +10055,12 @@ async def _executar_batalha(
     duas criaturas, suspense e conclusão (com ou sem roubo de XP)."""
     criatura_desafiante, criatura_desafiado = _sortear_criaturas(desafiante.id, desafiado.id)
 
+    # Nível de Capacidade (1 a 10) de cada criatura, PRA CADA pessoa — quanto
+    # mais essa pessoa já batalhou com ela, mais alto o nível e mais forte
+    # ela fica, mesmo entre criaturas da mesma raridade.
+    nivel_desafiante = _nivel_criatura(desafiante.id, criatura_desafiante["id"])
+    nivel_desafiado = _nivel_criatura(desafiado.id, criatura_desafiado["id"])
+
     # ── Abertura ──────────────────────────────────────────────────────────
     embed_abertura = discord.Embed(
         title="⚔️ UMA BATALHA COMEÇA!",
@@ -9981,7 +10080,10 @@ async def _executar_batalha(
     # ── Criatura do desafiante ───────────────────────────────────────────
     embed_c1 = discord.Embed(
         title="🔥 O desafiador entra em campo!",
-        description=f"**{desafiante.display_name}** invoca... **{criatura_desafiante['nome']}**!! 💥",
+        description=(
+            f"**{desafiante.display_name}** invoca... **{criatura_desafiante['nome']}** "
+            f"`⭐ Nível {nivel_desafiante}`!! 💥"
+        ),
         color=0xff4444,
     )
     embed_c1.set_image(url=criatura_desafiante["gif"])
@@ -9992,7 +10094,10 @@ async def _executar_batalha(
     # ── Criatura do desafiado ────────────────────────────────────────────
     embed_c2 = discord.Embed(
         title="💠 O desafiado revida!",
-        description=f"**{desafiado.display_name}** responde invocando... **{criatura_desafiado['nome']}**!! ⚡",
+        description=(
+            f"**{desafiado.display_name}** responde invocando... **{criatura_desafiado['nome']}** "
+            f"`⭐ Nível {nivel_desafiado}`!! ⚡"
+        ),
         color=0x4488ff,
     )
     embed_c2.set_image(url=criatura_desafiado["gif"])
@@ -10009,12 +10114,12 @@ async def _executar_batalha(
         pass
 
     # ── Sorteia o vencedor ────────────────────────────────────────────────
-    # Segue a hierarquia de força das raridades (_chance_vitoria_por_raridade):
-    # quanto maior a diferença de raridade entre as duas criaturas, mais a
-    # balança pende pro lado mais forte — mas o lado mais fraco sempre
-    # mantém uma chance real de dar a zebra, por menor que seja.
-    chance_desafiante_vence = _chance_vitoria_por_raridade(
-        criatura_desafiante["raridade"], criatura_desafiado["raridade"]
+    # Combina a hierarquia de força das raridades com o Nível de Capacidade
+    # de cada criatura (_chance_vitoria): quanto maior a diferença de
+    # raridade E de nível, mais a balança pende pro lado mais forte — mas o
+    # lado mais fraco sempre mantém uma chance real de dar a zebra.
+    chance_desafiante_vence = _chance_vitoria(
+        criatura_desafiante, nivel_desafiante, criatura_desafiado, nivel_desafiado
     )
 
     if random.random() < chance_desafiante_vence:
@@ -10023,6 +10128,16 @@ async def _executar_batalha(
     else:
         vencedor, criatura_vencedora = desafiado, criatura_desafiado
         perdedor, criatura_perdedora = desafiante, criatura_desafiante
+
+    # ── Registra o uso — CADA criatura usada nessa batalha (vencendo ou
+    # perdendo) soma +1 no seu contador, e pode subir de Nível de Capacidade
+    # na hora — quanto mais usada, mais forte ela fica com o tempo.
+    nivel_antigo_criatura_vencedora, nivel_novo_criatura_vencedora = _registrar_uso_criatura(
+        vencedor.id, criatura_vencedora["id"]
+    )
+    nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora = _registrar_uso_criatura(
+        perdedor.id, criatura_perdedora["id"]
+    )
 
     # ── Lança o "dado" que decide quanto (ou se) o vencedor rouba de XP ──
     dados_perdedor = xp_stats[perdedor.id]
@@ -10134,13 +10249,29 @@ async def _executar_batalha(
         )
     texto_desbloqueio = "\n\n".join(partes_desbloqueio)
 
+    # ── Aviso de subida de Nível de Capacidade — vale pras duas criaturas,
+    # a de quem venceu e a de quem perdeu, já que os dois "usaram" as suas. ──
+    partes_nivel_criatura = []
+    if nivel_novo_criatura_vencedora > nivel_antigo_criatura_vencedora:
+        partes_nivel_criatura.append(
+            f"📈 **{criatura_vencedora['nome']}** de {vencedor.display_name} ficou mais experiente "
+            f"e subiu pro **⭐ Nível {nivel_novo_criatura_vencedora}**!"
+        )
+    if nivel_novo_criatura_perdedora > nivel_antigo_criatura_perdedora:
+        partes_nivel_criatura.append(
+            f"📈 **{criatura_perdedora['nome']}** de {perdedor.display_name} ficou mais experiente "
+            f"e subiu pro **⭐ Nível {nivel_novo_criatura_perdedora}**!"
+        )
+    texto_nivel_criatura = ("\n\n" + "\n".join(partes_nivel_criatura)) if partes_nivel_criatura else ""
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
-            f"**{criatura_vencedora['nome']}** ({vencedor.mention}) derrota "
-            f"**{criatura_perdedora['nome']}** ({perdedor.mention})!\n\n"
+            f"**{criatura_vencedora['nome']}** `⭐ Nv.{nivel_novo_criatura_vencedora}` ({vencedor.mention}) derrota "
+            f"**{criatura_perdedora['nome']}** `⭐ Nv.{nivel_novo_criatura_perdedora}` ({perdedor.mention})!\n\n"
             f"{texto_roubo}\n\n"
-            f"{texto_desbloqueio}\n\n"
+            f"{texto_desbloqueio}"
+            f"{texto_nivel_criatura}\n\n"
             f"{texto_placar}\n\n"
             f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
             f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
@@ -10233,18 +10364,24 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
         title=f"📖 Coleção de Criaturas — {alvo.display_name}",
         description=(
             f"🔓 **{len(desbloqueadas)}/{len(_BATALHA_CRIATURAS)}** criaturas desbloqueadas até agora!\n"
-            "Vença batalhas invocando as que faltam pra completar a coleção. ⚔️"
+            "Vença batalhas invocando as que faltam pra completar a coleção. ⚔️\n"
+            "⭐ *O número entre parênteses é o Nível de Capacidade dela — sobe até 10 "
+            "quanto mais você invoca essa criatura em batalha.*"
         ),
         color=0x9b59b6,
     )
 
     for raridade in _ORDEM_RARIDADES:
         info = _RARIDADES[raridade]
-        linhas = [
-            f"{'🔓' if c['id'] in desbloqueadas else '🔒'} {c['nome']}"
-            for c in _BATALHA_CRIATURAS
-            if c["raridade"] == raridade
-        ]
+        linhas = []
+        for c in _BATALHA_CRIATURAS:
+            if c["raridade"] != raridade:
+                continue
+            if c["id"] in desbloqueadas:
+                nivel = _nivel_criatura(alvo.id, c["id"])
+                linhas.append(f"🔓 {c['nome']} `⭐ Nv.{nivel}`")
+            else:
+                linhas.append(f"🔒 {c['nome']}")
         if linhas:
             embed.add_field(name=f"{info['emoji']} {info['label']}", value="\n".join(linhas), inline=False)
 

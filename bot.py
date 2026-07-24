@@ -7,6 +7,7 @@ import json
 import aiohttp
 import time
 import asyncio
+import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 try:
@@ -8239,8 +8240,10 @@ def _emoji_da_cor(chave: str):
 #     "usos_criaturas": dict[str, int] (quantas vezes CADA criatura já foi invocada em batalha por
 #                  essa pessoa — é a partir daqui que se calcula o Nível de Capacidade dela, de 1 a 10;
 #                  ver _calcular_nivel_criatura),
+#     "favorito": dict (criatura favorita pra batalhas — ver _favorito_status):
+#                  {"id": str|None, "usos": int, "cansaco_id": str|None, "cansaco_ate": float|None}
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}, "favorito": {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None}})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None   # ID da ÚNICA mensagem do ranking — navegada com as setinhas ◀ ▶, nunca duplicada
 _xp_ranking_pagina_atual: int = 0   # índice (0-based) da página do ranking sendo exibida agora
@@ -8312,6 +8315,7 @@ def _carregar_xp_stats() -> None:
                 "derrotas":         valores.get("derrotas", 0),
                 "criaturas":        valores.get("criaturas", []),
                 "usos_criaturas":   valores.get("usos_criaturas", {}),
+                "favorito":         valores.get("favorito") or {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None},
             }
         # Compatibilidade: versões antigas (antes das setinhas ◀ ▶) salvavam
         # "ranking_message_ids" — uma LISTA de páginas empilhadas. A versão
@@ -8868,7 +8872,15 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "pode subir de nível, até o teto. Ou seja: se duas pessoas tiverem a MESMA criatura, mas uma "
             "já batalhou muito mais com ela, a mais usada leva vantagem no confronto, mesmo sendo a "
             "mesma raridade. Confira o nível de cada uma sua com `.criaturas`.\n\n"
-            "**6️⃣ ⚔️ Hierarquia de força das raridades**\n"
+            "**6️⃣ 🌟 Criatura favorita**\n"
+            "Use `.favorito <nome da criatura>` pra escolher uma favorita entre as que você já tem — "
+            "a partir daí, ela é **sempre** a escolhida nas suas batalhas, sem sorteio nenhum. Só que "
+            f"depois de `{_FAVORITO_USOS_ATE_CANSAR}` usos seguidos ela **cansa**: some da jogada, suas "
+            "batalhas voltam a sortear aleatoriamente, e ela entra num cooldown de "
+            f"`{_FAVORITO_COOLDOWN_SEGUNDOS // 60} min` até poder ser favoritada de novo (ou você pode "
+            "trocar de favorita a qualquer momento com `.favorito <outro nome>`, ou tirar com "
+            "`.favorito remover`). Veja `.favorito` sozinho pra conferir o status atual.\n\n"
+            "**7️⃣ ⚔️ Hierarquia de força das raridades**\n"
             "Raridade mais alta = criatura mais forte, mas ninguém fica sem chance nenhuma! "
             "A cada raridade de distância entre as duas criaturas, a chance da mais forte sobe um "
             "degrau — só que a mais fraca **sempre** mantém uma chance real de dar a zebra:\n"
@@ -8879,11 +8891,11 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
             f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
             f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n\n"
-            "**7️⃣ 🐉 Míticos — os dragões**\n"
+            "**8️⃣ 🐉 Míticos — os dragões**\n"
             "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
             f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**8️⃣ Pra poder batalhar**\n"
+            "**9️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9890,6 +9902,110 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
     return max(_CHANCE_VITORIA_MINIMA, min(_CHANCE_VITORIA_MAXIMA, chance_base + ajuste_nivel))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# CRIATURA FAVORITA — comando `.favorito <nome>`. Enquanto alguém tiver uma
+# favorita ativa, ela é SEMPRE a escolhida nas batalhas dessa pessoa (em vez
+# do sorteio aleatório de sempre) — até "cansar" depois de um certo número
+# de usos seguidos. Aí ela some da jogada, as batalhas voltam a sortear
+# aleatoriamente, e a pessoa entra num cooldown até poder favoritar de novo.
+# ══════════════════════════════════════════════════════════════════════
+
+_FAVORITO_USOS_ATE_CANSAR = 5           # quantas batalhas seguidas usando a favorita até ela cansar
+_FAVORITO_COOLDOWN_SEGUNDOS = 30 * 60   # 30 min de descanso depois de cansar, até poder favoritar de novo
+
+_FAVORITO_PADRAO = {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None}
+
+
+def _normalizar_texto(texto: str) -> str:
+    """Tira acentos e baixa a caixa — deixa a comparação de nomes de
+    criatura tolerante a 'kaiju do eco', 'Kaiju Do Eco', 'KAIJU DO ECO'..."""
+    sem_acento = "".join(
+        ch for ch in unicodedata.normalize("NFKD", texto or "") if not unicodedata.combining(ch)
+    )
+    return sem_acento.lower().strip()
+
+
+def _encontrar_criatura_por_nome(busca: str) -> dict:
+    """Acha uma criatura em _BATALHA_CRIATURAS a partir de um nome digitado
+    livremente (sem acento, com espaço, etc.). Tenta, nessa ordem: nome
+    exato, id exato, e por fim uma busca por trecho (só aceita se achar
+    UMA única criatura possível — em caso de ambiguidade, devolve None)."""
+    alvo = _normalizar_texto(busca)
+    if not alvo:
+        return None
+
+    for c in _BATALHA_CRIATURAS:
+        if _normalizar_texto(c["nome"]) == alvo:
+            return c
+
+    alvo_id = alvo.replace(" ", "_")
+    for c in _BATALHA_CRIATURAS:
+        if c["id"] == alvo_id:
+            return c
+
+    candidatos = [c for c in _BATALHA_CRIATURAS if alvo in _normalizar_texto(c["nome"])]
+    if len(candidatos) == 1:
+        return candidatos[0]
+    return None
+
+
+def _favorito_status(user_id: int) -> dict:
+    """Devolve o dict de favorito dessa pessoa, já garantindo a estrutura
+    padrão e limpando o cansaço sozinho se o cooldown dele já tiver passado."""
+    dados = xp_stats[user_id]
+    dados.setdefault("favorito", dict(_FAVORITO_PADRAO))
+    favorito = dados["favorito"]
+    for chave, valor_padrao in _FAVORITO_PADRAO.items():
+        favorito.setdefault(chave, valor_padrao)
+    if favorito["cansaco_ate"] is not None and time.time() >= favorito["cansaco_ate"]:
+        favorito["cansaco_id"] = None
+        favorito["cansaco_ate"] = None
+    return favorito
+
+
+def _favorito_cooldown_restante(user_id: int) -> float:
+    """Segundos restantes até a pessoa poder favoritar de novo (0 se não
+    houver cooldown ativo no momento)."""
+    favorito = _favorito_status(user_id)
+    if favorito["cansaco_ate"] is None:
+        return 0.0
+    return max(0.0, favorito["cansaco_ate"] - time.time())
+
+
+def _formatar_tempo_restante(segundos: float) -> str:
+    minutos, segs = divmod(max(0, int(segundos)), 60)
+    return f"{minutos}m{segs:02d}s"
+
+
+def _obter_criatura_favorita_ativa(user_id: int) -> dict:
+    """Devolve a criatura favorita ATIVA dessa pessoa (não cansada), ou
+    None se ela não tiver nenhuma favoritada no momento."""
+    favorito = _favorito_status(user_id)
+    if not favorito["id"]:
+        return None
+    return next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["id"]), None)
+
+
+def _registrar_uso_favorito(user_id: int, criatura_id: str) -> bool:
+    """Chamada toda vez que uma criatura é usada numa batalha. Se essa
+    criatura for a favorita ativa dessa pessoa, soma +1 no contador de usos
+    seguidos. Ao bater _FAVORITO_USOS_ATE_CANSAR, ela cansa: sai do posto de
+    favorita (as próximas batalhas voltam a sortear aleatoriamente) e entra
+    em cooldown até poder ser favoritada de novo. Devolve True se ela cansou
+    JUSTO NESSE uso (pra poder avisar no resultado da batalha)."""
+    favorito = _favorito_status(user_id)
+    if favorito["id"] != criatura_id:
+        return False
+    favorito["usos"] += 1
+    if favorito["usos"] >= _FAVORITO_USOS_ATE_CANSAR:
+        favorito["cansaco_id"] = criatura_id
+        favorito["cansaco_ate"] = time.time() + _FAVORITO_COOLDOWN_SEGUNDOS
+        favorito["id"] = None
+        favorito["usos"] = 0
+        return True
+    return False
+
+
 # 🐉 Míticos continuam raríssimos de desbloquear: não entram no sorteio
 # normal de recompensa — só há uma checagem especial a cada N vitórias, com
 # uma chance bem pequena de sair uma Mítica nova.
@@ -10027,11 +10143,17 @@ async def _iniciar_batalha_apos_aceite(
 
 
 def _sortear_uma_criatura(user_id: int) -> dict:
-    """Sorteia 1 criatura para essa pessoa invocar — SOMENTE dentre as que
-    ela já desbloqueou (ninguém pode invocar o que ainda não possui). O
-    sorteio continua PONDERADO pela raridade — entre as que ela tem, Comuns
-    saem com mais frequência que Raras, e assim por diante."""
+    """Sorteia 1 criatura para essa pessoa invocar. Se ela tiver uma 🌟
+    favorita ativa (e ainda não cansada), a favorita é SEMPRE a escolhida —
+    sem sorteio nenhum. Só cai no sorteio aleatório (SOMENTE dentre as que
+    ela já desbloqueou, ponderado pela raridade — Comuns saem com mais
+    frequência que Raras, e assim por diante) quando não há favorita ativa."""
     desbloqueadas = set(_garantir_criaturas_iniciais(user_id))
+
+    favorita = _obter_criatura_favorita_ativa(user_id)
+    if favorita is not None and favorita["id"] in desbloqueadas:
+        return favorita
+
     pool = [c for c in _BATALHA_CRIATURAS if c["id"] in desbloqueadas]
     if not pool:
         # segurança: nunca deveria cair aqui, já que _garantir_criaturas_iniciais
@@ -10061,6 +10183,13 @@ async def _executar_batalha(
     nivel_desafiante = _nivel_criatura(desafiante.id, criatura_desafiante["id"])
     nivel_desafiado = _nivel_criatura(desafiado.id, criatura_desafiado["id"])
 
+    # 🌟 Se a criatura sorteada é a favorita ativa de quem invocou, marca
+    # visualmente — o sorteio já dá prioridade absoluta a ela em _sortear_uma_criatura.
+    eh_favorita_desafiante = _favorito_status(desafiante.id)["id"] == criatura_desafiante["id"]
+    eh_favorita_desafiado = _favorito_status(desafiado.id)["id"] == criatura_desafiado["id"]
+    marcador_favorita_desafiante = " 🌟" if eh_favorita_desafiante else ""
+    marcador_favorita_desafiado = " 🌟" if eh_favorita_desafiado else ""
+
     # ── Abertura ──────────────────────────────────────────────────────────
     embed_abertura = discord.Embed(
         title="⚔️ UMA BATALHA COMEÇA!",
@@ -10082,7 +10211,7 @@ async def _executar_batalha(
         title="🔥 O desafiador entra em campo!",
         description=(
             f"**{desafiante.display_name}** invoca... **{criatura_desafiante['nome']}** "
-            f"`⭐ Nível {nivel_desafiante}`!! 💥"
+            f"`⭐ Nível {nivel_desafiante}`{marcador_favorita_desafiante}!! 💥"
         ),
         color=0xff4444,
     )
@@ -10096,7 +10225,7 @@ async def _executar_batalha(
         title="💠 O desafiado revida!",
         description=(
             f"**{desafiado.display_name}** responde invocando... **{criatura_desafiado['nome']}** "
-            f"`⭐ Nível {nivel_desafiado}`!! ⚡"
+            f"`⭐ Nível {nivel_desafiado}`{marcador_favorita_desafiado}!! ⚡"
         ),
         color=0x4488ff,
     )
@@ -10138,6 +10267,12 @@ async def _executar_batalha(
     nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora = _registrar_uso_criatura(
         perdedor.id, criatura_perdedora["id"]
     )
+
+    # 🌟 Se alguma das duas era a favorita ativa de quem a usou, soma mais um
+    # uso seguido nela também — e, se bater o limite, ela cansa aqui mesmo
+    # (some da função de favorita e entra em cooldown).
+    cansou_favorita_vencedora = _registrar_uso_favorito(vencedor.id, criatura_vencedora["id"])
+    cansou_favorita_perdedora = _registrar_uso_favorito(perdedor.id, criatura_perdedora["id"])
 
     # ── Lança o "dado" que decide quanto (ou se) o vencedor rouba de XP ──
     dados_perdedor = xp_stats[perdedor.id]
@@ -10264,6 +10399,23 @@ async def _executar_batalha(
         )
     texto_nivel_criatura = ("\n\n" + "\n".join(partes_nivel_criatura)) if partes_nivel_criatura else ""
 
+    # 🌟 Aviso de "cansaço" — se alguma das favoritas bateu o limite de usos
+    # seguidos NESSA batalha, avisa que ela vai descansar e por quanto tempo.
+    partes_favorita_cansada = []
+    if cansou_favorita_vencedora:
+        partes_favorita_cansada.append(
+            f"😮‍💨 A favorita de **{vencedor.display_name}**, **{criatura_vencedora['nome']}**, cansou "
+            f"depois de `{_FAVORITO_USOS_ATE_CANSAR}` usos seguidos! Vai descansar por "
+            f"`{_FAVORITO_COOLDOWN_SEGUNDOS // 60} min` — as próximas batalhas voltam a sortear aleatoriamente."
+        )
+    if cansou_favorita_perdedora:
+        partes_favorita_cansada.append(
+            f"😮‍💨 A favorita de **{perdedor.display_name}**, **{criatura_perdedora['nome']}**, cansou "
+            f"depois de `{_FAVORITO_USOS_ATE_CANSAR}` usos seguidos! Vai descansar por "
+            f"`{_FAVORITO_COOLDOWN_SEGUNDOS // 60} min` — as próximas batalhas voltam a sortear aleatoriamente."
+        )
+    texto_favorita_cansada = ("\n\n" + "\n".join(partes_favorita_cansada)) if partes_favorita_cansada else ""
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
@@ -10271,7 +10423,8 @@ async def _executar_batalha(
             f"**{criatura_perdedora['nome']}** `⭐ Nv.{nivel_novo_criatura_perdedora}` ({perdedor.mention})!\n\n"
             f"{texto_roubo}\n\n"
             f"{texto_desbloqueio}"
-            f"{texto_nivel_criatura}\n\n"
+            f"{texto_nivel_criatura}"
+            f"{texto_favorita_cansada}\n\n"
             f"{texto_placar}\n\n"
             f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
             f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
@@ -10359,14 +10512,33 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
     Uso: .criaturas [@alguém]"""
     alvo = membro or ctx.author
     desbloqueadas = set(_garantir_criaturas_iniciais(alvo.id))
+    favorito_alvo = _favorito_status(alvo.id)
+
+    if favorito_alvo["id"]:
+        criatura_favorita = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito_alvo["id"]), None)
+        nome_favorita = criatura_favorita["nome"] if criatura_favorita else favorito_alvo["id"]
+        linha_favorito = (
+            f"🌟 **Favorita atual:** {nome_favorita} "
+            f"(`{favorito_alvo['usos']}/{_FAVORITO_USOS_ATE_CANSAR}` usos até cansar)"
+        )
+    elif favorito_alvo["cansaco_ate"]:
+        criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito_alvo["cansaco_id"]), None)
+        nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito_alvo["cansaco_id"]
+        linha_favorito = (
+            f"😮‍💨 **{nome_cansada}** está descansando — faltam "
+            f"`{_formatar_tempo_restante(favorito_alvo['cansaco_ate'] - time.time())}` pra poder favoritar de novo."
+        )
+    else:
+        linha_favorito = "🌟 *Sem favorita ativa no momento — use `.favorito <nome>` pra escolher uma.*"
 
     embed = discord.Embed(
         title=f"📖 Coleção de Criaturas — {alvo.display_name}",
         description=(
             f"🔓 **{len(desbloqueadas)}/{len(_BATALHA_CRIATURAS)}** criaturas desbloqueadas até agora!\n"
             "Vença batalhas invocando as que faltam pra completar a coleção. ⚔️\n"
-            "⭐ *O número entre parênteses é o Nível de Capacidade dela — sobe até 10 "
-            "quanto mais você invoca essa criatura em batalha.*"
+            "⭐ *O número ao lado do nome é o Nível de Capacidade dela — sobe até 10 "
+            "quanto mais você invoca essa criatura em batalha.*\n\n"
+            f"{linha_favorito}"
         ),
         color=0x9b59b6,
     )
@@ -10379,7 +10551,8 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
                 continue
             if c["id"] in desbloqueadas:
                 nivel = _nivel_criatura(alvo.id, c["id"])
-                linhas.append(f"🔓 {c['nome']} `⭐ Nv.{nivel}`")
+                marcador = " 🌟" if favorito_alvo["id"] == c["id"] else ""
+                linhas.append(f"🔓 {c['nome']} `⭐ Nv.{nivel}`{marcador}")
             else:
                 linhas.append(f"🔒 {c['nome']}")
         if linhas:
@@ -10388,6 +10561,108 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
     embed.set_thumbnail(url=alvo.display_avatar.url)
     embed.set_footer(text="🌑 Aeon & ☀️ Celestia — confira também a 📖 Enciclopédia no canal de ranking")
     await ctx.send(embed=embed)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# COMANDO .favorito — escolhe uma criatura favorita pras batalhas. Enquanto
+# ela estiver ativa, é SEMPRE ela quem entra em campo (sem sorteio) — até
+# cansar depois de _FAVORITO_USOS_ATE_CANSAR usos seguidos, quando então
+# some por _FAVORITO_COOLDOWN_SEGUNDOS antes de poder ser favoritada de novo.
+# ══════════════════════════════════════════════════════════════════════
+
+_FAVORITO_PALAVRAS_REMOVER = {"remover", "limpar", "cancelar", "nenhum", "nenhuma", "tirar"}
+
+
+@bot.command(name="favorito", aliases=["usarmonstro", "monstrofavorito"])
+async def cmd_favorito(ctx, *, nome: str = None):
+    """Define (ou consulta) sua criatura favorita pra batalhas.
+    Uso:
+      .favorito <nome da criatura>  → define a favorita (ela passa a entrar em TODA batalha sua)
+      .favorito                     → mostra o status atual (favorita ativa ou tempo de cansaço restante)
+      .favorito remover             → tira a favorita atual, sem precisar esperar ela cansar
+    """
+    autor = ctx.author
+    favorito = _favorito_status(autor.id)
+
+    # ── Sem argumento nenhum: só mostra o status atual ──────────────────
+    if nome is None:
+        if favorito["id"]:
+            criatura_atual = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["id"]), None)
+            nome_atual = criatura_atual["nome"] if criatura_atual else favorito["id"]
+            nivel_atual = _nivel_criatura(autor.id, favorito["id"])
+            await ctx.send(
+                f"🌟 **Celestia:** Sua favorita agora é **{nome_atual}** `⭐ Nv.{nivel_atual}`!! 😆✨ "
+                f"Já foi usada `{favorito['usos']}/{_FAVORITO_USOS_ATE_CANSAR}` vezes seguidas até cansar."
+            )
+        elif favorito["cansaco_ate"]:
+            criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["cansaco_id"]), None)
+            nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito["cansaco_id"]
+            restante = _formatar_tempo_restante(favorito["cansaco_ate"] - time.time())
+            await ctx.send(
+                f"🌑 **Aeon:** ...**{nome_cansada}** está cansada. As sombras dizem que faltam "
+                f"`{restante}` de descanso antes dela poder ser favoritada de novo. 🖤🌑"
+            )
+        else:
+            await ctx.send(
+                "🌟 **Celestia:** Você não tem nenhuma favorita agora — suas batalhas estão "
+                "sorteando aleatoriamente!! Use `.favorito <nome da criatura>` pra escolher uma. 🌸✨"
+            )
+        return
+
+    # ── Remover a favorita atual, sem precisar esperar cansar ───────────
+    if _normalizar_texto(nome) in _FAVORITO_PALAVRAS_REMOVER:
+        if not favorito["id"]:
+            await ctx.send("🌟 **Celestia:** Você já não tinha nenhuma favorita ativa!! 🌸")
+            return
+        favorito["id"] = None
+        favorito["usos"] = 0
+        asyncio.create_task(_salvar_xp_stats())
+        await ctx.send(
+            "🌑 **Aeon:** ...favorita removida. As sombras voltam a sortear livremente nas suas batalhas. 🖤🌑"
+        )
+        return
+
+    # ── Ainda cansada / em cooldown — não deixa favoritar nada agora ────
+    if favorito["cansaco_ate"]:
+        criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["cansaco_id"]), None)
+        nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito["cansaco_id"]
+        restante = _formatar_tempo_restante(favorito["cansaco_ate"] - time.time())
+        await ctx.send(
+            f"🌑 **Aeon:** ...**{nome_cansada}** ainda está descansando. Espere mais "
+            f"`{restante}` antes de favoritar de novo. 🖤🌑"
+        )
+        return
+
+    # ── Encontra a criatura pelo nome digitado ───────────────────────────
+    criatura = _encontrar_criatura_por_nome(nome)
+    if criatura is None:
+        await ctx.send(
+            f"⚠️ Não encontrei nenhuma criatura chamada `{nome}`. Confira o nome certinho com `.criaturas`."
+        )
+        return
+
+    desbloqueadas = set(_garantir_criaturas_iniciais(autor.id))
+    if criatura["id"] not in desbloqueadas:
+        await ctx.send(
+            f"🌟 **Celestia:** Você ainda não desbloqueou **{criatura['nome']}**!! 😅🌸 "
+            "Só dá pra favoritar quem já tá na sua coleção — confira com `.criaturas`."
+        )
+        return
+
+    favorito["id"] = criatura["id"]
+    favorito["usos"] = 0
+    favorito["cansaco_id"] = None
+    favorito["cansaco_ate"] = None
+    asyncio.create_task(_salvar_xp_stats())
+
+    info_raridade = _RARIDADES[criatura["raridade"]]
+    nivel_atual = _nivel_criatura(autor.id, criatura["id"])
+    await ctx.send(
+        f"🌟 **Celestia:** PRONTO!! 😆✨ {info_raridade['emoji']} **{criatura['nome']}** `⭐ Nv.{nivel_atual}` "
+        f"agora é sua favorita — ela vai entrar em TODA batalha sua a partir de agora, até usar "
+        f"`{_FAVORITO_USOS_ATE_CANSAR}` vezes seguidas e precisar descansar!\n"
+        f"🌑 **Aeon:** ...as sombras vão priorizá-la. Escolha bem. 🖤🌑"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -1874,6 +1874,10 @@ async def on_voice_state_update(
     # roda isolado num try próprio pra nunca quebrar a lógica do ranking abaixo.
     asyncio.create_task(_processar_log_voz(member, before, after))
 
+    # Booster de Call também vale para QUALQUER membro, independente de cargo —
+    # roda isolado pra nunca quebrar a lógica do ranking do Anjo abaixo.
+    asyncio.create_task(_processar_call_booster_voice(member, before, after))
+
     try:
         if member.bot:
             return
@@ -9156,6 +9160,118 @@ _XP_CALLS_MULTIPLICADOR = {
 }
 
 
+# ── Booster de Call (streak) ────────────────────────────────────────────────
+# Enquanto a pessoa fica numa MESMA call de voz, sem sair, sem mutar (nem por
+# si mesma nem pelo servidor) e sem trocar de canal, o xp de call dela sobe
+# de nível a cada _CALL_BOOSTER_INTERVALO_MINUTOS minutos: nível 1 = xp normal,
+# nível 2 = xp em dobro, nível 3 = triplo, e assim por diante, sem limite.
+# Qualquer uma dessas ações reseta o booster NA HORA, de volta pro nível 1:
+#   • sair da call
+#   • mutar (self-mute ou mute pelo servidor)
+#   • trocar de canal de voz (mesmo pra outra call válida)
+# Toda vez que o nível sobe, um aviso aparece no canal CANAL_XP_ID dizendo
+# que o Booster de Call daquela pessoa foi ativado — e some sozinho depois
+# de 1 minuto (mesmo canal e mesmo estilo do aviso de Level Up).
+_CALL_BOOSTER_INTERVALO_MINUTOS = 20
+
+_call_booster_inicio: dict = {}            # user_id -> time.time() de quando a streak ATUAL começou (ininterrupta)
+_call_booster_nivel_anunciado: dict = {}   # user_id -> último nível (x2, x3, x4...) já avisado no canal, pra não repetir
+
+
+def _nivel_call_booster(user_id: int) -> int:
+    """Nível atual do Booster de Call de alguém: 1 = sem boost (xp de call normal),
+    2 = xp de call em dobro, 3 = triplo... sobe 1 nível a cada
+    _CALL_BOOSTER_INTERVALO_MINUTOS minutos ininterruptos numa mesma call.
+    Sem streak ativa agora (não está numa call qualificada), devolve 1 (sem efeito)."""
+    inicio = _call_booster_inicio.get(user_id)
+    if inicio is None:
+        return 1
+    minutos_corridos = (time.time() - inicio) / 60
+    return 1 + int(minutos_corridos // _CALL_BOOSTER_INTERVALO_MINUTOS)
+
+
+def _resetar_call_booster(user_id: int) -> None:
+    """Zera a streak do Booster de Call de alguém — perde o multiplicador na
+    hora (saiu da call, mutou, ou trocou de canal)."""
+    _call_booster_inicio.pop(user_id, None)
+    _call_booster_nivel_anunciado.pop(user_id, None)
+
+
+def _iniciar_call_booster(user_id: int) -> None:
+    """Começa (ou reinicia do zero) a contagem da streak do Booster de Call."""
+    _call_booster_inicio[user_id] = time.time()
+    _call_booster_nivel_anunciado[user_id] = 1
+
+
+async def _anunciar_call_booster(guild: discord.Guild, membro: discord.Member, nivel: int) -> None:
+    """Avisa no canal de XP que o Booster de Call de alguém subiu pro nível
+    informado (x2, x3, x4...). O aviso some sozinho depois de 1 minuto."""
+    canal = guild.get_channel(CANAL_XP_ID)
+    if canal is None:
+        return
+
+    embed = discord.Embed(
+        title="🔥 Booster de Call ativado!",
+        description=(
+            f"⚡ {membro.mention} ficou tempo suficiente numa call sem sair, sem mutar e sem trocar "
+            f"de canal — o xp de call agora está em **`x{nivel}`**!\n\n"
+            "🌟 **Celestia:** *brilha mais forte* CONTINUA NA CALL QUE AUMENTA AINDA MAIS!! 💫✨\n"
+            "🌑 **Aeon:** ...saia, troque de call ou mute, e o booster desaparece na hora. 🖤🌑"
+        ),
+        color=0xff8c42,
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_thumbnail(url=membro.display_avatar.url)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Booster de Call • some em 1 minuto")
+
+    try:
+        msg = await canal.send(embed=embed)
+        asyncio.create_task(_apagar_mensagem_depois(msg, 60))
+    except discord.HTTPException:
+        pass
+
+
+async def _processar_call_booster_voice(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState) -> None:
+    """Controla a streak do Booster de Call a partir de cada mudança de estado
+    de voz: começa a contar quando a pessoa entra numa call válida (não-privada)
+    e desmutada, e reseta na hora se ela sair da call, mutar (self ou servidor)
+    ou trocar de canal de voz."""
+    if member.bot:
+        return
+
+    try:
+        canal_antes = before.channel
+        canal_depois = after.channel
+        mutado_depois = bool(after.self_mute or after.mute)
+
+        # Saiu da call inteiramente -> perde o booster na hora
+        if canal_depois is None:
+            _resetar_call_booster(member.id)
+            return
+
+        # Trocou de canal de voz -> perde o booster na hora, mesmo indo pra outra call válida
+        trocou_de_canal = canal_antes is not None and canal_antes.id != canal_depois.id
+        if trocou_de_canal:
+            _resetar_call_booster(member.id)
+
+        # Calls privadas não participam do booster de call (mesma regra do xp de call)
+        if canal_depois.id in _XP_CALLS_PRIVADAS:
+            _resetar_call_booster(member.id)
+            return
+
+        if mutado_depois:
+            # Mutou agora (self-mute ou mute pelo servidor) -> perde o booster na hora
+            _resetar_call_booster(member.id)
+            return
+
+        # Está numa call válida e desmutada: se não tinha streak rodando
+        # (acabou de entrar, de trocar de canal, ou de desmutar), começa do zero.
+        if _call_booster_inicio.get(member.id) is None:
+            _iniciar_call_booster(member.id)
+    except Exception as e:
+        print(f"[booster-call] ERRO ao processar {member} ({member.id}): {e!r}")
+
+
 async def _processar_xp_call(guild: discord.Guild) -> None:
     """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
     quem está numa call de voz agora. É só um reforço — bem menos do que
@@ -9179,6 +9295,17 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
             # 🎁 Booster de XP do Baú — se estiver ativo, dobra o ganho por um tempo
             if time.time() < _xp_booster_ate.get(membro.id, 0):
                 ganho_call *= _BAU_BOOSTER_MULTIPLICADOR
+
+            # 🔥 Booster de Call — sobe 1 nível (x2, x3, x4...) a cada 20 min
+            # ininterruptos na mesma call. Se acabou de subir de nível, avisa
+            # no canal de XP (mensagem que some sozinha em 1 minuto).
+            nivel_boost = _nivel_call_booster(membro.id)
+            if nivel_boost > 1:
+                ganho_call *= nivel_boost
+            if nivel_boost > _call_booster_nivel_anunciado.get(membro.id, 1):
+                _call_booster_nivel_anunciado[membro.id] = nivel_boost
+                asyncio.create_task(_anunciar_call_booster(guild, membro, nivel_boost))
+
             ganho_call = max(1, round(ganho_call))
 
             dados = xp_stats[membro.id]

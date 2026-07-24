@@ -8241,9 +8241,13 @@ def _emoji_da_cor(chave: str):
 #                  essa pessoa — é a partir daqui que se calcula o Nível de Capacidade dela, de 1 a 10;
 #                  ver _calcular_nivel_criatura),
 #     "favorito": dict (criatura favorita pra batalhas — ver _favorito_status):
-#                  {"id": str|None, "usos": int, "cansaco_id": str|None, "cansaco_ate": float|None}
+#                  {"id": str|None, "usos": int, "cansacos": dict[str, float]}
+#                  "cansacos" guarda, PRA CADA criatura que já cansou, o timestamp
+#                  (time.time()) até quando ela ainda tá descansando. Isso permite
+#                  trocar de favorita livremente a qualquer momento — mesmo com
+#                  outra(s) criatura(s) ainda de castigo — sem perder o cooldown delas.
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}, "favorito": {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None}})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}, "favorito": {"id": None, "usos": 0, "cansacos": {}}})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None   # ID da ÚNICA mensagem do ranking — navegada com as setinhas ◀ ▶, nunca duplicada
 _xp_ranking_pagina_atual: int = 0   # índice (0-based) da página do ranking sendo exibida agora
@@ -8315,7 +8319,7 @@ def _carregar_xp_stats() -> None:
                 "derrotas":         valores.get("derrotas", 0),
                 "criaturas":        valores.get("criaturas", []),
                 "usos_criaturas":   valores.get("usos_criaturas", {}),
-                "favorito":         valores.get("favorito") or {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None},
+                "favorito":         _migrar_favorito(valores.get("favorito")),
             }
         # Compatibilidade: versões antigas (antes das setinhas ◀ ▶) salvavam
         # "ranking_message_ids" — uma LISTA de páginas empilhadas. A versão
@@ -9913,7 +9917,35 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
 _FAVORITO_USOS_ATE_CANSAR = 5           # quantas batalhas seguidas usando a favorita até ela cansar
 _FAVORITO_COOLDOWN_SEGUNDOS = 30 * 60   # 30 min de descanso depois de cansar, até poder favoritar de novo
 
-_FAVORITO_PADRAO = {"id": None, "usos": 0, "cansaco_id": None, "cansaco_ate": None}
+_FAVORITO_PADRAO = {"id": None, "usos": 0, "cansacos": {}}
+
+
+def _migrar_favorito(bruto) -> dict:
+    """Converte o formato salvo em disco pro formato atual do favorito.
+    Aceita: None (usuário novo), o formato NOVO (já com "cansacos"), ou o
+    formato ANTIGO (com "cansaco_id"/"cansaco_ate" únicos, de antes de dar
+    pra trocar de favorita com outra ainda descansando)."""
+    if not bruto:
+        return {"id": None, "usos": 0, "cansacos": {}}
+
+    if "cansacos" in bruto:
+        return {
+            "id":       bruto.get("id"),
+            "usos":     bruto.get("usos", 0),
+            "cansacos": dict(bruto.get("cansacos") or {}),
+        }
+
+    # Formato antigo — migra o único cansaço registrado (se ainda válido)
+    cansacos = {}
+    cansaco_id  = bruto.get("cansaco_id")
+    cansaco_ate = bruto.get("cansaco_ate")
+    if cansaco_id and cansaco_ate:
+        cansacos[cansaco_id] = cansaco_ate
+    return {
+        "id":       bruto.get("id"),
+        "usos":     bruto.get("usos", 0),
+        "cansacos": cansacos,
+    }
 
 
 def _normalizar_texto(texto: str) -> str:
@@ -9951,25 +9983,33 @@ def _encontrar_criatura_por_nome(busca: str) -> dict:
 
 def _favorito_status(user_id: int) -> dict:
     """Devolve o dict de favorito dessa pessoa, já garantindo a estrutura
-    padrão e limpando o cansaço sozinho se o cooldown dele já tiver passado."""
+    padrão e limpando sozinho qualquer cansaço cujo cooldown já tenha passado.
+    Cada criatura cansada tem seu próprio tempo de descanso em "cansacos",
+    então dá pra ter mais de uma "de castigo" ao mesmo tempo (ex: você troca
+    de favorita antes da anterior acabar de descansar)."""
     dados = xp_stats[user_id]
-    dados.setdefault("favorito", dict(_FAVORITO_PADRAO))
+    dados.setdefault("favorito", {"id": None, "usos": 0, "cansacos": {}})
     favorito = dados["favorito"]
-    for chave, valor_padrao in _FAVORITO_PADRAO.items():
-        favorito.setdefault(chave, valor_padrao)
-    if favorito["cansaco_ate"] is not None and time.time() >= favorito["cansaco_ate"]:
-        favorito["cansaco_id"] = None
-        favorito["cansaco_ate"] = None
+    favorito.setdefault("id", None)
+    favorito.setdefault("usos", 0)
+    favorito.setdefault("cansacos", {})
+
+    agora = time.time()
+    expirados = [cid for cid, ate in favorito["cansacos"].items() if agora >= ate]
+    for cid in expirados:
+        del favorito["cansacos"][cid]
+
     return favorito
 
 
-def _favorito_cooldown_restante(user_id: int) -> float:
-    """Segundos restantes até a pessoa poder favoritar de novo (0 se não
-    houver cooldown ativo no momento)."""
+def _favorito_cooldown_restante(user_id: int, criatura_id: str) -> float:
+    """Segundos restantes até UMA CRIATURA ESPECÍFICA poder ser favoritada de
+    novo (0 se ela não estiver descansando no momento)."""
     favorito = _favorito_status(user_id)
-    if favorito["cansaco_ate"] is None:
+    ate = favorito["cansacos"].get(criatura_id)
+    if ate is None:
         return 0.0
-    return max(0.0, favorito["cansaco_ate"] - time.time())
+    return max(0.0, ate - time.time())
 
 
 def _formatar_tempo_restante(segundos: float) -> str:
@@ -9998,8 +10038,7 @@ def _registrar_uso_favorito(user_id: int, criatura_id: str) -> bool:
         return False
     favorito["usos"] += 1
     if favorito["usos"] >= _FAVORITO_USOS_ATE_CANSAR:
-        favorito["cansaco_id"] = criatura_id
-        favorito["cansaco_ate"] = time.time() + _FAVORITO_COOLDOWN_SEGUNDOS
+        favorito["cansacos"][criatura_id] = time.time() + _FAVORITO_COOLDOWN_SEGUNDOS
         favorito["id"] = None
         favorito["usos"] = 0
         return True
@@ -10521,12 +10560,15 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
             f"🌟 **Favorita atual:** {nome_favorita} "
             f"(`{favorito_alvo['usos']}/{_FAVORITO_USOS_ATE_CANSAR}` usos até cansar)"
         )
-    elif favorito_alvo["cansaco_ate"]:
-        criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito_alvo["cansaco_id"]), None)
-        nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito_alvo["cansaco_id"]
+    elif favorito_alvo["cansacos"]:
+        partes_descanso = []
+        for cid, ate in favorito_alvo["cansacos"].items():
+            c_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == cid), None)
+            nome_cansada = c_cansada["nome"] if c_cansada else cid
+            partes_descanso.append(f"**{nome_cansada}** (`{_formatar_tempo_restante(ate - time.time())}`)")
         linha_favorito = (
-            f"😮‍💨 **{nome_cansada}** está descansando — faltam "
-            f"`{_formatar_tempo_restante(favorito_alvo['cansaco_ate'] - time.time())}` pra poder favoritar de novo."
+            "😮‍💨 Descansando: " + ", ".join(partes_descanso) +
+            " — mas dá pra favoritar outra criatura a qualquer momento com `.favorito <nome>`."
         )
     else:
         linha_favorito = "🌟 *Sem favorita ativa no momento — use `.favorito <nome>` pra escolher uma.*"
@@ -10594,13 +10636,16 @@ async def cmd_favorito(ctx, *, nome: str = None):
                 f"🌟 **Celestia:** Sua favorita agora é **{nome_atual}** `⭐ Nv.{nivel_atual}`!! 😆✨ "
                 f"Já foi usada `{favorito['usos']}/{_FAVORITO_USOS_ATE_CANSAR}` vezes seguidas até cansar."
             )
-        elif favorito["cansaco_ate"]:
-            criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["cansaco_id"]), None)
-            nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito["cansaco_id"]
-            restante = _formatar_tempo_restante(favorito["cansaco_ate"] - time.time())
+        elif favorito["cansacos"]:
+            partes = []
+            for cid, ate in favorito["cansacos"].items():
+                c_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == cid), None)
+                nome_cansada = c_cansada["nome"] if c_cansada else cid
+                partes.append(f"**{nome_cansada}** (`{_formatar_tempo_restante(ate - time.time())}`)")
             await ctx.send(
-                f"🌑 **Aeon:** ...**{nome_cansada}** está cansada. As sombras dizem que faltam "
-                f"`{restante}` de descanso antes dela poder ser favoritada de novo. 🖤🌑"
+                "🌑 **Aeon:** ...você não tem favorita ativa agora. Descansando: "
+                + ", ".join(partes) +
+                ". 🖤🌑 Pode favoritar outra criatura a qualquer momento com `.favorito <nome>`."
             )
         else:
             await ctx.send(
@@ -10622,17 +10667,6 @@ async def cmd_favorito(ctx, *, nome: str = None):
         )
         return
 
-    # ── Ainda cansada / em cooldown — não deixa favoritar nada agora ────
-    if favorito["cansaco_ate"]:
-        criatura_cansada = next((c for c in _BATALHA_CRIATURAS if c["id"] == favorito["cansaco_id"]), None)
-        nome_cansada = criatura_cansada["nome"] if criatura_cansada else favorito["cansaco_id"]
-        restante = _formatar_tempo_restante(favorito["cansaco_ate"] - time.time())
-        await ctx.send(
-            f"🌑 **Aeon:** ...**{nome_cansada}** ainda está descansando. Espere mais "
-            f"`{restante}` antes de favoritar de novo. 🖤🌑"
-        )
-        return
-
     # ── Encontra a criatura pelo nome digitado ───────────────────────────
     criatura = _encontrar_criatura_por_nome(nome)
     if criatura is None:
@@ -10649,10 +10683,19 @@ async def cmd_favorito(ctx, *, nome: str = None):
         )
         return
 
+    # ── Só bloqueia se for JUSTO a criatura que ainda tá descansando — pode
+    # trocar por QUALQUER OUTRA livremente, mesmo com essa ainda de castigo ──
+    cansaco_ate = favorito["cansacos"].get(criatura["id"])
+    if cansaco_ate is not None:
+        restante = _formatar_tempo_restante(cansaco_ate - time.time())
+        await ctx.send(
+            f"🌑 **Aeon:** ...**{criatura['nome']}** ainda está descansando. Espere mais "
+            f"`{restante}` antes de favoritá-la de novo — ou escolha outra com `.favorito <nome>`. 🖤🌑"
+        )
+        return
+
     favorito["id"] = criatura["id"]
     favorito["usos"] = 0
-    favorito["cansaco_id"] = None
-    favorito["cansaco_ate"] = None
     asyncio.create_task(_salvar_xp_stats())
 
     info_raridade = _RARIDADES[criatura["raridade"]]

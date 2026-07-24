@@ -9669,6 +9669,9 @@ _BATALHA_CRIATURAS = [
     {"id": "rino_acabado",            "nome": "Rino, o Acabado",              "raridade": "comum",    "gif": "https://33.media.tumblr.com/fc4838c3660618bf7dd87103de60871b/tumblr_inline_nzsz2t9ltH1s38bty_500.gif"},
     {"id": "plebeu",                  "nome": "O Plebeu",                     "raridade": "comum",    "gif": "https://i.pinimg.com/originals/1c/9f/2b/1c9f2b392f039b76b7f3a68039730d21.gif"},
     {"id": "bandido",                 "nome": "Bandido",                      "raridade": "comum",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/343/519/original/rafael-francoi-neutral-inxikrahsoldier-preview.gif?1654628639"},
+    {"id": "ranfroi_ultimo_plebeu",    "nome": "Ranfroi, o Último Plebeu",     "raridade": "comum",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/342/714/original/rafael-francoi-mk2.gif?1654627365"},
+    {"id": "buzzmole_eletrico",        "nome": "Buzzmole Elétrico do Eco",     "raridade": "comum",    "gif": "https://www.natekling.com/uploads/8/2/3/8/8238935/7185980.gif"},
+    {"id": "blindado_metaltooth",      "nome": "O Blindado",                   "raridade": "comum",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/342/682/original/rafael-francoi-metaltooth.gif?1654627258"},
 
     # ── Raras ───────────────────────────────────────────────────────────
     {"id": "cavaleiro_elemental",     "nome": "Cavaleiro Elemental",          "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
@@ -9678,6 +9681,10 @@ _BATALHA_CRIATURAS = [
     {"id": "brutal",                  "nome": "O Brutal",                     "raridade": "raro",     "gif": "https://i.pinimg.com/originals/fd/1f/8a/fd1f8aa84a2d1b1d1486c68613216d9d.gif"},
     {"id": "cavaleiro_sinistro",      "nome": "Cavaleiro do Sinistro",        "raridade": "raro",     "gif": "https://i.pinimg.com/originals/1c/3a/9b/1c3a9bc1c91135ff036d1d168d15e474.gif"},
     {"id": "kreging",                 "nome": "Kreging",                      "raridade": "raro",     "gif": "https://64.media.tumblr.com/3211afe2da2effd51671993d42cecc81/tumblr_oomh73qHh21qciqqno5_250.gif"},
+    {"id": "besta_gelida",             "nome": "Besta Gélida",                 "raridade": "raro",     "gif": "https://i.pinimg.com/originals/a6/a7/14/a6a714c4caab8f29b00e36feecc37fc2.gif"},
+    {"id": "pai_da_sorte",             "nome": "O Pai da Sorte",               "raridade": "raro",     "gif": "https://i.redd.it/9w2ulp6ym1ky.gif"},
+    {"id": "besta_do_eco",             "nome": "A Besta do Eco",               "raridade": "raro",     "gif": "https://i.pinimg.com/originals/a2/14/20/a214205173961824624e41024b6c5fdd.gif"},
+    {"id": "ravok_submetido_eco",      "nome": "Ravok, o Submetido do Eco",    "raridade": "raro",     "gif": "https://i.pinimg.com/originals/a7/ed/26/a7ed267e84861ec466c82095bb0bad63.gif"},
 
     # ── Épicas ──────────────────────────────────────────────────────────
     {"id": "heroina_esmeraldas",      "nome": "Heroína das Esmeraldas",       "raridade": "epico",    "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
@@ -9688,6 +9695,12 @@ _BATALHA_CRIATURAS = [
     {"id": "guerreiro_trovao",        "nome": "Guerreiro do Trovão",          "raridade": "epico",    "gif": "https://i.pinimg.com/originals/6b/2c/21/6b2c2173d12ddf1f2adae8f0064f772d.gif"},
     {"id": "anti_elemento",           "nome": "O Anti-Elemento",              "raridade": "epico",    "gif": "https://i.pinimg.com/originals/d1/ee/0e/d1ee0eed40bd9a2052e4b0ce55e741d9.gif"},
     {"id": "vortex",                  "nome": "O Vórtex",                     "raridade": "epico",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/342/679/original/rafael-francoi-build-epic-01.gif?1654627256"},
+    {"id": "seraphine_guerreira",      "nome": "Seraphine, a Guerreira",       "raridade": "epico",    "gif": "https://i.pinimg.com/originals/15/de/fc/15defcb5f35239554da784918902b32a.gif"},
+    {"id": "corrompido",               "nome": "O Corrompido",                 "raridade": "epico",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/343/359/original/rafael-francoi-f2-boss-preview.gif?1654628376"},
+    {"id": "ignara_musa_chamas",       "nome": "Ignara, a Musa das Chamas",    "raridade": "epico",    "gif": "https://i.pinimg.com/originals/01/a0/f0/01a0f071ff7c66dab9de366c4c8da0bf.gif"},
+    {"id": "primeiro_graking",         "nome": "O Primeiro Graking",           "raridade": "epico",    "gif": "https://i.pinimg.com/originals/c1/18/60/c11860b4b9e9b179b1b8dbc2ce640839.gif"},
+    {"id": "ophryx_dama_besta",        "nome": "Ophryx, a Dama e a Besta",     "raridade": "epico",    "gif": "https://gd-hbimg.huaban.com/bbf9f681a72dc53b226e1efe204770da4f98adf250494-5EKNdd_fw658"},
+    {"id": "warden_eco",               "nome": "Warden do Eco",                "raridade": "epico",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/343/624/original/rafael-francoi-ynuyt-unleashed.gif?1654628832"},
 
     # ── Lendárias ───────────────────────────────────────────────────────
     {"id": "ultimo_guerreiro",        "nome": "O Último Guerreiro",           "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/da5bb9cc8fab68c2c3cabe68a7cc7a10cd277939be96-bBi4DQ"},
@@ -9696,6 +9709,15 @@ _BATALHA_CRIATURAS = [
     {"id": "protetor_portao_inferno", "nome": "Protetor do Portão do Inferno","raridade": "lendario", "gif": "https://i.pinimg.com/originals/6d/bc/58/6dbc588871368635891ea6a5f12d3cf2.gif"},
     {"id": "magmata",                 "nome": "O Magmata",                    "raridade": "lendario", "gif": "https://i.redd.it/0jk54f0ocjwy.gif"},
     {"id": "vreg_entre_mundos",       "nome": "Vreg, Entre Mundos",           "raridade": "lendario", "gif": "https://cdna.artstation.com/p/assets/images/images/050/343/134/original/rafael-francoi-boss-f4-preview.gif?1654628012"},
+    {"id": "azrakiel_monarca",        "nome": "Azrakiel, o Monarca",          "raridade": "lendario", "gif": "https://i.pinimg.com/originals/a3/20/90/a32090812f05b6ac55c66e2cbf5c5621.gif"},
+    {"id": "arkanis_primeiro_reis",   "nome": "Arkanis, o Primeiro dos Reis", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/d5/66/4e/d5664e6db68e21ae002431b9fd13ed2d.gif"},
+    {"id": "auremortis_guardia_almas","nome": "Auremortis, a Guardiã das Almas Perdidas", "raridade": "lendario", "gif": "https://i.redd.it/nij0nx9bnkpy.gif"},
+    {"id": "goldryn_chama_destino",   "nome": "Goldryn, a Chama Que Consome o Destino",   "raridade": "lendario", "gif": "https://i.redd.it/go2trcn2yoby.gif"},
+    {"id": "thanarion_arauto_fim",    "nome": "Thanarion, o Arauto do Fim",   "raridade": "lendario", "gif": "https://i.pinimg.com/originals/04/96/7c/04967c814e98570fbffe8329fe36d2bc.gif"},
+    {"id": "nythrax_senhor_sombras",  "nome": "Nythrax, o Senhor das Sombras","raridade": "lendario", "gif": "https://cdnb.artstation.com/p/assets/images/images/050/342/691/original/rafael-francoi-exotic-spellcaster.gif?1654627313"},
+    {"id": "umbrael_observa_alem",    "nome": "Umbrael, o Que Observa Além",  "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/9064a16a34ed6e88bab3dc8c3815a6258b1d16c54068a-6KOtGT_fw658"},
+    {"id": "noxar_puro_trovao",       "nome": "Noxar, o Puro Trovão",         "raridade": "lendario", "gif": "https://i.pinimg.com/originals/c7/6c/87/c76c873ca7d63b7fb29792ad26d36368.gif"},
+    {"id": "malgorath_ultima_raca",   "nome": "Malgorath, o Último de Sua Raça", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/df/a8/fc/dfa8fca7813bbb3e42613523c2e2ba43.gif"},
 
     # ── Míticas ─────────────────────────────────────────────────────────
     # Dragões. Não entram no sorteio normal de recompensa (esse é o pool

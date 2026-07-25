@@ -11068,7 +11068,7 @@ _BOSS_CHANCE_GRUPO_BASE      = 0.12
 _BOSS_CHANCE_GRUPO_MAX       = 0.70
 _BOSS_BONUS_POR_PARTICIPANTE = 0.035
 _BOSS_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.01, "epico": 0.02, "lendario": 0.035, "secreto": 0.055, "mitico": 0.07,
+    "comum": 0.0, "raro": 0.02, "epico": 0.035, "lendario": 0.06, "secreto": 0.09, "mitico": 0.12,
 }
 
 _BOSS_XP_GANHO_MIN = 0.20   # 20% — mínimo de XP que quem vence pode ganhar
@@ -11828,7 +11828,7 @@ _BOSS2_CHANCE_GRUPO_BASE      = 0.05
 _BOSS2_CHANCE_GRUPO_MAX       = 0.45
 _BOSS2_BONUS_POR_PARTICIPANTE = 0.018
 _BOSS2_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.005, "epico": 0.010, "lendario": 0.018, "secreto": 0.028, "mitico": 0.035,
+    "comum": 0.0, "raro": 0.01, "epico": 0.018, "lendario": 0.03, "secreto": 0.045, "mitico": 0.06,
 }
 
 _BOSS2_XP_GANHO_MIN = 0.25   # 25% — mínimo de XP que quem vence pode ganhar (um pouco melhor que o boss 1)

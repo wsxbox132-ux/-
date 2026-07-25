@@ -9436,6 +9436,17 @@ def _iniciar_call_booster(user_id: int) -> None:
     _call_booster_nivel_anunciado[user_id] = 1
 
 
+def _empilhar_call_booster(user_id: int, ciclos: int = 1) -> None:
+    """Adianta o relógio da streak do Booster de Call de alguém em `ciclos`
+    intervalos inteiros de _CALL_BOOSTER_INTERVALO_MINUTOS — na prática,
+    empilha +1 nível de booster por ciclo EM CIMA do que a pessoa já tiver
+    (se ela já estiver numa streak de verdade, soma tempo a mais nela em vez
+    de resetar; se não tiver nenhuma rodando, começa uma nova já adiantada)."""
+    avanco_segundos = ciclos * _CALL_BOOSTER_INTERVALO_MINUTOS * 60
+    inicio_atual = _call_booster_inicio.get(user_id, time.time())
+    _call_booster_inicio[user_id] = inicio_atual - avanco_segundos
+
+
 async def _anunciar_call_booster(guild: discord.Guild, membro: discord.Member, nivel: int) -> None:
     """Avisa no canal de XP que o Booster de Call de alguém subiu pro nível
     informado (x2, x3, x4...). O aviso some sozinho depois de 1 minuto."""
@@ -11173,6 +11184,16 @@ _BAU_BOOSTER_MULTIPLICADOR = 2
 _xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp em dobro expira
 
 
+def _conceder_xp_booster(user_id: int, minutos: float) -> None:
+    """Concede (ou ESTENDE) o Booster de xp em dobro de alguém. Se a pessoa já
+    tiver um ativo, soma `minutos` em cima do tempo que ainda resta, em vez de
+    resetar pro valor cheio — assim dá pra empilhar vários boosters seguidos
+    (baú, boss, .darbosster...) sem perder o que já tava rolando."""
+    agora = time.time()
+    inicio = max(agora, _xp_booster_ate.get(user_id, 0))
+    _xp_booster_ate[user_id] = inicio + minutos * 60
+
+
 # ══════════════════════════════════════════════════════════════════════
 # .darbosster — comando interno, só o Reality (CRIADOR_ID) pode usar.
 # Dá o Booster de xp (o mesmo prêmio raro do Baú: xp de call E de mensagem
@@ -11193,11 +11214,13 @@ async def cmd_darbosster(ctx, alvo_id: int = None):
         await _apagar_mensagem_depois(aviso, 15)
         return
 
-    _xp_booster_ate[alvo_id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+    _conceder_xp_booster(alvo_id, _BAU_BOOSTER_MINUTOS)
+    _empilhar_call_booster(alvo_id)
 
     confirmacao = await ctx.send(
-        f"✅ Booster de xp (`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) ativado pra "
-        f"`{alvo_id}` por `{_BAU_BOOSTER_MINUTOS} min`."
+        f"✅ Booster de xp (`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) empilhado pra "
+        f"`{alvo_id}` por mais `{_BAU_BOOSTER_MINUTOS} min` — e o Booster de Call dela também "
+        f"subiu +1 nível em cima do que já tinha."
     )
     await _apagar_mensagem_depois(confirmacao, 15)
 
@@ -11254,7 +11277,7 @@ class BauView(discord.ui.View):
             )
         elif random.random() < _BAU_CHANCE_BOOSTER:
             # ── Prêmio raro: booster de 5 min que dobra xp de call e mensagem ──
-            _xp_booster_ate[membro.id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+            _conceder_xp_booster(membro.id, _BAU_BOOSTER_MINUTOS)
             texto_premio = (
                 f"⚡✨ **PRÊMIO RARÍSSIMO!!** {membro.mention} ativou um **Booster de XP** — "
                 f"pelos próximos `{_BAU_BOOSTER_MINUTOS} minutos`, todo xp de call e de mensagem vem "
@@ -12204,7 +12227,7 @@ async def _boss2_premiar_vencedores(guild: discord.Guild, vencedores: list) -> l
         if dados["nivel"] > nivel_antigo and guild is not None:
             asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
         # 🎁 Bônus exclusivo de Dourakhar: Booster de XP de 5 minutos pra quem venceu
-        _xp_booster_ate[membro.id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+        _conceder_xp_booster(membro.id, _BAU_BOOSTER_MINUTOS)
         resultados.append((membro, ganho, percentual))
 
     asyncio.create_task(_salvar_xp_stats())
@@ -12648,7 +12671,7 @@ async def _boss3_premiar_vencedores(guild: discord.Guild, vencedores: list) -> l
         if dados["nivel"] > nivel_antigo and guild is not None:
             asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
         # 🎁 Bônus exclusivo do Zephyrus: Booster de XP de apenas 2 minutos pra quem venceu
-        _xp_booster_ate[membro.id] = time.time() + _BOSS3_BOOSTER_MINUTOS * 60
+        _conceder_xp_booster(membro.id, _BOSS3_BOOSTER_MINUTOS)
         resultados.append((membro, ganho, percentual))
 
     asyncio.create_task(_salvar_xp_stats())

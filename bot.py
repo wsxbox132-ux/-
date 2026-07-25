@@ -10840,11 +10840,17 @@ _xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp
 
 class BauView(discord.ui.View):
     """View do baú — só a PRIMEIRA pessoa que clicar leva o prêmio; quem
-    clicar depois disso só recebe um aviso de que já foi levado."""
+    clicar depois disso só recebe um aviso de que já foi levado.
 
-    def __init__(self):
+    `forcar_secreto=True` é usado pelo .bausecreto: o visual e o texto são
+    IDÊNTICOS ao baú normal (mesmo título, mesma descrição, mesmo gif) — só
+    que quem clicar primeiro leva garantidamente uma criatura 🌌 Secreta
+    ainda não desbloqueada, sem precisar do sorteio de _BAU_CHANCE_SECRETO."""
+
+    def __init__(self, forcar_secreto: bool = False):
         super().__init__(timeout=None)
         self.aberto = False
+        self.forcar_secreto = forcar_secreto
 
     @discord.ui.button(label="🔓 Abrir o Baú", style=discord.ButtonStyle.success, custom_id="bau_abrir")
     async def abrir(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -10861,15 +10867,17 @@ class BauView(discord.ui.View):
 
         # 🌌 Prêmio mais raro de todos: uma criatura Secreta ainda não
         # desbloqueada. Se a pessoa já tiver as 6, cai pro sorteio normal
-        # (booster/xp) em vez de travar sem ter mais nada pra dar.
+        # (booster/xp) em vez de travar sem ter mais nada pra dar — mesmo
+        # no .bausecreto, que só GARANTE o secreto quando ainda sobra algum.
         _secretos_faltando = [
             c for c in _BATALHA_CRIATURAS
             if c["raridade"] == "secreto" and c["id"] not in dados["criaturas"]
         ]
 
         imagem_resultado = _BAU_GIF
+        sai_secreto = bool(_secretos_faltando) and (self.forcar_secreto or random.random() < _BAU_CHANCE_SECRETO)
 
-        if _secretos_faltando and random.random() < _BAU_CHANCE_SECRETO:
+        if sai_secreto:
             criatura_secreta = random.choice(_secretos_faltando)
             dados["criaturas"].append(criatura_secreta["id"])
             info_raridade_secreta = _RARIDADES["secreto"]
@@ -10918,6 +10926,27 @@ class BauView(discord.ui.View):
         self.stop()
 
 
+def _montar_embed_bau() -> discord.Embed:
+    """Monta o embed de anúncio do baú — usado tanto pelo .bau normal quanto
+    pelo .bausecreto, propositalmente IDÊNTICO nos dois, pra quem estiver no
+    chat não conseguir diferenciar um do outro só de olhar."""
+    embed = discord.Embed(
+        title="🪙 Um Baú Apareceu!",
+        description=(
+            "🌟 **Celestia:** AAAAA UM BAÚ MISTERIOSO!! 😱✨ *pula em volta dele* Quem clicar primeiro "
+            "LEVA O PRÊMIO!!\n"
+            "🌑 **Aeon:** ...corram. As sombras não esperam por ninguém. 🖤🌑\n\n"
+            f"🎁 Prêmio: entre `{_BAU_XP_MIN * 100:.0f}%` e `{_BAU_XP_MAX * 100:.0f}%` de XP a mais — "
+            f"mais raro, um **Booster de {_BAU_BOOSTER_MINUTOS} min** que dobra o xp de call e de "
+            "mensagem — e, raríssimo mesmo, uma criatura de raridade 🌌 **Secreta** direto pra coleção!"
+        ),
+        color=0xf5c542,
+    )
+    embed.set_image(url=_BAU_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
+    return embed
+
+
 @bot.command(name="bau")
 async def cmd_bau(ctx):
     """Joga um baú de recompensa no canal do chat geral — a primeira pessoa
@@ -10938,21 +10967,32 @@ async def cmd_bau(ctx):
     if canal is None:
         return
 
-    embed = discord.Embed(
-        title="🪙 Um Baú Apareceu!",
-        description=(
-            "🌟 **Celestia:** AAAAA UM BAÚ MISTERIOSO!! 😱✨ *pula em volta dele* Quem clicar primeiro "
-            "LEVA O PRÊMIO!!\n"
-            "🌑 **Aeon:** ...corram. As sombras não esperam por ninguém. 🖤🌑\n\n"
-            f"🎁 Prêmio: entre `{_BAU_XP_MIN * 100:.0f}%` e `{_BAU_XP_MAX * 100:.0f}%` de XP a mais — "
-            f"mais raro, um **Booster de {_BAU_BOOSTER_MINUTOS} min** que dobra o xp de call e de "
-            "mensagem — e, raríssimo mesmo, uma criatura de raridade 🌌 **Secreta** direto pra coleção!"
-        ),
-        color=0xf5c542,
-    )
-    embed.set_image(url=_BAU_GIF)
-    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
-    await canal.send(embed=embed, view=BauView())
+    await canal.send(embed=_montar_embed_bau(), view=BauView())
+
+
+@bot.command(name="bausecreto")
+async def cmd_bausecreto(ctx):
+    """Joga um baú IDÊNTICO ao .bau normal (mesmo visual, mesmo texto,
+    ninguém no chat consegue diferenciar) — mas quem clicar primeiro leva
+    GARANTIDAMENTE uma criatura 🌌 Secreta ainda não desbloqueada (a não
+    ser que já tenha as 6, aí cai no sorteio normal do baú). Só o Reality
+    pode usar. Uso: .bausecreto"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BAU_CANAL_ID)
+    if canal is None:
+        return
+
+    await canal.send(embed=_montar_embed_bau(), view=BauView(forcar_secreto=True))
 
 
 # ══════════════════════════════════════════════════════════════════════

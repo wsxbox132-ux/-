@@ -8919,10 +8919,12 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
             "**4️⃣ Desbloqueando criaturas**\n"
-            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário, 🌌 Secreto ou 🐉 Mítico. "
-            "Todo mundo começa com as ⚪ Comuns; de Raro até Lendário saem **de recompensa** ao **vencer** uma "
-            "batalha — o jogo sorteia uma criatura nova pra coleção. 🌌 Secreto e 🐉 Mítico ficam fora desse "
-            "sorteio (veja como conseguir nos itens 8️⃣ e 9️⃣). Confira tudo na 📖 **Enciclopédia** e em `.criaturas`.\n\n"
+            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário ou 🐉 Mítico — e quanto mais "
+            "rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as ⚪ Comuns "
+            "desbloqueadas; as demais (até Lendário) só saem **de recompensa** pra quem **vence** uma batalha — o jogo "
+            "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
+            "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
+            "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
             "**5️⃣ ⭐ Nível de Capacidade — quanto mais usa, mais forte fica**\n"
             "Além da raridade, toda criatura tem um **Nível de Capacidade** individual (de 1 a "
             f"{_NIVEL_CRIATURA_MAX}), que é **por pessoa**. Ela sempre começa no Nível 1, e cada vez que "
@@ -8941,25 +8943,22 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "**7️⃣ ⚔️ Hierarquia de força das raridades**\n"
             "Raridade mais alta = criatura mais forte, mas ninguém fica sem chance nenhuma! "
             "A cada raridade de distância entre as duas criaturas, a chance da mais forte sobe um "
-            "degrau — só que a mais fraca **sempre** mantém uma chance real de dar a zebra "
-            "(do mais forte pro mais fraco: 🐉 > 🌌 > 🟡 > 🟣 > 🔵 > ⚪):\n"
+            "degrau — só que a mais fraca **sempre** mantém uma chance real de dar a zebra:\n"
             f"⚪↔🔵 **1 raridade de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[1]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[1])*100:.0f}%`\n"
             f"⚪↔🟣 **2 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[2]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[2])*100:.0f}%`\n"
             f"⚪↔🟡 **3 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[3]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[3])*100:.0f}%`\n"
-            f"⚪↔🌌 **4 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
-            f"⚪↔🐉 **5 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[5]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[5])*100:.0f}%`\n"
+            f"⚪↔🐉 **4 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
-            f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` — e o Nível de Capacidade de cada criatura (item "
-            "acima) ainda refina esse número um pouco pra cima ou pra baixo.\n\n"
+            f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
+            f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n"
+            f"⚠️ **Excepção:** 🟡 Lendário vs 🐉 Mítico não segue essa tabela por degraus — o Mítico "
+            f"fica com `{_CHANCE_VITORIA_LENDARIO_MITICO*100:.0f}%` e o Lendário só tem essa fresta de "
+            f"`{(1-_CHANCE_VITORIA_LENDARIO_MITICO)*100:.0f}%` pra vencer.\n\n"
             "**8️⃣ 🐉 Míticos — os dragões**\n"
-            "A raridade mais forte de todas: não entram no sorteio normal de recompensa — a cada "
-            f"`{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
+            "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
+            f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**9️⃣ 🌌 Secretos — quase tão fortes quanto os Míticos**\n"
-            f"Só 1 degrau abaixo do 🐉 Mítico — por isso levam `{(1-_CHANCE_VITORIA_POR_DEGRAU[1])*100:.0f}%` de "
-            f"chance contra ele, bem mais que os `{(1-_CHANCE_VITORIA_POR_DEGRAU[2])*100:.0f}%` de um 🟡 Lendário. "
-            f"Só saem do 🪙 Baú (`.bau`), nunca de batalha ou `.ovo` — chance de só `{_BAU_CHANCE_SECRETO * 100:.0f}%`.\n\n"
-            "**🔟 Pra poder batalhar**\n"
+            "**9️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9930,17 +9929,37 @@ _CHANCE_VITORIA_POR_DEGRAU = {
     5: 0.96,   # 5 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
 }
 
+# Excepção específica: 🟡 Lendário contra 🐉 Mítico é MUITO mais desigual do
+# que os 2 degraus "normais" desse par sugeririam. Aqui o Mítico fica com a
+# chance máxima permitida (mesma trava de _CHANCE_VITORIA_MAXIMA, lá na frente)
+# e o Lendário só tem essa fresta mínima de 5% pra dar a zebra. Isso NÃO afeta
+# outros pares que também têm 2 degraus de distância (ex: 🌌 Secreto vs 🟣 Épico) —
+# só esse confronto específico.
+_CHANCE_VITORIA_LENDARIO_MITICO = 0.95   # chance do Mítico (o lado mais forte do par)
+_CHANCE_VITORIA_PAR_ESPECIAL = {
+    frozenset({"lendario", "mitico"}): _CHANCE_VITORIA_LENDARIO_MITICO,
+}
+
 
 def _chance_vitoria_por_raridade(raridade_a: str, raridade_b: str) -> float:
     """Devolve a chance de uma criatura de raridade `raridade_a` vencer uma
     de raridade `raridade_b`, seguindo a hierarquia de força das raridades.
     Quanto mais forte a raridade (e maior a distância entre elas), maior a
     chance de vitória — mas o lado mais fraco sempre mantém uma chance real
-    de virar o jogo, por menor que seja."""
+    de virar o jogo, por menor que seja. Pares listados em
+    _CHANCE_VITORIA_PAR_ESPECIAL pulam a conta por degrau e usam o valor fixo
+    definido lá (esse valor ainda passa pelo ajuste de Nível de Capacidade
+    em _chance_vitoria, então o resultado final pode variar um pouco)."""
     indice_a = _ORDEM_RARIDADES.index(raridade_a)   # 0 = 🐉 Mítico (mais forte) ... 4 = ⚪ Comum (mais fraco)
     indice_b = _ORDEM_RARIDADES.index(raridade_b)
-    degrau = abs(indice_a - indice_b)
-    chance_do_mais_forte = _CHANCE_VITORIA_POR_DEGRAU.get(degrau, 0.95)
+
+    par_especial = _CHANCE_VITORIA_PAR_ESPECIAL.get(frozenset({raridade_a, raridade_b}))
+    if par_especial is not None:
+        chance_do_mais_forte = par_especial
+    else:
+        degrau = abs(indice_a - indice_b)
+        chance_do_mais_forte = _CHANCE_VITORIA_POR_DEGRAU.get(degrau, 0.95)
+
     if indice_a < indice_b:      # A é a raridade mais forte
         return chance_do_mais_forte
     elif indice_a > indice_b:    # B é a raridade mais forte
@@ -10655,10 +10674,15 @@ async def _processar_desafio(message: discord.Message) -> None:
 # ══════════════════════════════════════════════════════════════════════
 
 
+CANAL_CRIATURAS_ID = 1530569053280665660  # canal onde a coleção do .criaturas é SEMPRE enviada
+
+
 @bot.command(name="criaturas")
 async def cmd_criaturas(ctx, membro: discord.Member = None):
     """Mostra a coleção de criaturas desbloqueadas de alguém na Arena de
     Batalhas (ou de quem usou o comando, se ninguém for mencionado).
+    A resposta é sempre jogada no canal CANAL_CRIATURAS_ID, não importa
+    de onde o comando foi chamado.
     Uso: .criaturas [@alguém]"""
     alvo = membro or ctx.author
     desbloqueadas = set(_garantir_criaturas_iniciais(alvo.id))
@@ -10713,7 +10737,17 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
 
     embed.set_thumbnail(url=alvo.display_avatar.url)
     embed.set_footer(text="🌑 Aeon & ☀️ Celestia — confira também a 📖 Enciclopédia no canal de ranking")
-    await ctx.send(embed=embed)
+
+    canal_destino = bot.get_channel(CANAL_CRIATURAS_ID)
+    if canal_destino is None:
+        # Canal não encontrado (bot fora do servidor certo, canal deletado etc.)
+        # — cai pro canal onde o comando foi chamado, pra não perder a resposta.
+        await ctx.send(embed=embed)
+        return
+
+    await canal_destino.send(embed=embed)
+    if ctx.channel.id != canal_destino.id:
+        await ctx.send(f"📖 Sua coleção foi enviada em {canal_destino.mention}!")
 
 
 # ══════════════════════════════════════════════════════════════════════

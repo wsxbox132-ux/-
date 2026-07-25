@@ -10828,7 +10828,7 @@ async def cmd_favorito(ctx, *, nome: str = None):
 _BAU_GIF = "https://static2.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/be/e0/WQOIGADT.gif"
 _BAU_CANAL_ID = 1284257046740602901  # mesmo canal do chat geral (_XP_CANAL_1)
 
-_BAU_CHANCE_SECRETO = 0.04    # 4% de chance — o prêmio MAIS raro do baú, uma criatura 🌌 Secreta
+_BAU_CHANCE_SECRETO = 0.08    # 8% de chance — ainda o prêmio mais raro do baú (o booster é 15%), uma criatura 🌌 Secreta
 _BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster
 _BAU_XP_MIN = 0.01            # 1%  — mínimo de xp que o dado pode sortear
 _BAU_XP_MAX = 0.20            # 20% — máximo de xp que o dado pode sortear

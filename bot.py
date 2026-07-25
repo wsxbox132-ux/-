@@ -9364,7 +9364,7 @@ async def _atualizar_ranking_xp() -> None:
         await _salvar_xp_stats()
 
 
-_XP_POR_TICK_CALL = 6   # xp ganho a cada 1 min em call de voz — triplicado (era 2)
+_XP_POR_TICK_CALL = 12   # xp ganho a cada 1 min em call de voz — dobrado de novo (era 6, antes disso era 2)
 
 # Calls com xp bônus — canal_id -> multiplicador aplicado em cima do
 # _XP_POR_TICK_CALL normal. Qualquer call que não estiver aqui usa o valor

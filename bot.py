@@ -10284,6 +10284,48 @@ def _checar_desbloqueio_besta(user_id: int, criatura: dict, nivel_antigo: int, n
     return besta_nova
 
 
+# Canal onde todo desbloqueio de 🐺 Besta é anunciado — mesmo canal do chat
+# geral (_XP_CANAL_1 = 1284257046740602901).
+_BESTA_ANUNCIO_CANAL_ID = 1284257046740602901
+
+
+async def _anunciar_besta_desbloqueada(
+    guild: discord.Guild, membro: discord.Member, criatura_origem: dict, besta: dict
+) -> None:
+    """Manda, no canal fixo _BESTA_ANUNCIO_CANAL_ID, o anúncio de que `membro`
+    destravou a 🐺 Besta `besta` ao levar `criatura_origem` até o Nível de
+    Capacidade máximo. Não apaga sozinho — fica registrado no canal."""
+    canal = guild.get_channel(_BESTA_ANUNCIO_CANAL_ID)
+    if canal is None:
+        return
+
+    info_raridade_besta = _RARIDADES["bestas"]
+    teto = _nivel_criatura_max(criatura_origem["id"])
+
+    embed = discord.Embed(
+        title="🐺 Besta Destravada!",
+        description=(
+            f"⚡ **{membro.display_name}** levou **{criatura_origem['nome']}** até o "
+            f"**Nível de Capacidade máximo** (`{teto}/{teto}`) e, como conquista, destravou "
+            f"{info_raridade_besta['emoji']} **{besta['nome']}** (*{info_raridade_besta['label']}*)!!\n\n"
+            "🌑 **Aeon:** *observa com respeito* ...uma conquista de verdade, ganha com treino. "
+            "As sombras aprovam. 🖤🌑\n"
+            f"🌟 **Celestia:** AAAAA {membro.mention} MERECEU CADA PINGO DISSO!! 😭🌟🤍✨ "
+            "TREINOU, SUOU E CONQUISTOU!! 💪💫"
+        ),
+        color=info_raridade_besta["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_author(name=membro.display_name, icon_url=membro.display_avatar.url)
+    embed.set_image(url=besta["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+
+    try:
+        await canal.send(content=membro.mention, embed=embed)
+    except discord.HTTPException:
+        pass
+
+
 # ══════════════════════════════════════════════════════════════════════
 # CRIATURA FAVORITA — comando `.favorito <nome>`. Enquanto alguém tiver uma
 # favorita ativa, ela é SEMPRE a escolhida nas batalhas dessa pessoa (em vez
@@ -10724,6 +10766,18 @@ async def _executar_batalha(
     besta_nova_perdedor = _checar_desbloqueio_besta(
         perdedor.id, criatura_perdedora, nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora
     )
+
+    # ── Anuncia no canal fixo (_BESTA_ANUNCIO_CANAL_ID) sempre que uma Besta
+    # for destravada agora, dizendo quem foi e qual Besta. Vale pros dois
+    # lados, já que qualquer um dos dois pode ter batido o nível máximo. ──
+    if besta_nova_vencedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_besta_desbloqueada(canal.guild, vencedor, criatura_vencedora, besta_nova_vencedor)
+        )
+    if besta_nova_perdedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_besta_desbloqueada(canal.guild, perdedor, criatura_perdedora, besta_nova_perdedor)
+        )
 
     xp_roubado = 0
     percentual = 0.0

@@ -11637,17 +11637,17 @@ _BOSS2_CANAL_ID = _BOSS_CANAL_ID   # mesmo canal do boss 1 — só aparece aqui
 _BOSS2_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
 _BOSS2_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
 
-_BOSS2_CHANCE_SOLO = 0.02   # 2% — nível mítico, enfrentar sozinho é praticamente suicídio (menos que o boss 1)
+_BOSS2_CHANCE_SOLO = 0.01   # 1% — nível mítico, enfrentar sozinho é praticamente suicídio (menos que o boss 1) [dificuldade aumentada]
 
 # Batalha em grupo: base mais baixa e teto mais baixo que o boss 1 — mesma
 # lógica (mais gente = mais chance, criaturas raras dão bônus extra), mas
 # Dourakhar continua sendo bem mais difícil de derrubar mesmo com o
-# servidor inteiro lutando junto.
-_BOSS2_CHANCE_GRUPO_BASE      = 0.08
-_BOSS2_CHANCE_GRUPO_MAX       = 0.55
-_BOSS2_BONUS_POR_PARTICIPANTE = 0.025
+# servidor inteiro lutando junto. [valores reduzidos pra aumentar a dificuldade]
+_BOSS2_CHANCE_GRUPO_BASE      = 0.05
+_BOSS2_CHANCE_GRUPO_MAX       = 0.45
+_BOSS2_BONUS_POR_PARTICIPANTE = 0.018
 _BOSS2_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.008, "epico": 0.015, "lendario": 0.025, "mitico": 0.05,
+    "comum": 0.0, "raro": 0.005, "epico": 0.010, "lendario": 0.018, "mitico": 0.035,
 }
 
 _BOSS2_XP_GANHO_MIN = 0.25   # 25% — mínimo de XP que quem vence pode ganhar (um pouco melhor que o boss 1)
@@ -11706,7 +11706,7 @@ async def _boss2_premiar_vencedores(guild: discord.Guild, vencedores: list) -> l
 
 
 async def _boss2_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
-    """Roda o confronto solo contra Dourakhar: só 2% de chance de vitória —
+    """Roda o confronto solo contra Dourakhar: só 1% de chance de vitória —
     e se perder, não perde XP nenhum, só o orgulho."""
     try:
         criatura = _boss_criatura_mais_forte(membro.id)
@@ -11749,7 +11749,7 @@ async def _boss2_batalha_solo(canal: discord.TextChannel, membro: discord.Member
             _, ganho, percentual = resultados[0]
             descricao = (
                 f"🏆 **LENDÁRIO DE VERDADE!!** {membro.mention} e {info_raridade['emoji']} **{criatura['nome']}** "
-                f"derrubaram **DOURAKHAR, O ARAUTO DA MORTE**, SOZINHOS!! Só 2% de chance!! 💀⚔️\n\n"
+                f"derrubaram **DOURAKHAR, O ARAUTO DA MORTE**, SOZINHOS!! Só 1% de chance!! 💀⚔️\n\n"
                 f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`) + ⚡ **Booster de XP {_BAU_BOOSTER_MINUTOS}min**!\n\n"
                 f"🌑 **Aeon:** ...impossível. A própria Morte hesitou. As sombras não têm palavras. 🖤💀\n"
                 f"🌟 **Celestia:** EU. NÃO. ACREDITO. 😭🌟🤍✨ ISSO VAI VIRAR LENDA NO SERVIDOR INTEIRO!!"
@@ -11974,7 +11974,7 @@ class Boss2EscolhaView(discord.ui.View):
             description=(
                 f"🌑 **Aeon:** ...{interaction.user.mention} escolheu encarar Dourakhar sozinho. "
                 f"Isso não é coragem, isso é ousadia pura. 🖤💀\n"
-                f"🌟 **Celestia:** SÓ 2% DE CHANCE?!?! 😰🌟 É NÍVEL MÍTICO, TEM CERTEZA?!"
+                f"🌟 **Celestia:** SÓ 1% DE CHANCE?!?! 😰🌟 É NÍVEL MÍTICO, TEM CERTEZA?!"
             ),
             color=0xff4444,
         )
@@ -12006,7 +12006,7 @@ class Boss2EscolhaView(discord.ui.View):
 async def cmd_boss2(ctx):
     """💀 Invoca Dourakhar, o Arauto da Morte — o boss de NÍVEL MÍTICO, mais
     difícil que o Dragão do Caos. Só o Reality (CRIADOR_ID) pode chamar.
-    O chat escolhe entre encarar sozinho (2% de chance) ou juntar um time
+    O chat escolhe entre encarar sozinho (1% de chance) ou juntar um time
     (mais gente = mais chance, mas ainda assim MUITO mais difícil que o
     boss 1). Quem vencer ganha um pouco mais de XP que no boss 1 e também
     leva um Booster de XP de 5 minutos. Uso: .boss2"""

@@ -9543,6 +9543,74 @@ async def loop_ranking_xp():
     await _atualizar_ranking_xp()
 
 
+_VERXP_SOME_SEGUNDOS = 10   # a resposta do .verxp some sozinha depois desse tempo
+
+
+@bot.command(name="verxp")
+async def cmd_verxp(ctx):
+    """Mostra quanto de xp por minuto você está ganhando AGORA numa call de
+    voz (base + bônus da call + Booster de Baú + Booster de Call), com a
+    mesma conta usada de verdade em _processar_xp_call. A resposta some
+    sozinha em alguns segundos. Uso: .verxp"""
+    autor = ctx.author
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        aviso = await ctx.send("⚠️ Esse comando só funciona dentro do servidor.")
+        await _apagar_mensagem_depois(aviso, _VERXP_SOME_SEGUNDOS)
+        return
+
+    membro = guild.get_member(autor.id)
+    if membro is None:
+        try:
+            membro = await guild.fetch_member(autor.id)
+        except discord.NotFound:
+            membro = None
+
+    estado_voz = membro.voice if membro else None
+    canal_voz = estado_voz.channel if estado_voz else None
+
+    if canal_voz is None:
+        resposta = (
+            "🌑 **Aeon:** ...você não está em nenhuma call agora. 🖤🌑 Sem call, sem xp de call — "
+            f"entre numa call pra começar a ganhar (base: `{_XP_POR_TICK_CALL}` xp/min)."
+        )
+    elif canal_voz.id in _XP_CALLS_PRIVADAS:
+        resposta = "🌑 **Aeon:** ...essa call é privada. 🖤🌑 Não rende xp nenhum, por aqui as sombras não contam."
+    elif estado_voz.self_mute or estado_voz.mute:
+        resposta = (
+            "🌑 **Aeon:** ...você está mutado. 🖤🌑 Sem microfone aberto, sem xp de call — "
+            "desmute pra voltar a ganhar."
+        )
+    else:
+        ganho_call = _XP_POR_TICK_CALL
+        detalhes = [f"Base: `{_XP_POR_TICK_CALL}` xp/min"]
+
+        mult_canal = _XP_CALLS_MULTIPLICADOR.get(canal_voz.id, 1.0)
+        ganho_call *= mult_canal
+        if mult_canal != 1.0:
+            detalhes.append(f"Bônus dessa call: `x{mult_canal:g}`")
+
+        if time.time() < _xp_booster_ate.get(autor.id, 0):
+            ganho_call *= _BAU_BOOSTER_MULTIPLICADOR
+            detalhes.append(f"Booster de Baú ativo: `x{_BAU_BOOSTER_MULTIPLICADOR}`")
+
+        nivel_boost = _nivel_call_booster(autor.id)
+        if nivel_boost > 1:
+            ganho_call *= nivel_boost
+            detalhes.append(f"Booster de Call (streak): `x{nivel_boost}`")
+
+        ganho_final = max(1, round(ganho_call))
+
+        resposta = (
+            f"🌟 **Celestia:** Agora você tá ganhando **`{ganho_final}` xp por minuto** nessa call!! 🌸✨\n"
+            + "\n".join(f"› {linha}" for linha in detalhes)
+        )
+
+    msg = await ctx.send(resposta)
+    await _apagar_mensagem_depois(msg, _VERXP_SOME_SEGUNDOS)
+
+
 @bot.command(name="nivel")
 async def cmd_nivel(ctx, membro: discord.Member = None):
     """Mostra o nível e XP de um membro (ou de quem usou o comando). Uso: .nivel [@membro]"""

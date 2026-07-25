@@ -8919,12 +8919,13 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
             "**4️⃣ Desbloqueando criaturas**\n"
-            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário ou 🐉 Mítico — e quanto mais "
-            "rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as ⚪ Comuns "
-            "desbloqueadas; as demais (até Lendário) só saem **de recompensa** pra quem **vence** uma batalha — o jogo "
-            "sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra sempre. "
-            "Quem perde não ganha nada disso. Veja a lista completa na 📖 **Enciclopédia** (mensagem fixa "
-            "aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
+            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário, 🐺 Bestas, 🌌 Secreto ou "
+            "🐉 Mítico — e quanto mais rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as "
+            "⚪ Comuns desbloqueadas; Raras, Épicas e Lendárias saem **de recompensa** pra quem **vence** uma "
+            "batalha — o jogo sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra "
+            "sempre. Quem perde não ganha nada disso. 🐺 Bestas, 🌌 Secretas e 🐉 Míticas seguem caminhos próprios "
+            "pra desbloquear — veja os itens 8️⃣ e 9️⃣ abaixo. Veja a lista completa na 📖 **Enciclopédia** "
+            "(mensagem fixa aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
             "**5️⃣ ⭐ Nível de Capacidade — quanto mais usa, mais forte fica**\n"
             "Além da raridade, toda criatura tem um **Nível de Capacidade** individual (de 1 a "
             f"{_NIVEL_CRIATURA_MAX}), que é **por pessoa**. Ela sempre começa no Nível 1, e cada vez que "
@@ -8947,18 +8948,26 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"⚪↔🔵 **1 raridade de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[1]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[1])*100:.0f}%`\n"
             f"⚪↔🟣 **2 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[2]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[2])*100:.0f}%`\n"
             f"⚪↔🟡 **3 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[3]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[3])*100:.0f}%`\n"
-            f"⚪↔🐉 **4 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
+            f"⚪↔🐺 **4 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
+            f"⚪↔🌌 **5 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[5]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[5])*100:.0f}%`\n"
+            f"⚪↔🐉 **6 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[6]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[6])*100:.0f}%`\n"
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
             f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
             f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n"
             f"⚠️ **Excepção:** 🟡 Lendário vs 🐉 Mítico não segue essa tabela por degraus — o Mítico "
             f"fica com `{_CHANCE_VITORIA_LENDARIO_MITICO*100:.0f}%` e o Lendário só tem essa fresta de "
             f"`{(1-_CHANCE_VITORIA_LENDARIO_MITICO)*100:.0f}%` pra vencer.\n\n"
-            "**8️⃣ 🐉 Míticos — os dragões**\n"
+            "**8️⃣ 🐺 Bestas — a recompensa de quem treina de verdade**\n"
+            "Mais fortes que as 🟡 Lendárias, mas ainda um degrau abaixo das 🌌 Secretas. Não saem de nenhum "
+            "sorteio — a ÚNICA forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico até o "
+            f"Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`, item 5️⃣ acima). Ao bater esse nível, você ganha, "
+            "na hora e de graça, 1 Besta sorteada entre as do tier correspondente que você ainda não tiver — "
+            "garantido, sem depender de sorte nenhuma!\n\n"
+            "**9️⃣ 🐉 Míticos — os dragões**\n"
             "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
             f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**9️⃣ Pra poder batalhar**\n"
+            "**🔟 Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9054,7 +9063,9 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "raridade menor, mas RARÍSSIMOS de conseguir — só numa chance bem pequena a cada várias "
             "vitórias!!\n"
             "🌑 **Aeon:** ...e as 🌌 Secretas nem essas vitórias concedem. Só saem do 🪙 Baú, com uma "
-            "chance minúscula. As mais raras de todas. 🖤🌌\n\n"
+            "chance minúscula. As mais raras de todas. 🖤🌌\n"
+            "🌟 **Celestia:** E as 🐺 BESTAS não vêm de sorte NENHUMA!! 💪✨ É pura conquista — leva uma "
+            f"criatura ⚪🔵🟣 até o Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`) e ela é sua, garantido!!\n\n"
             "👇 Use o menu abaixo pra escolher uma raridade — ele abre, só pra você, as criaturas "
             "daquela raridade pra conferir os detalhes (e a imagem) de cada uma."
         ),
@@ -9789,10 +9800,18 @@ _RARIDADES = {
     "raro":     {"label": "Raro",     "emoji": "🔵", "cor": 0x3498db, "peso": 25},
     "epico":    {"label": "Épico",    "emoji": "🟣", "cor": 0x9b59b6, "peso": 15},
     "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
+    # 🐺 Bestas: mais fortes que as Lendárias, mas ainda um degrau abaixo das
+    # Secretas. Não entram no sorteio normal de recompensa nem no 🪙 Baú — a
+    # ÚNICA forma de conseguir uma é levando uma criatura Comum, Rara ou
+    # Épica até o Nível de Capacidade máximo (ver _BESTAS_POR_TIER e
+    # _checar_desbloqueio_besta, mais abaixo). O peso aqui só importa pra
+    # decidir a chance dela ser invocada em batalha depois de já ter sido
+    # conquistada.
+    "bestas":   {"label": "Besta",    "emoji": "🐺", "cor": 0x922b21, "peso": 6},
     "secreto":  {"label": "Secreto",  "emoji": "🌌", "cor": 0x6c2eb5, "peso": 2},
     "mitico":   {"label": "Mítico",   "emoji": "🐉", "cor": 0xe0115f, "peso": 5},
 }
-_ORDEM_RARIDADES = ("mitico", "secreto", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+_ORDEM_RARIDADES = ("mitico", "secreto", "bestas", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
 
 # Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
 # um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
@@ -9855,6 +9874,21 @@ _BATALHA_CRIATURAS = [
     {"id": "noxar_puro_trovao",       "nome": "Noxar, o Puro Trovão",         "raridade": "lendario", "gif": "https://i.pinimg.com/originals/c7/6c/87/c76c873ca7d63b7fb29792ad26d36368.gif"},
     {"id": "malgorath_ultima_raca",   "nome": "Malgorath, o Último de Sua Raça", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/df/a8/fc/dfa8fca7813bbb3e42613523c2e2ba43.gif"},
 
+    # ── Bestas ──────────────────────────────────────────────────────────
+    # Mais fortes que as Lendárias, mas ainda um degrau abaixo das Secretas.
+    # Nunca saem de sorteio de vitória nem do 🪙 Baú — a ÚNICA forma de
+    # conseguir uma é levando uma criatura Comum, Rara ou Épica até o Nível
+    # de Capacidade máximo (veja _BESTAS_POR_TIER logo abaixo, que define
+    # qual "tier" desbloqueia qual Besta):
+    #   ⚪ Comum no Nível máximo → sorteia 1 entre Kragor / Espinho Maldito
+    #   🔵 Raro  no Nível máximo → sorteia 1 entre Drogan / A Matriarca do Abismo
+    #   🟣 Épico no Nível máximo → concede Venomor
+    {"id": "kragor_senhor_presas",    "nome": "Kragor, Senhor das Presas",     "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530616424576323615/1784997759114.gif?ex=6a663921&is=6a64e7a1&hm=ce8f0e4db85718ec33963682c0cf21136ce59d18b1dfa4861bf64716f9b802c4"},
+    {"id": "espinho_maldito",         "nome": "Espinho Maldito",               "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530620836648849519/1784998710439.gif?ex=6a663d3d&is=6a64ebbd&hm=fccdd2a51553437b3244b38e95abec8d7eb2c753a575be68c3c5468a01256fce"},
+    {"id": "drogan_carniceiro",       "nome": "Drogan, o Carniceiro",          "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530620836187345046/1784998831160.gif?ex=6a663d3c&is=6a64ebbc&hm=a55e419e47578dc873b7ab25687d4a14d994aa29d954012dd53afba93331834c"},
+    {"id": "matriarca_abismo",        "nome": "A Matriarca do Abismo",         "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530621862898438184/1784999080550.gif?ex=6a663e31&is=6a64ecb1&hm=fb9e9ae76d5a675e227bbc929fa5028b415d196abe9c07dc4513c5483f091a45"},
+    {"id": "venomor",                 "nome": "Venomor",                       "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530626370051506216/1785000151649.gif?ex=6a664264&is=6a64f0e4&hm=19fd34a9f84377e2b4c3e77b6c57d94ca043d394eb261b834ac2cff5b8f374b0"},
+
     # ── Secretas ────────────────────────────────────────────────────────
     # Um degrau abaixo das Míticas, mas acima das Lendárias — e MUITO mais
     # raras de conseguir que qualquer uma delas. Só saem do 🪙 Baú (.bau),
@@ -9914,19 +9948,20 @@ _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
 
 # ── Hierarquia de força das raridades ──────────────────────────────────────
 # Cada raridade tem uma força relativa (_ORDEM_RARIDADES, do mais forte pro
-# mais fraco: 🐉 Mítico > 🌌 Secreto > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
+# mais fraco: 🐉 Mítico > 🌌 Secreto > 🐺 Bestas > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
 # Quanto maior a distância de raridade entre duas criaturas, mais a balança
 # pende pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
 # Um ⚪ Comum sempre pode dar a zebra contra um 🟣 Épico, só que é raro.
 # Chave = quantos "degraus" de raridade separam as duas criaturas na
-# hierarquia (0 = mesma raridade, 5 = a maior distância possível).
+# hierarquia (0 = mesma raridade, 6 = a maior distância possível).
 _CHANCE_VITORIA_POR_DEGRAU = {
     0: 0.50,   # mesma raridade — força bruta pura, sorteio justo
     1: 0.63,   # 1 degrau de diferença (ex: 🔵 Raro vs ⚪ Comum)
     2: 0.74,   # 2 degraus de diferença (ex: 🟣 Épico vs ⚪ Comum)
     3: 0.83,   # 3 degraus de diferença (ex: 🟡 Lendário vs ⚪ Comum)
-    4: 0.90,   # 4 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
-    5: 0.96,   # 5 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
+    4: 0.90,   # 4 degraus de diferença (ex: 🐺 Bestas vs ⚪ Comum)
+    5: 0.96,   # 5 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
+    6: 0.98,   # 6 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
 }
 
 # Excepção específica: 🟡 Lendário contra 🐉 Mítico é MUITO mais desigual do
@@ -10060,6 +10095,49 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
     chance_base = _chance_vitoria_por_raridade(criatura_a["raridade"], criatura_b["raridade"])
     ajuste_nivel = (nivel_a - nivel_b) * _NIVEL_CRIATURA_BONUS_POR_DEGRAU
     return max(_CHANCE_VITORIA_MINIMA, min(_CHANCE_VITORIA_MAXIMA, chance_base + ajuste_nivel))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🐺 BESTAS — raridade desbloqueada por CONQUISTA, não por sorteio. Mais
+# fortes que as Lendárias, mas ainda um degrau abaixo das Secretas. A única
+# forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico
+# até o Nível de Capacidade máximo (_NIVEL_CRIATURA_MAX) — ao bater esse
+# nível, a pessoa recebe automaticamente, de graça, 1 Besta sorteada dentre
+# as do "tier" correspondente (as que ela ainda não tiver). Nunca aparecem
+# no sorteio normal de recompensa de batalha nem no 🪙 Baú — só saem por
+# esse caminho.
+# ══════════════════════════════════════════════════════════════════════
+
+# tier de origem (raridade da criatura que bateu o Nível máximo) -> lista de
+# ids de Bestas que podem ser concedidas quando isso acontece.
+_BESTAS_POR_TIER = {
+    "comum": ["kragor_senhor_presas", "espinho_maldito"],
+    "raro":  ["drogan_carniceiro", "matriarca_abismo"],
+    "epico": ["venomor"],
+}
+
+
+def _checar_desbloqueio_besta(user_id: int, criatura: dict, nivel_antigo: int, nivel_novo: int):
+    """Se `criatura` acabou de bater o Nível de Capacidade máximo dela AGORA
+    (ou seja, subiu de nível nessa mesma batalha e o nível novo já é o teto)
+    e a raridade dela tem um tier de Bestas associado, sorteia 1 Besta ainda
+    não possuída daquele tier e concede pra `user_id`. Devolve a Besta
+    concedida (dict) ou None se nada foi desbloqueado."""
+    tier = _BESTAS_POR_TIER.get(criatura["raridade"])
+    if not tier:
+        return None
+    if not (nivel_novo > nivel_antigo and nivel_novo >= _nivel_criatura_max(criatura["id"])):
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    faltando = [c for c in _BATALHA_CRIATURAS if c["id"] in tier and c["id"] not in dados["criaturas"]]
+    if not faltando:
+        return None
+
+    besta_nova = random.choice(faltando)
+    dados["criaturas"].append(besta_nova["id"])
+    return besta_nova
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -10458,11 +10536,13 @@ async def _executar_batalha(
     # 🐉 Míticas ficam de fora desse sorteio normal — elas têm uma checagem
     # especial própria logo abaixo, bem mais rara. 🌌 Secretas também ficam
     # de fora — essas só saem do 🪙 Baú (.bau), nunca como recompensa de
-    # batalha. ──
+    # batalha. 🐺 Bestas também ficam de fora — essas só saem quando uma
+    # criatura Comum/Rara/Épica bate o Nível de Capacidade máximo (ver
+    # _checar_desbloqueio_besta logo abaixo). ──
     dados_vencedor.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto")
+        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto", "bestas")
     ]
     criatura_nova = None
     if _nao_possuidas:
@@ -10487,6 +10567,19 @@ async def _executar_batalha(
         if _miticas_faltando:
             criatura_mitica_nova = random.choice(_miticas_faltando)
             dados_vencedor["criaturas"].append(criatura_mitica_nova["id"])
+
+    # ── 🐺 Desbloqueio de Besta — vale pros dois lados, já que os dois
+    # "usaram" sua criatura nessa batalha e qualquer uma das duas pode ter
+    # batido o Nível de Capacidade máximo agora. Só concede quando a
+    # criatura em questão é Comum, Rara ou Épica (as únicas com tier de
+    # Besta associado) e o Nível máximo acabou de ser alcançado NESSA
+    # batalha — ver _checar_desbloqueio_besta. ──
+    besta_nova_vencedor = _checar_desbloqueio_besta(
+        vencedor.id, criatura_vencedora, nivel_antigo_criatura_vencedora, nivel_novo_criatura_vencedora
+    )
+    besta_nova_perdedor = _checar_desbloqueio_besta(
+        perdedor.id, criatura_perdedora, nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora
+    )
 
     xp_roubado = 0
     percentual = 0.0
@@ -10545,6 +10638,22 @@ async def _executar_batalha(
             f"{_MITICO_VITORIAS_INTERVALO} vitórias, e **{vencedor.display_name}** acabou de desbloquear "
             f"{info_raridade_mitica['emoji']} **{criatura_mitica_nova['nome']}** "
             f"(*{info_raridade_mitica['label']}*)!! 🐉✨"
+        )
+    if besta_nova_vencedor is not None:
+        info_raridade_besta = _RARIDADES["bestas"]
+        partes_desbloqueio.append(
+            f"🐺⚡ **CONQUISTA!** A **{criatura_vencedora['nome']}** de {vencedor.display_name} chegou ao "
+            f"**Nível de Capacidade máximo** e, como recompensa, {vencedor.display_name} desbloqueou "
+            f"{info_raridade_besta['emoji']} **{besta_nova_vencedor['nome']}** "
+            f"(*{info_raridade_besta['label']}*)!! 🐺⚡"
+        )
+    if besta_nova_perdedor is not None:
+        info_raridade_besta = _RARIDADES["bestas"]
+        partes_desbloqueio.append(
+            f"🐺⚡ **CONQUISTA!** A **{criatura_perdedora['nome']}** de {perdedor.display_name} chegou ao "
+            f"**Nível de Capacidade máximo** e, como recompensa, {perdedor.display_name} desbloqueou "
+            f"{info_raridade_besta['emoji']} **{besta_nova_perdedor['nome']}** "
+            f"(*{info_raridade_besta['label']}*)!! 🐺⚡"
         )
     if not partes_desbloqueio:
         partes_desbloqueio.append(
@@ -11540,9 +11649,9 @@ async def _ovo_chocar(user_id: int) -> None:
     dados.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto")
+        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto", "bestas")
     ]
-    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto")]
+    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto", "bestas")]
     pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
     criatura_nascida = random.choices(pool, weights=pesos, k=1)[0]
     if criatura_nascida["id"] not in dados["criaturas"]:

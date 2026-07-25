@@ -9049,9 +9049,11 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "pra coleção. 🖤🌑\n"
             "🌟 **Celestia:** E os 🐉 MÍTICOS são OUTRO NÍVEL!! 😱✨ Quase imbatíveis contra qualquer "
             "raridade menor, mas RARÍSSIMOS de conseguir — só numa chance bem pequena a cada várias "
-            "vitórias!!\n\n"
-            "👇 Use os menus abaixo (um pra cada raridade) pra ver os detalhes (e a imagem) de cada "
-            "uma, e conferir **só pra você** se já desbloqueou ou não."
+            "vitórias!!\n"
+            "🌑 **Aeon:** ...e as 🌌 Secretas nem essas vitórias concedem. Só saem do 🪙 Baú, com uma "
+            "chance minúscula. As mais raras de todas. 🖤🌌\n\n"
+            "👇 Use o menu abaixo pra escolher uma raridade — ele abre, só pra você, as criaturas "
+            "daquela raridade pra conferir os detalhes (e a imagem) de cada uma."
         ),
         color=0x9b59b6,
     )
@@ -9112,7 +9114,7 @@ class EnciclopediaSelect(discord.ui.Select):
             nivel_pessoal = _nivel_criatura(interaction.user.id, criatura["id"])
             status = (
                 "🔓 **Você já desbloqueou essa criatura!** Ela pode aparecer nas suas batalhas.\n"
-                f"⭐ **Nível de Capacidade atual:** `{nivel_pessoal}/{_NIVEL_CRIATURA_MAX}` — "
+                f"⭐ **Nível de Capacidade atual:** `{nivel_pessoal}/{_nivel_criatura_max(criatura['id'])}` — "
                 "use ela em mais batalhas pra deixar cada vez mais forte."
             )
         else:
@@ -9132,16 +9134,57 @@ class EnciclopediaSelect(discord.ui.Select):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+class EnciclopediaRaridadeSelect(discord.ui.Select):
+    """Passo 1 da navegação: escolher qual raridade explorar. Ao escolher,
+    abre — só pra quem clicou — o menu com as criaturas daquela raridade
+    (EnciclopediaSelect). Isso existe como um passo à parte (em vez de um
+    select por raridade direto na mensagem fixa) porque o Discord só permite
+    5 menus por mensagem, e com 6 raridades (contando a 🌌 Secreta) não
+    caberia mais um select fixo por raridade — assim sobra espaço mesmo se
+    surgirem raridades novas no futuro."""
+
+    def __init__(self):
+        options = []
+        for raridade in _ORDEM_RARIDADES:
+            if not any(c["raridade"] == raridade for c in _BATALHA_CRIATURAS):
+                continue
+            info = _RARIDADES[raridade]
+            qtd = sum(1 for c in _BATALHA_CRIATURAS if c["raridade"] == raridade)
+            options.append(
+                discord.SelectOption(
+                    label=f"{info['label']} ({qtd})",
+                    value=raridade,
+                    emoji=info["emoji"],
+                )
+            )
+        super().__init__(
+            placeholder="🔍 Escolha uma raridade pra explorar...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="enciclopedia_raridade_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        raridade = self.values[0]
+        info = _RARIDADES[raridade]
+        view = discord.ui.View(timeout=180)
+        view.add_item(EnciclopediaSelect(raridade))
+        await interaction.response.send_message(
+            f"{info['emoji']} Escolha uma criatura **{info['label']}** pra ver os detalhes:",
+            view=view,
+            ephemeral=True,
+        )
+
+
 class EnciclopediaView(discord.ui.View):
-    """View persistente (sobrevive a reinícios do bot) com um menu de seleção
-    de criaturas por raridade — um select pra Lendárias, um pra Épicas,
-    um pra Raras e um pra Comuns."""
+    """View persistente (sobrevive a reinícios do bot) com um único menu
+    pra escolher a raridade — que abre, de forma privada, o menu com as
+    criaturas daquela raridade especificamente."""
 
     def __init__(self):
         super().__init__(timeout=None)
-        for raridade in _ORDEM_RARIDADES:
-            if any(c["raridade"] == raridade for c in _BATALHA_CRIATURAS):
-                self.add_item(EnciclopediaSelect(raridade))
+        self.add_item(EnciclopediaRaridadeSelect())
 
 
 async def _achar_mensagem_enciclopedia(canal: discord.TextChannel):
@@ -9743,9 +9786,10 @@ _RARIDADES = {
     "raro":     {"label": "Raro",     "emoji": "🔵", "cor": 0x3498db, "peso": 25},
     "epico":    {"label": "Épico",    "emoji": "🟣", "cor": 0x9b59b6, "peso": 15},
     "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
+    "secreto":  {"label": "Secreto",  "emoji": "🌌", "cor": 0x6c2eb5, "peso": 2},
     "mitico":   {"label": "Mítico",   "emoji": "🐉", "cor": 0xe0115f, "peso": 5},
 }
-_ORDEM_RARIDADES = ("mitico", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+_ORDEM_RARIDADES = ("mitico", "secreto", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
 
 # Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
 # um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
@@ -9808,6 +9852,18 @@ _BATALHA_CRIATURAS = [
     {"id": "noxar_puro_trovao",       "nome": "Noxar, o Puro Trovão",         "raridade": "lendario", "gif": "https://i.pinimg.com/originals/c7/6c/87/c76c873ca7d63b7fb29792ad26d36368.gif"},
     {"id": "malgorath_ultima_raca",   "nome": "Malgorath, o Último de Sua Raça", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/df/a8/fc/dfa8fca7813bbb3e42613523c2e2ba43.gif"},
 
+    # ── Secretas ────────────────────────────────────────────────────────
+    # Um degrau abaixo das Míticas, mas acima das Lendárias — e MUITO mais
+    # raras de conseguir que qualquer uma delas. Só saem do 🪙 Baú (.bau),
+    # com uma chance minúscula (_BAU_CHANCE_SECRETO) — nunca aparecem como
+    # recompensa normal de vitória em batalha nem no .ovo.
+    {"id": "nyxalith_dragao_eclipse_contaminado", "nome": "Nyxalith, o Dragão do Eclipse Contaminado", "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530548540453949492/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte8-ezgif.com-video-to-gif-converter.gif?ex=6a65f9e8&is=6a64a868&hm=520ea2ec3119628ee31e2fcdc0ffec3cd2f58abeb1299853fe6bfbfa0225dc24"},
+    {"id": "magnus_frostbane",                    "nome": "Magnus Frostbane",                             "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530551857657811144/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte12-ezgif.com-video-to-gif-converter.gif?ex=6a65fcff&is=6a64ab7f&hm=b17f232f526747a90194d31ac0043cb30c66511a1df23b2ea54c79d98c633e19"},
+    {"id": "drakonis_prime",                      "nome": "Drakonis Prime",                               "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530550661341646929/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte10-ezgif.com-video-to-gif-converter.gif?ex=6a65fbe1&is=6a64aa61&hm=56b3b0869302c0a49246ec7ba92b17ab28db532828585b57d68ceee9eec47c4d"},
+    {"id": "pirikita",                            "nome": "Pirikita",                                     "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530543477765570590/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte6-ezgif.com-video-to-gif-converter.gif?ex=6a65f531&is=6a64a3b1&hm=95e9447603d93ff32e57592230af53ec07567d79ed1eaa5e4b886c2acc67653b"},
+    {"id": "solarius_guardiao_ordem",              "nome": "Solarius, Guardião da Ordem",                  "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530556148976193636/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte14-ezgif.com-video-to-gif-converter.gif?ex=6a6600fe&is=6a64af7e&hm=5a60dce14b09c13ee02ae437cf01492ed8b8444978fa8d044efc78fff056c262"},
+    {"id": "vorakthul",                            "nome": "Vorak'thul",                                   "raridade": "secreto", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530543478193520791/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte5-ezgif.com-video-to-gif-converter.gif?ex=6a65f531&is=6a64a3b1&hm=72a2e23365092d97d2fb9e4c23765cc0ee32765fe092f5ebb1d8bb348283d98c"},
+
     # ── Míticas ─────────────────────────────────────────────────────────
     # Dragões. Não entram no sorteio normal de recompensa (esse é o pool
     # de _nao_possuidas em _executar_batalha, que já os exclui) — só saem
@@ -9855,18 +9911,19 @@ _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
 
 # ── Hierarquia de força das raridades ──────────────────────────────────────
 # Cada raridade tem uma força relativa (_ORDEM_RARIDADES, do mais forte pro
-# mais fraco: 🐉 Mítico > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum). Quanto
-# maior a distância de raridade entre duas criaturas, mais a balança pende
-# pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
+# mais fraco: 🐉 Mítico > 🌌 Secreto > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
+# Quanto maior a distância de raridade entre duas criaturas, mais a balança
+# pende pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
 # Um ⚪ Comum sempre pode dar a zebra contra um 🟣 Épico, só que é raro.
 # Chave = quantos "degraus" de raridade separam as duas criaturas na
-# hierarquia (0 = mesma raridade, 4 = a maior distância possível).
+# hierarquia (0 = mesma raridade, 5 = a maior distância possível).
 _CHANCE_VITORIA_POR_DEGRAU = {
     0: 0.50,   # mesma raridade — força bruta pura, sorteio justo
-    1: 0.65,   # 1 degrau de diferença (ex: 🔵 Raro vs ⚪ Comum)
-    2: 0.78,   # 2 degraus de diferença (ex: 🟣 Épico vs ⚪ Comum)
-    3: 0.88,   # 3 degraus de diferença (ex: 🟡 Lendário vs ⚪ Comum)
-    4: 0.95,   # 4 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
+    1: 0.63,   # 1 degrau de diferença (ex: 🔵 Raro vs ⚪ Comum)
+    2: 0.74,   # 2 degraus de diferença (ex: 🟣 Épico vs ⚪ Comum)
+    3: 0.83,   # 3 degraus de diferença (ex: 🟡 Lendário vs ⚪ Comum)
+    4: 0.90,   # 4 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
+    5: 0.96,   # 5 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
 }
 
 
@@ -9905,6 +9962,15 @@ _NIVEL_CRIATURA_MAX = 10
 # custoso lá no topo, pra o Nível 10 realmente significar "muito usada".
 _NIVEL_CRIATURA_USOS_ACUMULADOS = [0, 3, 7, 12, 18, 25, 33, 42, 52, 63]
 
+# Teto (e tabela de usos) especial para criaturas específicas — não é
+# documentado/anunciado em nenhum lugar do bot de propósito. Continua a
+# mesma progressão de dificuldade da tabela normal, só que até o Nível 20
+# em vez de 10.
+_NIVEL_CRIATURA_MAX_ESPECIAL = {"vorakthul": 20}
+_NIVEL_CRIATURA_USOS_ACUMULADOS_ESTENDIDO = _NIVEL_CRIATURA_USOS_ACUMULADOS + [
+    75, 88, 102, 117, 133, 150, 168, 187, 207, 228,
+]
+
 # Quanto cada DEGRAU de diferença de nível pesa na chance de vitória (ex:
 # nível 1 vs nível 3 = 2 degraus de diferença). É um ajuste mais discreto
 # que o da raridade — o nível refina a disputa, não a domina.
@@ -9916,14 +9982,25 @@ _CHANCE_VITORIA_MINIMA = 0.05
 _CHANCE_VITORIA_MAXIMA = 0.95
 
 
-def _calcular_nivel_criatura(usos: int) -> int:
+def _nivel_criatura_max(criatura_id: str = None) -> int:
+    """Teto de Nível de Capacidade pra essa criatura — normalmente
+    _NIVEL_CRIATURA_MAX (10), exceto pras que estão em
+    _NIVEL_CRIATURA_MAX_ESPECIAL."""
+    return _NIVEL_CRIATURA_MAX_ESPECIAL.get(criatura_id, _NIVEL_CRIATURA_MAX)
+
+
+def _calcular_nivel_criatura(usos: int, criatura_id: str = None) -> int:
     """Converte quantos usos uma criatura já teve no Nível de Capacidade
-    correspondente (1 a 10), de acordo com _NIVEL_CRIATURA_USOS_ACUMULADOS."""
+    correspondente, de acordo com _NIVEL_CRIATURA_USOS_ACUMULADOS (ou a
+    tabela estendida, pras criaturas em _NIVEL_CRIATURA_MAX_ESPECIAL)."""
+    tabela = _NIVEL_CRIATURA_USOS_ACUMULADOS
+    if criatura_id in _NIVEL_CRIATURA_MAX_ESPECIAL:
+        tabela = _NIVEL_CRIATURA_USOS_ACUMULADOS_ESTENDIDO
     nivel = 1
-    for indice, limite in enumerate(_NIVEL_CRIATURA_USOS_ACUMULADOS):
+    for indice, limite in enumerate(tabela):
         if usos >= limite:
             nivel = indice + 1
-    return min(nivel, _NIVEL_CRIATURA_MAX)
+    return min(nivel, _nivel_criatura_max(criatura_id))
 
 
 def _usos_criatura(user_id: int, criatura_id: str) -> int:
@@ -9934,8 +10011,8 @@ def _usos_criatura(user_id: int, criatura_id: str) -> int:
 
 
 def _nivel_criatura(user_id: int, criatura_id: str) -> int:
-    """Nível de Capacidade atual (1 a 10) dessa criatura, PRA ESSA pessoa."""
-    return _calcular_nivel_criatura(_usos_criatura(user_id, criatura_id))
+    """Nível de Capacidade atual dessa criatura, PRA ESSA pessoa."""
+    return _calcular_nivel_criatura(_usos_criatura(user_id, criatura_id), criatura_id)
 
 
 def _registrar_uso_criatura(user_id: int, criatura_id: str) -> tuple:
@@ -9945,10 +10022,10 @@ def _registrar_uso_criatura(user_id: int, criatura_id: str) -> tuple:
     dados = xp_stats[user_id]
     dados.setdefault("usos_criaturas", {})
     usos_antes = dados["usos_criaturas"].get(criatura_id, 0)
-    nivel_antigo = _calcular_nivel_criatura(usos_antes)
+    nivel_antigo = _calcular_nivel_criatura(usos_antes, criatura_id)
     usos_depois = usos_antes + 1
     dados["usos_criaturas"][criatura_id] = usos_depois
-    nivel_novo = _calcular_nivel_criatura(usos_depois)
+    nivel_novo = _calcular_nivel_criatura(usos_depois, criatura_id)
     return nivel_antigo, nivel_novo
 
 
@@ -10356,11 +10433,13 @@ async def _executar_batalha(
     # uma criatura NOVA (sorteada por raridade, dentre as que ainda não tem)
     # pra sua coleção. Quem perde não ganha nada disso.
     # 🐉 Míticas ficam de fora desse sorteio normal — elas têm uma checagem
-    # especial própria logo abaixo, bem mais rara. ──
+    # especial própria logo abaixo, bem mais rara. 🌌 Secretas também ficam
+    # de fora — essas só saem do 🪙 Baú (.bau), nunca como recompensa de
+    # batalha. ──
     dados_vencedor.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] != "mitico"
+        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto")
     ]
     criatura_nova = None
     if _nao_possuidas:
@@ -10741,14 +10820,16 @@ async def cmd_favorito(ctx, *, nome: str = None):
 # Comando .bau (só o Reality/CRIADOR_ID pode ativar) joga um baú com botão
 # no canal _BAU_CANAL_ID. A PRIMEIRA pessoa que clicar leva o prêmio: na
 # maioria das vezes um % de XP a mais (sorteado entre 1% e 20% do XP atual
-# dela); bem mais raro (e esse é o prêmio mais difícil de sair) um booster
-# de 5 minutos que DOBRA o xp ganho em call e em mensagem nesse período.
+# dela); mais raro um booster de 5 minutos que DOBRA o xp ganho em call e
+# em mensagem nesse período; e, RARÍSSIMO (o prêmio mais difícil de todos),
+# uma criatura de raridade 🌌 Secreta — a única forma de conseguir uma.
 # ══════════════════════════════════════════════════════════════════════
 
 _BAU_GIF = "https://static2.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/be/e0/WQOIGADT.gif"
 _BAU_CANAL_ID = 1284257046740602901  # mesmo canal do chat geral (_XP_CANAL_1)
 
-_BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster — o prêmio mais raro/difícil
+_BAU_CHANCE_SECRETO = 0.02    # 2% de chance — o prêmio MAIS raro do baú, uma criatura 🌌 Secreta
+_BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster
 _BAU_XP_MIN = 0.01            # 1%  — mínimo de xp que o dado pode sortear
 _BAU_XP_MAX = 0.20            # 20% — máximo de xp que o dado pode sortear
 _BAU_BOOSTER_MINUTOS = 5
@@ -10776,8 +10857,30 @@ class BauView(discord.ui.View):
 
         membro = interaction.user
         dados = xp_stats[membro.id]
+        dados.setdefault("criaturas", [])
 
-        if random.random() < _BAU_CHANCE_BOOSTER:
+        # 🌌 Prêmio mais raro de todos: uma criatura Secreta ainda não
+        # desbloqueada. Se a pessoa já tiver as 6, cai pro sorteio normal
+        # (booster/xp) em vez de travar sem ter mais nada pra dar.
+        _secretos_faltando = [
+            c for c in _BATALHA_CRIATURAS
+            if c["raridade"] == "secreto" and c["id"] not in dados["criaturas"]
+        ]
+
+        imagem_resultado = _BAU_GIF
+
+        if _secretos_faltando and random.random() < _BAU_CHANCE_SECRETO:
+            criatura_secreta = random.choice(_secretos_faltando)
+            dados["criaturas"].append(criatura_secreta["id"])
+            info_raridade_secreta = _RARIDADES["secreto"]
+            imagem_resultado = criatura_secreta["gif"]
+            texto_premio = (
+                f"🌌✨ **PRÊMIO RARÍSSIMO!!** {membro.mention} encontrou algo que quase ninguém acha... "
+                f"{info_raridade_secreta['emoji']} **{criatura_secreta['nome']}** "
+                f"(*{info_raridade_secreta['label']}*) foi desbloqueada e entrou pra sua coleção!! "
+                f"Use `.criaturas` pra conferir. 🌌"
+            )
+        elif random.random() < _BAU_CHANCE_BOOSTER:
             # ── Prêmio raro: booster de 5 min que dobra xp de call e mensagem ──
             _xp_booster_ate[membro.id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
             texto_premio = (
@@ -10809,7 +10912,7 @@ class BauView(discord.ui.View):
             color=0xf5c542,
             timestamp=discord.utils.utcnow(),
         )
-        embed_resultado.set_image(url=_BAU_GIF)
+        embed_resultado.set_image(url=imagem_resultado)
         embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
         await interaction.response.edit_message(embed=embed_resultado, view=self)
         self.stop()
@@ -10842,8 +10945,8 @@ async def cmd_bau(ctx):
             "LEVA O PRÊMIO!!\n"
             "🌑 **Aeon:** ...corram. As sombras não esperam por ninguém. 🖤🌑\n\n"
             f"🎁 Prêmio: entre `{_BAU_XP_MIN * 100:.0f}%` e `{_BAU_XP_MAX * 100:.0f}%` de XP a mais — "
-            f"ou, bem mais raro, um **Booster de {_BAU_BOOSTER_MINUTOS} min** que dobra o xp de call e "
-            "de mensagem!"
+            f"mais raro, um **Booster de {_BAU_BOOSTER_MINUTOS} min** que dobra o xp de call e de "
+            "mensagem — e, raríssimo mesmo, uma criatura de raridade 🌌 **Secreta** direto pra coleção!"
         ),
         color=0xf5c542,
     )
@@ -10887,7 +10990,7 @@ _BOSS_CHANCE_GRUPO_BASE      = 0.12
 _BOSS_CHANCE_GRUPO_MAX       = 0.70
 _BOSS_BONUS_POR_PARTICIPANTE = 0.035
 _BOSS_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.01, "epico": 0.02, "lendario": 0.035, "mitico": 0.07,
+    "comum": 0.0, "raro": 0.01, "epico": 0.02, "lendario": 0.035, "secreto": 0.055, "mitico": 0.07,
 }
 
 _BOSS_XP_GANHO_MIN = 0.20   # 20% — mínimo de XP que quem vence pode ganhar
@@ -11359,9 +11462,9 @@ async def _ovo_chocar(user_id: int) -> None:
     dados.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados["criaturas"] and c["raridade"] != "mitico"
+        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto")
     ]
-    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] != "mitico"]
+    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto")]
     pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
     criatura_nascida = random.choices(pool, weights=pesos, k=1)[0]
     if criatura_nascida["id"] not in dados["criaturas"]:
@@ -11647,7 +11750,7 @@ _BOSS2_CHANCE_GRUPO_BASE      = 0.05
 _BOSS2_CHANCE_GRUPO_MAX       = 0.45
 _BOSS2_BONUS_POR_PARTICIPANTE = 0.018
 _BOSS2_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.005, "epico": 0.010, "lendario": 0.018, "mitico": 0.035,
+    "comum": 0.0, "raro": 0.005, "epico": 0.010, "lendario": 0.018, "secreto": 0.028, "mitico": 0.035,
 }
 
 _BOSS2_XP_GANHO_MIN = 0.25   # 25% — mínimo de XP que quem vence pode ganhar (um pouco melhor que o boss 1)
@@ -12092,7 +12195,7 @@ _BOSS3_CHANCE_GRUPO_BASE      = 0.095
 _BOSS3_CHANCE_GRUPO_MAX       = 0.60
 _BOSS3_BONUS_POR_PARTICIPANTE = 0.028
 _BOSS3_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.009, "epico": 0.017, "lendario": 0.028, "mitico": 0.055,
+    "comum": 0.0, "raro": 0.009, "epico": 0.017, "lendario": 0.028, "secreto": 0.045, "mitico": 0.055,
 }
 
 _BOSS3_XP_GANHO_MIN = 0.22   # 22% — mínimo de XP que quem vence pode ganhar (entre o boss1 e o boss2)

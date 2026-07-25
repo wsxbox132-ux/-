@@ -8954,9 +8954,12 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
             f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
             f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n"
-            f"⚠️ **Excepção:** 🟡 Lendário vs 🐉 Mítico não segue essa tabela por degraus — o Mítico "
-            f"fica com `{_CHANCE_VITORIA_LENDARIO_MITICO*100:.0f}%` e o Lendário só tem essa fresta de "
-            f"`{(1-_CHANCE_VITORIA_LENDARIO_MITICO)*100:.0f}%` pra vencer.\n\n"
+            f"⚠️ **Excepção:** 🟡 Lendário vs 🐉 Mítico e 🟡 Lendário vs 🌌 Secreto não seguem essa "
+            f"tabela por degraus — a discrepância aqui é bem maior que em qualquer outro confronto:\n"
+            f"🟡↔🐉 **Lendário vs Mítico:** `{_CHANCE_VITORIA_LENDARIO_MITICO*100:.0f}%` x "
+            f"`{(1-_CHANCE_VITORIA_LENDARIO_MITICO)*100:.0f}%`\n"
+            f"🟡↔🌌 **Lendário vs Secreto:** `{_CHANCE_VITORIA_LENDARIO_SECRETO*100:.0f}%` x "
+            f"`{(1-_CHANCE_VITORIA_LENDARIO_SECRETO)*100:.0f}%`\n\n"
             "**8️⃣ 🐺 Bestas — a recompensa de quem treina de verdade**\n"
             "Mais fortes que as 🟡 Lendárias, mas ainda um degrau abaixo das 🌌 Secretas. Não saem de nenhum "
             "sorteio — a ÚNICA forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico até o "
@@ -9964,15 +9967,17 @@ _CHANCE_VITORIA_POR_DEGRAU = {
     6: 0.98,   # 6 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
 }
 
-# Excepção específica: 🟡 Lendário contra 🐉 Mítico é MUITO mais desigual do
-# que os 2 degraus "normais" desse par sugeririam. Aqui o Mítico fica com a
-# chance máxima permitida (mesma trava de _CHANCE_VITORIA_MAXIMA, lá na frente)
-# e o Lendário só tem essa fresta mínima de 5% pra dar a zebra. Isso NÃO afeta
-# outros pares que também têm 2 degraus de distância (ex: 🌌 Secreto vs 🟣 Épico) —
-# só esse confronto específico.
-_CHANCE_VITORIA_LENDARIO_MITICO = 0.95   # chance do Mítico (o lado mais forte do par)
+# Excepção específica: 🟡 Lendário contra 🐉 Mítico OU 🌌 Secreto é MUITO mais
+# desigual do que a tabela por degraus normal sugeriria. Aqui o lado mais forte
+# (Mítico ou Secreto) fica com uma chance bem acima do teto normal de 95%, e o
+# Lendário sobra só com uma fresta mínima pra dar a zebra. Isso NÃO afeta outros
+# pares que também têm a mesma distância de degraus (ex: 🌌 Secreto vs 🟣 Épico) —
+# só esses dois confrontos específicos contra o Lendário.
+_CHANCE_VITORIA_LENDARIO_MITICO  = 0.99   # chance do Mítico  (o lado mais forte do par)
+_CHANCE_VITORIA_LENDARIO_SECRETO = 0.97   # chance do Secreto (o lado mais forte do par)
 _CHANCE_VITORIA_PAR_ESPECIAL = {
-    frozenset({"lendario", "mitico"}): _CHANCE_VITORIA_LENDARIO_MITICO,
+    frozenset({"lendario", "mitico"}):  _CHANCE_VITORIA_LENDARIO_MITICO,
+    frozenset({"lendario", "secreto"}): _CHANCE_VITORIA_LENDARIO_SECRETO,
 }
 
 
@@ -10039,6 +10044,14 @@ _NIVEL_CRIATURA_BONUS_POR_DEGRAU = 0.03
 _CHANCE_VITORIA_MINIMA = 0.05
 _CHANCE_VITORIA_MAXIMA = 0.95
 
+# Trava separada e bem mais folgada, só pra confrontos listados em
+# _CHANCE_VITORIA_PAR_ESPECIAL (Lendário x Mítico / Lendário x Secreto). Sem
+# isso, os 99%/97% definidos ali em cima seriam cortados de volta pro teto
+# normal de 95% — aqui a discrepância desses dois confrontos pode ir bem
+# além disso, mesmo depois do ajuste de Nível de Capacidade.
+_CHANCE_VITORIA_MINIMA_PAR_ESPECIAL = 0.01
+_CHANCE_VITORIA_MAXIMA_PAR_ESPECIAL = 0.99
+
 
 def _nivel_criatura_max(criatura_id: str = None) -> int:
     """Teto de Nível de Capacidade pra essa criatura — normalmente
@@ -10091,10 +10104,20 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
     """Chance da criatura A vencer a criatura B, combinando a hierarquia de
     raridade (_chance_vitoria_por_raridade) com o ajuste fino do Nível de
     Capacidade de cada uma: pra cada degrau de nível a mais, um pequeno
-    empurrão a mais na balança. Sempre travado entre 5% e 95%."""
+    empurrão a mais na balança. Travado entre 5% e 95% no caso normal — mas
+    os pares especiais (Lendário x Mítico / Lendário x Secreto) usam a trava
+    mais folgada (1%/99%), já que a ideia ali é justamente uma discrepância
+    bem maior que a de qualquer outro confronto."""
     chance_base = _chance_vitoria_por_raridade(criatura_a["raridade"], criatura_b["raridade"])
     ajuste_nivel = (nivel_a - nivel_b) * _NIVEL_CRIATURA_BONUS_POR_DEGRAU
-    return max(_CHANCE_VITORIA_MINIMA, min(_CHANCE_VITORIA_MAXIMA, chance_base + ajuste_nivel))
+
+    par = frozenset({criatura_a["raridade"], criatura_b["raridade"]})
+    if par in _CHANCE_VITORIA_PAR_ESPECIAL:
+        minimo, maximo = _CHANCE_VITORIA_MINIMA_PAR_ESPECIAL, _CHANCE_VITORIA_MAXIMA_PAR_ESPECIAL
+    else:
+        minimo, maximo = _CHANCE_VITORIA_MINIMA, _CHANCE_VITORIA_MAXIMA
+
+    return max(minimo, min(maximo, chance_base + ajuste_nivel))
 
 
 # ══════════════════════════════════════════════════════════════════════

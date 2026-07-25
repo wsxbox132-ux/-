@@ -10986,6 +10986,61 @@ async def cmd_favorito(ctx, *, nome: str = None):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# .uparcriatura — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Sobe em 1 o Nível de Capacidade da criatura favorita/equipada de alguém
+# (a mesma lógica de _calcular_nivel_criatura / _NIVEL_CRIATURA_USOS_ACUMULADOS
+# usada pelo resto do sistema — só que "empurrando" os usos direto pro
+# limiar do próximo nível, em vez de esperar batalhas de verdade).
+# De propósito NÃO aparece em nenhum lugar do help/ajuda.
+# Uso (PV ou servidor): .uparcriatura <ID ou @membro>
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="uparcriatura")
+async def cmd_uparcriatura(ctx, alvo_id: int = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.uparcriatura <ID ou @membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    criatura = _obter_criatura_favorita_ativa(alvo_id)
+    if criatura is None:
+        aviso = await ctx.send(f"❌ `{alvo_id}` não tem criatura favorita/equipada no momento.")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    criatura_id = criatura["id"]
+    teto = _nivel_criatura_max(criatura_id)
+    nivel_atual = _nivel_criatura(alvo_id, criatura_id)
+
+    if nivel_atual >= teto:
+        aviso = await ctx.send(f"⚠️ `{criatura['nome']}` já está no nível máximo (`{teto}`).")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    tabela = (
+        _NIVEL_CRIATURA_USOS_ACUMULADOS_ESTENDIDO
+        if criatura_id in _NIVEL_CRIATURA_MAX_ESPECIAL
+        else _NIVEL_CRIATURA_USOS_ACUMULADOS
+    )
+    dados = xp_stats[alvo_id]
+    dados.setdefault("usos_criaturas", {})
+    dados["usos_criaturas"][criatura_id] = max(
+        dados["usos_criaturas"].get(criatura_id, 0),
+        tabela[nivel_atual],   # limiar de usos mínimos pro PRÓXIMO nível
+    )
+    nivel_novo = _calcular_nivel_criatura(dados["usos_criaturas"][criatura_id], criatura_id)
+    asyncio.create_task(_salvar_xp_stats())
+
+    confirmacao = await ctx.send(f"✅ `{criatura['nome']}` (`{alvo_id}`) → Nível `{nivel_novo}`.")
+    await _apagar_mensagem_depois(confirmacao, 15)
+
+
+# ══════════════════════════════════════════════════════════════════════
 # BAÚ — evento de recompensa surpresa
 # Comando .bau (só o Reality/CRIADOR_ID pode ativar) joga um baú com botão
 # no canal _BAU_CANAL_ID. A PRIMEIRA pessoa que clicar leva o prêmio: na

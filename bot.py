@@ -10326,6 +10326,100 @@ async def _anunciar_besta_desbloqueada(
         pass
 
 
+def _forcar_verificacao_besta(user_id: int, criatura: dict):
+    """Versão 'preguiçosa' de _checar_desbloqueio_besta: em vez de exigir que
+    o Nível de Capacidade tenha acabado de subir NESSA hora, só olha o
+    estado atual — se `criatura` já está no nível máximo dela pra essa
+    pessoa. Usada pelo comando `.destravarbesta`, que existe pra corrigir
+    manualmente os casos em que o desbloqueio automático (em batalha) falhou
+    ou não foi anunciado. Sortear e conceder a Besta segue seguro contra
+    duplicação: só concede se ainda faltar alguma Besta daquele tier na
+    coleção da pessoa (mesma checagem de sempre)."""
+    tier = _BESTAS_POR_TIER.get(criatura["raridade"])
+    if not tier:
+        return None
+    if _nivel_criatura(user_id, criatura["id"]) < _nivel_criatura_max(criatura["id"]):
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    faltando = [c for c in _BATALHA_CRIATURAS if c["id"] in tier and c["id"] not in dados["criaturas"]]
+    if not faltando:
+        return None
+
+    besta_nova = random.choice(faltando)
+    dados["criaturas"].append(besta_nova["id"])
+    return besta_nova
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .destravarbesta — comando de manutenção/correção. Verifica se a pessoa
+# (ou alguém que o Reality aponte) tem alguma criatura ⚪/🔵/🟣 já no Nível
+# de Capacidade máximo cuja Besta correspondente não foi concedida (por
+# causa de alguma falha no desbloqueio automático em batalha) e concede na
+# hora, anunciando no mesmo canal fixo de sempre (_BESTA_ANUNCIO_CANAL_ID).
+# Idempotente: pode ser chamado várias vezes sem risco de duplicar — só
+# concede enquanto sobrar Besta faltando no tier.
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="destravarbesta", aliases=["corrigirbesta", "checarbesta"])
+async def cmd_destravarbesta(ctx, membro: discord.Member = None):
+    """Corrige o bug de Besta não concedida/anunciada.
+    Uso: .destravarbesta            → verifica você mesmo
+         .destravarbesta @membro    → só o Reality pode checar outra pessoa
+    """
+    autor = ctx.author
+
+    if membro is not None and membro.id != autor.id and autor.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha de lado* ...você só pode checar as suas próprias criaturas. 🖤🌑"
+        )
+        return
+
+    alvo = membro or autor
+
+    dados = xp_stats[alvo.id]
+    dados.setdefault("criaturas", [])
+
+    candidatas = [
+        c for c in _BATALHA_CRIATURAS
+        if c["id"] in dados["criaturas"]
+        and c["raridade"] in _BESTAS_POR_TIER
+        and _nivel_criatura(alvo.id, c["id"]) >= _nivel_criatura_max(c["id"])
+    ]
+
+    if not candidatas:
+        await ctx.send(
+            f"🌑 **Aeon:** *verifica em silêncio* ...nenhuma criatura Comum, Rara ou Épica de "
+            f"{alvo.mention} está no Nível de Capacidade máximo agora. 🖤🌑 Nada pra destravar."
+        )
+        return
+
+    concedidas = []
+    for criatura in candidatas:
+        besta = _forcar_verificacao_besta(alvo.id, criatura)
+        if besta is not None:
+            concedidas.append((criatura, besta))
+
+    if not concedidas:
+        await ctx.send(
+            f"🌟 **Celestia:** Verifiquei tudinho!! 😊🌸 {alvo.mention} já tem todas as Bestas "
+            "disponíveis pros tiers das criaturas maxadas dela — nada faltando pra destravar!! ✨"
+        )
+        return
+
+    asyncio.create_task(_salvar_xp_stats())
+
+    for criatura, besta in concedidas:
+        if ctx.guild:
+            asyncio.create_task(_anunciar_besta_desbloqueada(ctx.guild, alvo, criatura, besta))
+
+    nomes = ", ".join(f"🐺 **{besta['nome']}**" for _, besta in concedidas)
+    await ctx.send(
+        f"✅ Corrigido! {alvo.mention} destravou: {nomes} — confira o canal de anúncios e `.criaturas`. ⚡"
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════
 # CRIATURA FAVORITA — comando `.favorito <nome>`. Enquanto alguém tiver uma
 # favorita ativa, ela é SEMPRE a escolhida nas batalhas dessa pessoa (em vez

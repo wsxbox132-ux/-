@@ -12056,6 +12056,450 @@ async def cmd_boss2(ctx):
     asyncio.create_task(_apagar_mensagem_depois(msg))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Comando .boss3 (só o Reality/CRIADOR_ID pode ativar) invoca Zephyrus, o
+# Guardião do Véu Arcano — nível mítico, um pouco mais fraco que Dourakhar
+# (boss2) mas ainda bem mais difícil que o Dragão do Caos (boss1). Mesma
+# lógica de sempre (encarar sozinho ou chamar o time), mas Zephyrus entra
+# em campo subestimando os desafiantes assim que a luta começa. Quem
+# vencer ganha XP e leva um Booster de XP de apenas 2 minutos (mais curto
+# que o de Dourakhar, condizente com o boss ser um pouco mais fraco).
+# ══════════════════════════════════════════════════════════════════════
+
+# ⚠️ Esses gifs são links temporários do CDN do Discord (parâmetros ?ex=...),
+# que expiram sozinhos depois de um tempo (geralmente ~24h-48h). Se pararem
+# de aparecer nos embeds, pegue links novos (clique direito na imagem no
+# Discord > Copiar link) e troque aqui embaixo — ou, melhor ainda, subam
+# os gifs num host permanente (imgur, ibb.co etc.) pra nunca mais precisar trocar.
+_BOSS3_ZEPHYRUS_INTRO_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530395243793350656/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte1-ezgif.com-video-to-gif-converter.gif?ex=6a656b23&is=6a6419a3&hm=31a65b7384655f72f7bb1d274dddef20abd0f2a5476f4a650634418861d5cf2c&"
+_BOSS3_ZEPHYRUS_BATALHA_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530395243336437971/PixVerse_V6_Image_Text_540P_faa_em_pixel_arte3-ezgif.com-video-to-gif-converter.gif?ex=6a656b23&is=6a6419a3&hm=7f3f861eccc45b6d93d8dbd437014814fd46196daec6cb535c34de7da748ad4b&"
+
+_BOSS3_CANAL_ID = _BOSS_CANAL_ID   # mesmo canal dos outros bosses — só aparece aqui
+
+_BOSS3_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
+_BOSS3_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
+
+# Booster exclusivo do Zephyrus: mais curto que o dos outros bosses (2 min
+# em vez dos 5 min do Baú/Dourakhar), condizente com ele ser um pouco mais fraco.
+_BOSS3_BOOSTER_MINUTOS = 2
+
+_BOSS3_CHANCE_SOLO = 0.03   # 3% — nível mítico, mas um pouco mais generoso que o 2% de Dourakhar
+
+# Batalha em grupo: base e teto um pouco acima do boss2 (Dourakhar), mas
+# ainda abaixo do boss1 (Dragão do Caos) — Zephyrus é "um pouco mais fraco"
+# que Dourakhar, não fácil.
+_BOSS3_CHANCE_GRUPO_BASE      = 0.095
+_BOSS3_CHANCE_GRUPO_MAX       = 0.60
+_BOSS3_BONUS_POR_PARTICIPANTE = 0.028
+_BOSS3_BONUS_RARIDADE_CRIATURA = {
+    "comum": 0.0, "raro": 0.009, "epico": 0.017, "lendario": 0.028, "mitico": 0.055,
+}
+
+_BOSS3_XP_GANHO_MIN = 0.22   # 22% — mínimo de XP que quem vence pode ganhar (entre o boss1 e o boss2)
+_BOSS3_XP_GANHO_MAX = 0.65   # 65% — máximo de XP que quem vence pode ganhar
+_BOSS3_XP_GANHO_SEM_XP = (35, 90)   # recompensa fixa pra quem ainda não tem XP acumulado
+
+
+def _boss3_chance_grupo(convocacoes: list) -> float:
+    """Calcula a chance de vitória do grupo contra Zephyrus: base + um
+    bônus por pessoa + um bônus pela raridade de cada criatura convocada,
+    sempre travado no teto de _BOSS3_CHANCE_GRUPO_MAX — um pouco mais
+    generoso que Dourakhar (boss2), mas ainda um boss de nível mítico."""
+    chance = _BOSS3_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS3_BONUS_POR_PARTICIPANTE
+    for _membro, criatura in convocacoes:
+        chance += _BOSS3_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+    return min(chance, _BOSS3_CHANCE_GRUPO_MAX)
+
+
+def _boss3_calcular_ganho_xp(user_id: int) -> tuple:
+    """Sorteia quanto de XP essa pessoa ganha por vencer Zephyrus: entre
+    22% e 65% do XP que ela já tem — ou uma recompensa fixa se ainda não
+    tiver XP nenhum acumulado."""
+    dados = xp_stats[user_id]
+    xp_atual = dados.get("xp", 0)
+    if xp_atual > 0:
+        percentual = random.uniform(_BOSS3_XP_GANHO_MIN, _BOSS3_XP_GANHO_MAX)
+        ganho = max(1, round(xp_atual * percentual))
+    else:
+        percentual = 0.0
+        ganho = random.randint(*_BOSS3_XP_GANHO_SEM_XP)
+    return ganho, percentual
+
+
+async def _boss3_premiar_vencedores(guild: discord.Guild, vencedores: list) -> list:
+    """Aplica o ganho de XP de cada vencedor, ativa o Booster de XP de
+    _BOSS3_BOOSTER_MINUTOS (mais curto que o dos outros bosses) pra cada
+    um deles, atualiza nível e dispara o aviso de level up quando for o
+    caso. Devolve uma lista de (membro, ganho, percentual)."""
+    resultados = []
+    for membro in vencedores:
+        dados = xp_stats[membro.id]
+        nivel_antigo = dados["nivel"]
+        ganho, percentual = _boss3_calcular_ganho_xp(membro.id)
+        dados["xp"] += ganho
+        dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+        if dados["nivel"] > nivel_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
+        # 🎁 Bônus exclusivo do Zephyrus: Booster de XP de apenas 2 minutos pra quem venceu
+        _xp_booster_ate[membro.id] = time.time() + _BOSS3_BOOSTER_MINUTOS * 60
+        resultados.append((membro, ganho, percentual))
+
+    asyncio.create_task(_salvar_xp_stats())
+    asyncio.create_task(_atualizar_ranking_xp())
+    return resultados
+
+
+async def _boss3_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
+    """Roda o confronto solo contra Zephyrus: só 3% de chance de vitória —
+    e se perder, não perde XP nenhum, só o orgulho."""
+    try:
+        criatura = _boss_criatura_mais_forte(membro.id)
+        info_raridade = _RARIDADES[criatura["raridade"]]
+
+        embed_convocacao = discord.Embed(
+            title="🌀 Um desafiante solitário ousa se apresentar!",
+            description=(
+                f"🌑 **Aeon:** ...{membro.mention} decidiu encarar Zephyrus sozinho. O véu se agita "
+                f"como se estivesse rindo. 🖤🔮\n"
+                f"🌟 **Celestia:** {membro.display_name} convoca {info_raridade['emoji']} "
+                f"**{criatura['nome']}**!! É NÍVEL MÍTICO, cuidado!! 😳🌟✨"
+            ),
+            color=info_raridade["cor"],
+        )
+        embed_convocacao.set_thumbnail(url=criatura["gif"])
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "🌀 **Zephyrus:** *\"Sozinho? Eu já vi poeira com mais ambição que você, mortal. "
+                "Mas tudo bem... vamos ver quanto tempo essa fagulha dura contra o véu.\"*"
+            ),
+            color=0x1b1033,
+        )
+        embed_batalha.set_image(url=_BOSS3_ZEPHYRUS_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        venceu = random.random() < _BOSS3_CHANCE_SOLO
+
+        if venceu:
+            resultados = await _boss3_premiar_vencedores(canal.guild, [membro])
+            _, ganho, percentual = resultados[0]
+            descricao = (
+                f"🏆 **O VÉU SE RASGOU!!** {membro.mention} e {info_raridade['emoji']} **{criatura['nome']}** "
+                f"derrubaram **ZEPHYRUS, O GUARDIÃO DO VÉU ARCANO**, SOZINHOS!! Só 3% de chance!! 🌀⚔️\n\n"
+                f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`) + ⚡ **Booster de XP {_BOSS3_BOOSTER_MINUTOS}min**!\n\n"
+                f"🌑 **Aeon:** ...ele subestimou. Foi o único erro que cometeu. As sombras anotam isso. 🖤🌀\n"
+                f"🌟 **Celestia:** ELE DUVIDOU E PERDEU!! 😭🌟🤍✨ TOMA ESSA, ZEPHYRUS!!"
+            )
+            cor = 0xf5c542
+        else:
+            descricao = (
+                f"🌀 **Zephyrus:** *\"...como eu disse.\"* {info_raridade['emoji']} **{criatura['nome']}** caiu "
+                f"em batalha, e {membro.mention} não conseguiu sozinho dessa vez.\n\n"
+                f"🍃 Nenhum XP foi perdido — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...era esperado. O véu não se abre fácil. 🖤🌑\n"
+                f"🌟 **Celestia:** Não desanima!! 🌸😢 Contra esse aqui também é bem melhor ir em grupo!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Zephyrus, o Guardião do Véu Arcano")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+async def _boss3_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
+    """Roda o confronto em grupo contra Zephyrus: cada participante convoca
+    a criatura mais forte que já desbloqueou, e a chance de vitória cresce
+    com o número (e a força) das criaturas convocadas — um pouco mais fácil
+    que Dourakhar (boss2), mas ainda nível mítico."""
+    try:
+        convocacoes = [(p, _boss_criatura_mais_forte(p.id)) for p in participantes]
+
+        embed_cabecalho = discord.Embed(
+            title=f"⚔️ {len(convocacoes)} guerreiro(a)s ousam encarar o véu!",
+            description="🌟 **Celestia:** ESSE TIME TÁ INDO CONTRA O NÍVEL MÍTICO!! 😱🌟✨ Boa sorte pra todos!!",
+            color=0x1b1033,
+        )
+        cards = _boss_cards_criaturas(convocacoes)
+
+        # 1º lote: cabeçalho + até 9 cards (10 embeds é o limite do Discord por
+        # mensagem). O resto (grupos grandes) sai em mensagens seguintes.
+        lote = [embed_cabecalho] + cards[:9]
+        restante = cards[9:]
+        msg1 = await canal.send(embeds=lote)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        while restante:
+            msg_extra = await canal.send(embeds=restante[:10])
+            asyncio.create_task(_apagar_mensagem_depois(msg_extra))
+            restante = restante[10:]
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "🌀 **Zephyrus:** *\"Um bando de mortais batendo à porta do véu... adoráveis. "
+                "Ingênuos, mas adoráveis. Vou tentar não bocejar enquanto isso acaba.\"*"
+            ),
+            color=0x1b1033,
+        )
+        embed_batalha.set_image(url=_BOSS3_ZEPHYRUS_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        chance = _boss3_chance_grupo(convocacoes)
+        venceu = random.random() < chance
+
+        if venceu:
+            resultados = await _boss3_premiar_vencedores(canal.guild, participantes)
+            texto_ganhos = "\n".join(
+                f"✨ {membro.mention} +`{ganho}` XP (`{percentual * 100:.1f}%`) ⚡"
+                for membro, ganho, percentual in resultados
+            )
+            descricao = (
+                f"🏆 **O VÉU CEDEU!!** O time de `{len(participantes)}` guerreiro(a)s derrubou "
+                f"**ZEPHYRUS, O GUARDIÃO DO VÉU ARCANO**!! (chance da batalha: `{chance * 100:.0f}%`) 🌀⚔️\n\n"
+                f"{texto_ganhos}\n\n"
+                f"⚡ Todos os vencedores também ganharam um **Booster de XP de {_BOSS3_BOOSTER_MINUTOS} minutos** "
+                f"(xp de call e mensagem em dobro)!\n\n"
+                f"🌑 **Aeon:** ...ele riu até o fim. Foi o erro dele. As sombras respeitam vocês. 🖤🌀\n"
+                f"🌟 **Celestia:** ELE ACHOU QUE VOCÊS ERAM FRACOS E SE FERROU!!! 😭🌟🤍✨"
+            )
+            cor = 0xf5c542
+        else:
+            mencoes = ", ".join(p.mention for p in participantes)
+            descricao = (
+                f"🌀 **Zephyrus:** *\"...eu avisei.\"* Mesmo com `{len(participantes)}` guerreiro(a)s "
+                f"juntos (`{chance * 100:.0f}%` de chance), o Guardião do Véu Arcano foi forte demais "
+                f"dessa vez. {mencoes} não conseguiram.\n\n"
+                f"🍃 Ninguém perdeu XP — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...nível mítico não perdoa fácil, mesmo o mais fraco deles. 🖤🌑\n"
+                f"🌟 **Celestia:** Vamos treinar e tentar de novo!! 🌸💫 Vocês foram MUITO corajosos!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Zephyrus, o Guardião do Véu Arcano")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+class Boss3RecrutamentoView(discord.ui.View):
+    """Botão único de 'Quero Participar!' que fica ativo por
+    _BOSS3_TEMPO_RECRUTAMENTO segundos, juntando o time que vai enfrentar
+    Zephyrus em conjunto. Quando o tempo acaba, a batalha começa sozinha."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS3_TEMPO_RECRUTAMENTO)
+        self.canal = canal
+        self.participantes: dict = {}   # user_id -> discord.Member
+        self.mensagem: discord.Message = None
+
+    @discord.ui.button(label="⚔️ Quero Participar!", style=discord.ButtonStyle.success)
+    async def participar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if interaction.user.id in self.participantes:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já tá na lista, guerreiro(a)!! 😆🌸", ephemeral=True
+            )
+            return
+
+        self.participantes[interaction.user.id] = interaction.user
+        button.label = f"⚔️ Quero Participar! ({len(self.participantes)})"
+        await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            if self.mensagem:
+                await self.mensagem.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+        participantes = list(self.participantes.values())
+        if not participantes:
+            try:
+                msg = await self.canal.send(
+                    "🌑 **Aeon:** ...ninguém teve coragem de se juntar a tempo. "
+                    "Zephyrus sorri e se dissolve de volta no véu... por enquanto. 🖤🌀"
+                )
+                asyncio.create_task(_apagar_mensagem_depois(msg))
+            finally:
+                _boss_ativo_no_canal.discard(self.canal.id)
+            return
+
+        asyncio.create_task(_boss3_batalha_grupo(self.canal, participantes))
+
+
+class Boss3EscolhaView(discord.ui.View):
+    """Botões de 'Todos Juntos' e 'Eu Consigo Sozinho' que aparecem quando
+    Zephyrus surge. A PRIMEIRA escolha feita (por qualquer pessoa) decide
+    o caminho dessa aparição do boss."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS3_TEMPO_ESCOLHA)
+        self.canal = canal
+        self.decidido = False
+        self.mensagem: discord.Message = None
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="🤝 Todos Juntos", style=discord.ButtonStyle.primary)
+    async def todos_juntos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🤝 O CHAMADO FOI FEITO!",
+            description=(
+                f"🌟 **Celestia:** {interaction.user.mention} decidiu enfrentar Zephyrus "
+                f"EM GRUPO!! 😱🌟✨\n"
+                f"🌑 **Aeon:** ...quem tiver coragem, clique no botão abaixo. `{_BOSS3_TEMPO_RECRUTAMENTO}s` "
+                f"pra se juntar ao time. 🖤🌀"
+            ),
+            color=0xff8800,
+        )
+        embed.set_image(url=_BOSS3_ZEPHYRUS_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        view_recrutamento = Boss3RecrutamentoView(self.canal)
+        msg_recrutamento = await self.canal.send(
+            "🌀 Time contra **Zephyrus, o Guardião do Véu Arcano** — clique pra participar!",
+            view=view_recrutamento,
+        )
+        view_recrutamento.mensagem = msg_recrutamento
+        asyncio.create_task(_apagar_mensagem_depois(msg_recrutamento))
+
+    @discord.ui.button(label="🗡️ Eu Consigo Sozinho", style=discord.ButtonStyle.danger)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🗡️ DESAFIO SOLITÁRIO ACEITO!",
+            description=(
+                f"🌑 **Aeon:** ...{interaction.user.mention} escolheu encarar Zephyrus sozinho. "
+                f"Isso não é coragem, isso é ousadia pura. 🖤🌀\n"
+                f"🌟 **Celestia:** SÓ 3% DE CHANCE?!?! 😰🌟 É NÍVEL MÍTICO, TEM CERTEZA?!"
+            ),
+            color=0xff4444,
+        )
+        embed.set_image(url=_BOSS3_ZEPHYRUS_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        asyncio.create_task(_boss3_batalha_solo(self.canal, interaction.user))
+
+    async def on_timeout(self):
+        if self.decidido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            embed = discord.Embed(
+                title="🌀 Zephyrus se dissolve de volta no véu...",
+                description=(
+                    "🌑 **Aeon:** ...ninguém teve coragem de decidir a tempo. O Guardião "
+                    "se retira... por enquanto. 🖤🌀"
+                ),
+                color=0x888888,
+            )
+            await self.mensagem.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+        _boss_ativo_no_canal.discard(self.canal.id)
+
+
+@bot.command(name="boss3")
+async def cmd_boss3(ctx):
+    """🌀 Invoca Zephyrus, o Guardião do Véu Arcano — boss de NÍVEL MÍTICO,
+    um pouco mais fraco que Dourakhar (boss2) mas ainda bem mais difícil
+    que o Dragão do Caos (boss1). Só o Reality (CRIADOR_ID) pode chamar.
+    O chat escolhe entre encarar sozinho (3% de chance) ou juntar um time
+    (mais gente = mais chance). Quem vencer ganha XP e leva um Booster de
+    XP de apenas 2 minutos. Uso: .boss3"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BOSS3_CANAL_ID)
+    if canal is None:
+        return
+
+    if canal.id in _boss_ativo_no_canal:
+        aviso = await ctx.send(
+            "🌟 **Celestia:** Já tem um boss ativo por lá!! Espera esse terminar!! 😅🌸"
+        )
+        asyncio.create_task(_apagar_mensagem_depois(aviso))
+        return
+
+    _boss_ativo_no_canal.add(canal.id)
+
+    embed = discord.Embed(
+        title="🌀 NÍVEL MÍTICO — O GUARDIÃO DO VÉU ARCANO DESPERTOU!!",
+        description=(
+            "🌑 **Aeon:** ...o véu entre os mundos racha, e algo antigo espia através da fenda. "
+            "Não é tão devastador quanto Dourakhar... mas ainda assim, nível mítico. 🖤🔮\n\n"
+            "🌀 **Zephyrus:** *\"Sinto o cheiro de mortais curiosos demais para o próprio bem. "
+            "Eu sou **Zephyrus**, Guardião do Véu Arcano. Aproximem-se... se conseguirem.\"*\n\n"
+            "🌟 **Celestia:** GENTE ISSO AQUI TAMBÉM É NÍVEL **MÍTICO**!! 😨🌟 Mais fraco que "
+            "Dourakhar, mas ainda MUITO mais perigoso que o Dragão do Caos!! Sozinho ou em grupo?? ✨\n\n"
+            f"⏳ Vocês têm `{_BOSS3_TEMPO_ESCOLHA}s` pra decidir."
+        ),
+        color=0x1b1033,
+    )
+    embed.set_image(url=_BOSS3_ZEPHYRUS_INTRO_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Nível Mítico: Zephyrus, o Guardião do Véu Arcano")
+
+    view = Boss3EscolhaView(canal)
+    msg = await canal.send(embed=embed, view=view)
+    view.mensagem = msg
+    asyncio.create_task(_apagar_mensagem_depois(msg))
+
+
 @bot.command(name="surpresachat")
 async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""

@@ -9549,9 +9549,11 @@ _VERXP_SOME_SEGUNDOS = 10   # a resposta do .verxp some sozinha depois desse tem
 @bot.command(name="verxp")
 async def cmd_verxp(ctx):
     """Mostra quanto de xp por minuto você está ganhando AGORA numa call de
-    voz (base + bônus da call + Booster de Baú + Booster de Call), com a
-    mesma conta usada de verdade em _processar_xp_call. A resposta some
-    sozinha em alguns segundos. Uso: .verxp"""
+    voz (base + bônus da call + Booster de Baú + Booster de Call), além de
+    quais boosters estão ativos (com o tempo que falta pra cada um) e há
+    quanto tempo você tá nessa call sem sair/mutar/trocar de canal. Usa a
+    mesma conta de verdade de _processar_xp_call. A resposta some sozinha
+    em alguns segundos. Uso: .verxp"""
     autor = ctx.author
 
     guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
@@ -9583,6 +9585,14 @@ async def cmd_verxp(ctx):
             "desmute pra voltar a ganhar."
         )
     else:
+        agora = time.time()
+
+        # Tempo contínuo nessa call — mesma streak usada pelo Booster de Call
+        # (zera se a pessoa sair, mutar ou trocar de canal, então reflete
+        # certinho "há quanto tempo você tá aqui, participando de verdade").
+        inicio_streak = _call_booster_inicio.get(autor.id)
+        tempo_na_call = (agora - inicio_streak) if inicio_streak else 0.0
+
         ganho_call = _XP_POR_TICK_CALL
         detalhes = [f"Base: `{_XP_POR_TICK_CALL}` xp/min"]
 
@@ -9591,19 +9601,32 @@ async def cmd_verxp(ctx):
         if mult_canal != 1.0:
             detalhes.append(f"Bônus dessa call: `x{mult_canal:g}`")
 
-        if time.time() < _xp_booster_ate.get(autor.id, 0):
+        bau_restante = _xp_booster_ate.get(autor.id, 0) - agora
+        if bau_restante > 0:
             ganho_call *= _BAU_BOOSTER_MULTIPLICADOR
-            detalhes.append(f"Booster de Baú ativo: `x{_BAU_BOOSTER_MULTIPLICADOR}`")
+            detalhes.append(
+                f"🎁 Booster de Baú ativo: `x{_BAU_BOOSTER_MULTIPLICADOR}` "
+                f"(dura mais `{_formatar_tempo_restante(bau_restante)}`)"
+            )
 
         nivel_boost = _nivel_call_booster(autor.id)
         if nivel_boost > 1:
             ganho_call *= nivel_boost
-            detalhes.append(f"Booster de Call (streak): `x{nivel_boost}`")
+            intervalo_segundos = _CALL_BOOSTER_INTERVALO_MINUTOS * 60
+            falta_prox_nivel = intervalo_segundos - (tempo_na_call % intervalo_segundos)
+            detalhes.append(
+                f"🔥 Booster de Call: `x{nivel_boost}` (nível {nivel_boost} — sobe pra "
+                f"`x{nivel_boost + 1}` em `{_formatar_tempo_restante(falta_prox_nivel)}`)"
+            )
+
+        if bau_restante <= 0 and nivel_boost <= 1:
+            detalhes.append("Nenhum booster ativo agora.")
 
         ganho_final = max(1, round(ganho_call))
 
         resposta = (
             f"🌟 **Celestia:** Agora você tá ganhando **`{ganho_final}` xp por minuto** nessa call!! 🌸✨\n"
+            f"› Tempo nessa call: `{_formatar_tempo_restante(tempo_na_call)}`\n"
             + "\n".join(f"› {linha}" for linha in detalhes)
         )
 

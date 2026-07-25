@@ -1784,6 +1784,25 @@ async def on_ready():
     if not loop_ranking_xp.is_running():
         loop_ranking_xp.start()
 
+    # Recupera (melhor esforço) quem já estava numa call válida e desmutada
+    # ANTES do bot (re)iniciar — sem isso, o Booster de Call (streak) só
+    # começa a contar na PRÓXIMA mudança de estado de voz dessa pessoa
+    # (sair, mutar, trocar de canal), o que pode nunca acontecer tão cedo.
+    # É por causa disso que quem já tava numa call há um tempão via
+    # `.verxp` mostrar "Tempo nessa call: 0m00s" e nenhum booster ativo,
+    # mesmo estando lá fazia tempo — o streak nunca tinha sido iniciado.
+    for guild in bot.guilds:
+        for canal_voz in guild.voice_channels:
+            if canal_voz.id in _XP_CALLS_PRIVADAS:
+                continue
+            for membro in canal_voz.members:
+                if membro.bot:
+                    continue
+                estado_voz = membro.voice
+                if estado_voz is not None and (estado_voz.self_mute or estado_voz.mute):
+                    continue
+                _call_booster_inicio.setdefault(membro.id, time.time())
+
     # Inicia a checagem periódica de ovos incubando (recompensa do .ovo)
     if not loop_checar_ovos.is_running():
         loop_checar_ovos.start()
@@ -11152,6 +11171,35 @@ _BAU_BOOSTER_MINUTOS = 5
 _BAU_BOOSTER_MULTIPLICADOR = 2
 
 _xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp em dobro expira
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .darbosster — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Dá o Booster de xp (o mesmo prêmio raro do Baú: xp de call E de mensagem
+# em dobro por _BAU_BOOSTER_MINUTOS minutos) direto pra alguém, sem precisar
+# esperar o baú sortear. De propósito NÃO aparece em nenhum lugar do help.
+# Uso (PV ou servidor): .darbosster <ID ou @membro>
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="darbosster")
+async def cmd_darbosster(ctx, alvo_id: int = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.darbosster <ID ou @membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    _xp_booster_ate[alvo_id] = time.time() + _BAU_BOOSTER_MINUTOS * 60
+
+    confirmacao = await ctx.send(
+        f"✅ Booster de xp (`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) ativado pra "
+        f"`{alvo_id}` por `{_BAU_BOOSTER_MINUTOS} min`."
+    )
+    await _apagar_mensagem_depois(confirmacao, 15)
 
 
 class BauView(discord.ui.View):

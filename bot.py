@@ -10421,6 +10421,106 @@ async def cmd_destravarbesta(ctx, membro: discord.Member = None):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# .reiniciacriaturas — comando de manutenção. Zera a COLEÇÃO de criaturas
+# de UMA pessoa específica (por ID): as criaturas/Bestas desbloqueadas, o
+# Nível de Capacidade de cada uma e a criatura favorita ativa. NÃO mexe em
+# XP, nível geral nem vitórias/derrotas — só no lado "criaturas" mesmo.
+# Irreversível, por isso pede confirmação por botão antes de aplicar.
+# ══════════════════════════════════════════════════════════════════════
+
+class ReiniciarCriaturasView(discord.ui.View):
+    def __init__(self, alvo_id: int, alvo_nome: str):
+        super().__init__(timeout=60)
+        self.alvo_id = alvo_id
+        self.alvo_nome = alvo_nome
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != CRIADOR_ID:
+            await interaction.response.send_message(
+                "⚠️ Só o Reality pode confirmar esse reset.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="✅ Confirmar reset",
+        style=discord.ButtonStyle.danger,
+        custom_id="reiniciar_criaturas_confirmar"
+    )
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        dados = xp_stats[self.alvo_id]
+        dados["criaturas"] = []
+        dados["usos_criaturas"] = {}
+        dados["favorito"] = {"id": None, "usos": 0, "cansacos": {}}
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=(
+                f"♻️ **Criaturas de `{self.alvo_nome}` (`{self.alvo_id}`) reiniciadas** — "
+                "coleção, Níveis de Capacidade e favorita voltaram a 0."
+            ),
+            embed=None,
+            view=self
+        )
+        self.stop()
+        asyncio.create_task(_salvar_xp_stats())
+
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.secondary,
+        custom_id="reiniciar_criaturas_cancelar"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ Reset cancelado.", embed=None, view=self)
+        self.stop()
+
+
+@bot.command(name="reiniciacriaturas", aliases=["reiniciarcriaturas", "resetcriaturas"])
+async def cmd_reiniciacriaturas(ctx, alvo_id: int = None):
+    """Reseta a coleção de criaturas (desbloqueadas, Níveis de Capacidade e
+    favorita) de UMA pessoa específica, por ID. Não mexe em XP/nível geral
+    nem vitórias/derrotas. Só o Reality pode usar.
+    Uso: .reiniciacriaturas <ID do membro>"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.reiniciacriaturas <ID do membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    alvo = guild.get_member(alvo_id) if guild else None
+    if alvo is None and guild:
+        try:
+            alvo = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            alvo = None
+
+    alvo_nome = alvo.display_name if alvo else str(alvo_id)
+    dados = xp_stats[alvo_id]
+    qtd_criaturas = len(dados.get("criaturas", []))
+
+    embed = discord.Embed(
+        title="♻️ Reiniciar Criaturas",
+        description=(
+            f"👤 **Membro:** {alvo.mention if alvo else f'`{alvo_id}`'} — `{alvo_nome}`\n"
+            f"📖 **Criaturas desbloqueadas atualmente:** `{qtd_criaturas}`\n\n"
+            "Isso vai **zerar** a coleção de criaturas (inclusive 🐺 Bestas), o Nível de Capacidade "
+            "de cada uma e a criatura favorita dessa pessoa.\n"
+            "⚠️ XP, nível geral e vitórias/derrotas **não** são afetados — só o lado \"criaturas\".\n\n"
+            "Tem certeza?"
+        ),
+        color=0xff4444
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Criaturas")
+    await ctx.send(embed=embed, view=ReiniciarCriaturasView(alvo_id, alvo_nome))
+
+
+# ══════════════════════════════════════════════════════════════════════
 # CRIATURA FAVORITA — comando `.favorito <nome>`. Enquanto alguém tiver uma
 # favorita ativa, ela é SEMPRE a escolhida nas batalhas dessa pessoa (em vez
 # do sorteio aleatório de sempre) — até "cansar" depois de um certo número
@@ -11252,6 +11352,80 @@ async def cmd_favorito(ctx, *, nome: str = None):
         f"`{_FAVORITO_USOS_ATE_CANSAR}` vezes seguidas e precisar descansar!\n"
         f"🌑 **Aeon:** ...as sombras vão priorizá-la. Escolha bem. 🖤🌑"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .darcriatura — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Concede uma criatura específica (por nome) direto pra coleção de alguém,
+# sem precisar passar por batalha nem sorteio. Útil pra corrigir coleção,
+# testar raridades específicas ou repor algo perdido.
+# De propósito NÃO aparece em nenhum lugar do help/ajuda.
+# Uso (PV ou servidor): .darcriatura <nome da criatura> <ID do membro>
+# Exemplo: .darcriatura Kraken do Abismo 769951556388257812
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="darcriatura")
+async def cmd_darcriatura(ctx, *, texto: str = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if texto is None:
+        aviso = await ctx.send("⚠️ Uso: `.darcriatura <nome da criatura> <ID do membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    # O ID precisa ser o ÚLTIMO token da mensagem — tudo antes disso é o
+    # nome da criatura (que pode ter espaço, acento, etc.).
+    partes = texto.rsplit(" ", 1)
+    if len(partes) != 2 or not partes[1].isdigit():
+        aviso = await ctx.send(
+            "⚠️ Uso: `.darcriatura <nome da criatura> <ID do membro>`\n"
+            "O ID precisa vir por último, separado por espaço. "
+            "Exemplo: `.darcriatura Kraken do Abismo 769951556388257812`"
+        )
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    nome_criatura, alvo_id_texto = partes
+    alvo_id = int(alvo_id_texto)
+
+    criatura = _encontrar_criatura_por_nome(nome_criatura)
+    if criatura is None:
+        aviso = await ctx.send(
+            f"❌ Nenhuma criatura encontrada pra `{nome_criatura}` (ou o nome é ambíguo — "
+            "tenta ser mais específico)."
+        )
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    alvo = guild.get_member(alvo_id) if guild else None
+    if alvo is None and guild:
+        try:
+            alvo = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            alvo = None
+    alvo_nome = alvo.display_name if alvo else str(alvo_id)
+
+    dados = xp_stats[alvo_id]
+    dados.setdefault("criaturas", [])
+    info_raridade = _RARIDADES[criatura["raridade"]]
+
+    if criatura["id"] in dados["criaturas"]:
+        aviso = await ctx.send(
+            f"⚠️ `{alvo_nome}` já tem {info_raridade['emoji']} **{criatura['nome']}** — nada mudou."
+        )
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    dados["criaturas"].append(criatura["id"])
+    asyncio.create_task(_salvar_xp_stats())
+
+    confirmacao = await ctx.send(
+        f"✅ {info_raridade['emoji']} **{criatura['nome']}** (*{info_raridade['label']}*) concedida "
+        f"pra `{alvo_nome}` (`{alvo_id}`)."
+    )
+    await _apagar_mensagem_depois(confirmacao, 15)
 
 
 # ══════════════════════════════════════════════════════════════════════

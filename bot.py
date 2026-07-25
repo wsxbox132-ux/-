@@ -1788,6 +1788,10 @@ async def on_ready():
     if not loop_checar_ovos.is_running():
         loop_checar_ovos.start()
 
+    # Inicia a checagem periódica dos ovos de dragão incubando (.ovodragao)
+    if not loop_checar_ovos_dragao.is_running():
+        loop_checar_ovos_dragao.start()
+
     # Registra as setinhas ◀ ▶ do ranking como view persistente (sobrevive a reinícios)
     bot.add_view(RankingXPView(total_paginas=2))
 
@@ -1894,6 +1898,16 @@ async def on_voice_state_update(
             _ovo_iniciar_contagem(member.id)
         elif saiu_da_call:
             _ovo_pausar_contagem(member.id)
+
+    # 🐉🥚 Ovo de Dragão pendente — mesma lógica do ovo normal acima, mas
+    # com seu próprio dicionário (uma pessoa pode ter os dois ovos ao mesmo tempo).
+    if member.id in _ovos_dragao_pendentes:
+        entrou_em_call = before.channel is None and after.channel is not None
+        saiu_da_call = before.channel is not None and after.channel is None
+        if entrou_em_call:
+            _ovo_dragao_iniciar_contagem(member.id)
+        elif saiu_da_call:
+            _ovo_dragao_pausar_contagem(member.id)
 
     try:
         if member.bot:
@@ -11430,6 +11444,176 @@ async def cmd_ovo(ctx, alvo_id: int = None):
         f"Fique `{_OVO_TEMPO_CHOCAR_SEGUNDOS // 60} min` numa call pra ele chocar — "
         "o tempo soma mesmo se você sair e voltar depois."
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# OVO DE DRAGÃO — igual ao .ovo normal, mas o ovo aqui é garantidamente
+# um 🐉 Dragão (raridade mítica). Mesmíssima mecânica: `.ovodragao <ID ou
+# @membro>` (só o Reality/CRIADOR_ID pode usar) dá o ovo pendente, a pessoa
+# precisa acumular `_OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS` numa call (o tempo
+# soma mesmo saindo e voltando) e, ao chocar, nasce um dragão aleatório
+# (prioriza um que ela ainda não tem). Tudo é anunciado no chat geral
+# (`_OVO_DRAGAO_CANAL_ID`) — inclusive a entrega do ovo, com uma introdução
+# mais épica que o ovo comum.
+# ⚠️ `_ovos_dragao_pendentes` também fica só em memória — um reinício do
+# bot perde os ovos de dragão ainda chocando.
+# ══════════════════════════════════════════════════════════════════════
+
+# Pool de dragões: todas as criaturas cujo id começa com "dragao_" — hoje
+# são todas raridade mítica, mas o filtro é por id pra já valer
+# automaticamente se algum dragão novo for adicionado no futuro.
+_DRAGOES_DISPONIVEIS = [c for c in _BATALHA_CRIATURAS if c["id"].startswith("dragao_")]
+
+_OVO_DRAGAO_CANAL_ID = _XP_CANAL_1                  # mesmo canal do chat geral — onde tudo é anunciado
+_OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60          # 5 minutos acumulados numa call pra chocar
+_OVO_DRAGAO_CHECAGEM_INTERVALO_SEGUNDOS = 20        # de quanto em quanto tempo confere quem já bateu a meta
+
+# user_id -> {"tempo_acumulado": float, "entrou_em": float|None}
+_ovos_dragao_pendentes: dict = {}
+
+
+def _ovo_dragao_tempo_atual(user_id: int) -> float:
+    """Tempo total (já acumulado + sessão em andamento, se houver) que essa
+    pessoa já passou numa call desde que ganhou o ovo de dragão pendente."""
+    ovo = _ovos_dragao_pendentes.get(user_id)
+    if ovo is None:
+        return 0.0
+    total = ovo["tempo_acumulado"]
+    if ovo["entrou_em"] is not None:
+        total += time.time() - ovo["entrou_em"]
+    return total
+
+
+def _ovo_dragao_iniciar_contagem(user_id: int) -> None:
+    """Chamada quando alguém com ovo de dragão pendente entra numa call —
+    marca o início da sessão atual (se não tiver uma já rodando)."""
+    ovo = _ovos_dragao_pendentes.get(user_id)
+    if ovo is not None and ovo["entrou_em"] is None:
+        ovo["entrou_em"] = time.time()
+
+
+def _ovo_dragao_pausar_contagem(user_id: int) -> None:
+    """Chamada quando alguém com ovo de dragão pendente sai da call — soma
+    o tempo dessa sessão no acumulado e pausa a contagem até ela voltar."""
+    ovo = _ovos_dragao_pendentes.get(user_id)
+    if ovo is not None and ovo["entrou_em"] is not None:
+        ovo["tempo_acumulado"] += time.time() - ovo["entrou_em"]
+        ovo["entrou_em"] = None
+
+
+async def _ovo_dragao_chocar(user_id: int) -> None:
+    """Choca o ovo de dragão dessa pessoa: sorteia um 🐉 dragão (prioriza
+    um que ela ainda não tem) pra coleção dela, e anuncia no chat geral."""
+    _ovos_dragao_pendentes.pop(user_id, None)
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    _dragoes_nao_possuidos = [
+        c for c in _DRAGOES_DISPONIVEIS if c["id"] not in dados["criaturas"]
+    ]
+    pool = _dragoes_nao_possuidos or _DRAGOES_DISPONIVEIS
+    pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
+    dragao_nascido = random.choices(pool, weights=pesos, k=1)[0]
+    if dragao_nascido["id"] not in dados["criaturas"]:
+        dados["criaturas"].append(dragao_nascido["id"])
+    asyncio.create_task(_salvar_xp_stats())
+
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return
+    canal = guild.get_channel(_OVO_DRAGAO_CANAL_ID)
+    if canal is None:
+        return
+
+    membro = guild.get_member(user_id)
+    mencao = membro.mention if membro else f"<@{user_id}>"
+    info_raridade = _RARIDADES[dragao_nascido["raridade"]]
+
+    embed = discord.Embed(
+        title="🐉🥚 O Ovo do Dragão Chocou!",
+        description=(
+            f"🌟 **Celestia:** AAAAAAA {mencao} ELE CHOCOU!! 😍🌟✨ *gira em faíscas douradas* "
+            "A espera valeu CADA segundo... olha só o que estava dormindo ali dentro...\n"
+            f"🌑 **Aeon:** ...{info_raridade['emoji']} **{dragao_nascido['nome']}** "
+            f"(*{info_raridade['label']}*). Um dragão reconhece outro guerreiro. As sombras se curvam. 🖤🐉\n\n"
+            "Use `.criaturas` pra conferir sua coleção. 📖"
+        ),
+        color=info_raridade["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_thumbnail(url=dragao_nascido["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Incubadora de Dragões")
+    await canal.send(embed=embed)
+
+
+@tasks.loop(seconds=_OVO_DRAGAO_CHECAGEM_INTERVALO_SEGUNDOS)
+async def loop_checar_ovos_dragao():
+    """Roda a cada _OVO_DRAGAO_CHECAGEM_INTERVALO_SEGUNDOS: confere se
+    algum ovo de dragão pendente já bateu a meta de tempo em call — assim
+    ele choca na hora, sem precisar esperar a pessoa sair da call."""
+    for user_id in list(_ovos_dragao_pendentes.keys()):
+        try:
+            if _ovo_dragao_tempo_atual(user_id) >= _OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS:
+                await _ovo_dragao_chocar(user_id)
+        except Exception as e:
+            print(f"[ovodragao] ERRO ao chocar ovo de dragão de {user_id}: {e!r}")
+
+
+@bot.command(name="ovodragao", aliases=["ovodragão"])
+async def cmd_ovodragao(ctx, alvo_id: int = None):
+    """Dá um 🐉🥚 ovo de dragão pendente pra alguém. Igual ao .ovo normal,
+    mas o que nasce é garantidamente um dragão. Anuncia a entrega no chat
+    geral com uma introdução épica. Só o Reality pode usar.
+    Uso: .ovodragao <ID ou @membro>"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        await ctx.send("⚠️ **Uso correto:** `.ovodragao <ID ou @membro>`")
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    membro = guild.get_member(alvo_id) if guild else None
+    if membro is None and guild:
+        try:
+            membro = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            await ctx.send(f"❌ Membro com ID `{alvo_id}` não encontrado no servidor.")
+            return
+
+    _ovos_dragao_pendentes[alvo_id] = {"tempo_acumulado": 0.0, "entrou_em": None}
+    # Se a pessoa já estiver numa call agora mesmo, a contagem já começa valendo.
+    if membro is not None and membro.voice is not None and membro.voice.channel is not None:
+        _ovo_dragao_iniciar_contagem(alvo_id)
+
+    mencao = membro.mention if membro else f"<@{alvo_id}>"
+    minutos = _OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS // 60
+
+    embed_intro = discord.Embed(
+        title="🐉🥚 Um Ovo Lendário Surgiu...",
+        description=(
+            "**DIANTE DE INÚMERAS BATALHAS, UM OVO CAIU SOBRE SUAS MÃOS.**\n\n"
+            f"🌑 **Aeon:** ...{mencao}. As sombras sentiram o peso disso antes mesmo de acontecer. 🖤🐉 "
+            "Algo ancestral dorme aí dentro — e não é uma criatura qualquer.\n\n"
+            f"🌟 **Celestia:** UM OVO DE DRAGÃO PRA {mencao}!! 😍🌟✨ *gira sem parar* "
+            f"Fique `{minutos} min` numa call pra ele chocar — o tempo soma mesmo que você "
+            "saia e volte depois!! Boa sorte, guerreiro(a)!! 🌸🐉"
+        ),
+        color=_RARIDADES["mitico"]["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed_intro.set_footer(text="🌑 Aeon & ☀️ Celestia — Incubadora de Dragões")
+
+    canal_geral = guild.get_channel(_OVO_DRAGAO_CANAL_ID) if guild else None
+    if canal_geral is not None:
+        await canal_geral.send(embed=embed_intro)
+
+    # Se o comando foi usado fora do chat geral (ex.: no PV, como o .ovo normal),
+    # manda uma confirmação simples pro Reality também.
+    if canal_geral is None or ctx.channel.id != canal_geral.id:
+        await ctx.send(f"✅ Ovo de dragão entregue pra {mencao} — anunciado no chat geral.")
 
 
 # Comando .boss2 (só o Reality/CRIADOR_ID pode ativar) invoca o boss mais

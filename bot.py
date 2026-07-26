@@ -10642,11 +10642,14 @@ _BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sum
 
 # ── Vantagem — comando .vantagem <ID>, só o Reality. Marca alguém pra
 # GANHAR garantido a PRÓXIMA batalha que participar (como desafiante ou
-# desafiado, tanto faz) e saquear _VANTAGEM_PERCENTUAL_ROUBO (30%) de XP
-# garantido da outra pessoa, pulando o sorteio normal de vitória/roubo. É
+# desafiado, tanto faz) e saquear entre _VANTAGEM_ROUBO_MIN e
+# _VANTAGEM_ROUBO_MAX (20% a 30%) de XP garantido da outra pessoa — o
+# percentual exato ainda é sorteado, só que dentro dessa faixa mais alta e
+# sem chance de sair 0% — pulando o sorteio normal de vitória/roubo. É
 # consumida (removida do set) assim que essa próxima batalha acontece. ──
-_vantagem_ativa: set = set()          # user_ids com Vantagem pendente pra próxima batalha
-_VANTAGEM_PERCENTUAL_ROUBO = 0.30     # 30% de xp roubado garantido quando a Vantagem é usada
+_vantagem_ativa: set = set()      # user_ids com Vantagem pendente pra próxima batalha
+_VANTAGEM_ROUBO_MIN = 0.20        # 20% — mínimo de xp roubado garantido quando a Vantagem é usada
+_VANTAGEM_ROUBO_MAX = 0.30        # 30% — máximo de xp roubado garantido quando a Vantagem é usada
 
 
 async def _apagar_mensagem_depois(mensagem: discord.Message, segundos: int = _BATALHA_TEMPO_SOMEM) -> None:
@@ -11004,9 +11007,9 @@ async def _executar_batalha(
     xp_roubado = 0
     percentual = 0.0
     if vantagem_usada_por is not None:
-        # 🍀 Vantagem usada — rouba os 30% garantidos, sem passar pelo
-        # sorteio normal de "pode não roubar nada"/faixa aleatória.
-        percentual = _VANTAGEM_PERCENTUAL_ROUBO
+        # 🍀 Vantagem usada — rouba entre 20% e 30% garantido (sem chance de
+        # 0%), sem passar pelo sorteio normal de "pode não roubar nada".
+        percentual = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
         if xp_perdedor_antes > 0:
             xp_roubado = max(1, round(xp_perdedor_antes * percentual))
             xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
@@ -11646,8 +11649,9 @@ async def cmd_bostercall(ctx, canal_id: int = None):
 # .vantagem — comando interno, só o Reality (CRIADOR_ID) pode usar.
 # Marca alguém pra GANHAR garantido a PRÓXIMA batalha (.desafio) que ela
 # participar, seja como desafiante ou desafiada — pula o sorteio normal de
-# vitória e o de roubo de XP: ela vence na hora e saqueia
-# _VANTAGEM_PERCENTUAL_ROUBO (30%) garantido de XP da outra pessoa.
+# vitória e o de roubo de XP: ela vence na hora e saqueia entre
+# _VANTAGEM_ROUBO_MIN e _VANTAGEM_ROUBO_MAX (20% a 30%) garantido de XP da
+# outra pessoa.
 # A Vantagem fica "guardada" até a próxima batalha de verdade acontecer
 # (não expira sozinha) e é consumida (removida) nesse momento.
 # De propósito NÃO aparece em nenhum lugar do help/ajuda.
@@ -11670,8 +11674,8 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
 
     confirmacao = await ctx.send(
         f"🍀✨ Vantagem concedida pra `{alvo_id}` — ela vai vencer garantido a próxima batalha que "
-        f"participar, e vai saquear `{_VANTAGEM_PERCENTUAL_ROUBO * 100:.0f}%` de XP garantido da "
-        "outra pessoa."
+        f"participar, e vai saquear entre `{_VANTAGEM_ROUBO_MIN * 100:.0f}%` e "
+        f"`{_VANTAGEM_ROUBO_MAX * 100:.0f}%` de XP garantido da outra pessoa."
     )
     await _apagar_mensagem_depois(confirmacao, 15)
 

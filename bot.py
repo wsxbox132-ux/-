@@ -10640,6 +10640,14 @@ _MITICO_CHANCE_DESBLOQUEIO = 0.01    # 1% de chance nessa rolagem
 _BATALHA_TEMPO_ACEITE = 60          # segundos que o desafiado tem pra aceitar/recusar
 _BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sumir sozinha
 
+# ── Vantagem — comando .vantagem <ID>, só o Reality. Marca alguém pra
+# GANHAR garantido a PRÓXIMA batalha que participar (como desafiante ou
+# desafiado, tanto faz) e saquear _VANTAGEM_PERCENTUAL_ROUBO (30%) de XP
+# garantido da outra pessoa, pulando o sorteio normal de vitória/roubo. É
+# consumida (removida do set) assim que essa próxima batalha acontece. ──
+_vantagem_ativa: set = set()          # user_ids com Vantagem pendente pra próxima batalha
+_VANTAGEM_PERCENTUAL_ROUBO = 0.30     # 30% de xp roubado garantido quando a Vantagem é usada
+
 
 async def _apagar_mensagem_depois(mensagem: discord.Message, segundos: int = _BATALHA_TEMPO_SOMEM) -> None:
     """Espera alguns segundos e apaga a mensagem sozinha, ignorando erros
@@ -10872,16 +10880,36 @@ async def _executar_batalha(
     # de cada criatura (_chance_vitoria): quanto maior a diferença de
     # raridade E de nível, mais a balança pende pro lado mais forte — mas o
     # lado mais fraco sempre mantém uma chance real de dar a zebra.
-    chance_desafiante_vence = _chance_vitoria(
-        criatura_desafiante, nivel_desafiante, criatura_desafiado, nivel_desafiado
-    )
+    #
+    # 🍀 EXCEÇÃO: se um dos dois tiver uma Vantagem pendente (.vantagem), ela
+    # é consumida aqui e o resultado NEM passa pelo sorteio — essa pessoa
+    # vence garantido essa batalha (a próxima que ela participar depois de
+    # receber a Vantagem).
+    vantagem_usada_por = None
+    if desafiante.id in _vantagem_ativa:
+        _vantagem_ativa.discard(desafiante.id)
+        vantagem_usada_por = desafiante.id
+    elif desafiado.id in _vantagem_ativa:
+        _vantagem_ativa.discard(desafiado.id)
+        vantagem_usada_por = desafiado.id
 
-    if random.random() < chance_desafiante_vence:
+    if vantagem_usada_por == desafiante.id:
         vencedor, criatura_vencedora = desafiante, criatura_desafiante
         perdedor, criatura_perdedora = desafiado, criatura_desafiado
-    else:
+    elif vantagem_usada_por == desafiado.id:
         vencedor, criatura_vencedora = desafiado, criatura_desafiado
         perdedor, criatura_perdedora = desafiante, criatura_desafiante
+    else:
+        chance_desafiante_vence = _chance_vitoria(
+            criatura_desafiante, nivel_desafiante, criatura_desafiado, nivel_desafiado
+        )
+
+        if random.random() < chance_desafiante_vence:
+            vencedor, criatura_vencedora = desafiante, criatura_desafiante
+            perdedor, criatura_perdedora = desafiado, criatura_desafiado
+        else:
+            vencedor, criatura_vencedora = desafiado, criatura_desafiado
+            perdedor, criatura_perdedora = desafiante, criatura_desafiante
 
     # ── Registra o uso — CADA criatura usada nessa batalha (vencendo ou
     # perdendo) soma +1 no seu contador, e pode subir de Nível de Capacidade
@@ -10975,7 +11003,14 @@ async def _executar_batalha(
 
     xp_roubado = 0
     percentual = 0.0
-    if xp_perdedor_antes > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
+    if vantagem_usada_por is not None:
+        # 🍀 Vantagem usada — rouba os 30% garantidos, sem passar pelo
+        # sorteio normal de "pode não roubar nada"/faixa aleatória.
+        percentual = _VANTAGEM_PERCENTUAL_ROUBO
+        if xp_perdedor_antes > 0:
+            xp_roubado = max(1, round(xp_perdedor_antes * percentual))
+            xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
+    elif xp_perdedor_antes > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
         percentual = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
         xp_roubado = max(1, round(xp_perdedor_antes * percentual))
         xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
@@ -10998,7 +11033,13 @@ async def _executar_batalha(
     asyncio.create_task(_salvar_xp_stats())
 
     # ── Conclusão dramática ───────────────────────────────────────────────
-    if xp_roubado > 0:
+    if vantagem_usada_por is not None:
+        texto_roubo = (
+            f"🍀✨ **VANTAGEM!** **{vencedor.display_name}** tinha uma vantagem secreta e venceu essa "
+            f"batalha garantido — saqueou **`{xp_roubado}` XP** (`{percentual * 100:.0f}%`) de "
+            f"**{perdedor.display_name}**!"
+        )
+    elif xp_roubado > 0:
         texto_roubo = (
             f"💰 O dado sorteou **`{percentual * 100:.1f}%`**! "
             f"**{vencedor.display_name}** saqueou **`{xp_roubado}` XP** de **{perdedor.display_name}**!"
@@ -11603,6 +11644,40 @@ async def cmd_bostercall(ctx, canal_id: int = None):
         f"cada um também subiu +1 nível em cima do que já tinha.\n{nomes}"
     )
     await _apagar_mensagem_depois(confirmacao, 30)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .vantagem — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Marca alguém pra GANHAR garantido a PRÓXIMA batalha (.desafio) que ela
+# participar, seja como desafiante ou desafiada — pula o sorteio normal de
+# vitória e o de roubo de XP: ela vence na hora e saqueia
+# _VANTAGEM_PERCENTUAL_ROUBO (30%) garantido de XP da outra pessoa.
+# A Vantagem fica "guardada" até a próxima batalha de verdade acontecer
+# (não expira sozinha) e é consumida (removida) nesse momento.
+# De propósito NÃO aparece em nenhum lugar do help/ajuda.
+# Uso (PV ou servidor): .vantagem <ID ou @membro>
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="vantagem")
+async def cmd_vantagem(ctx, alvo_id: int = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.vantagem <ID ou @membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    _vantagem_ativa.add(alvo_id)
+
+    confirmacao = await ctx.send(
+        f"🍀✨ Vantagem concedida pra `{alvo_id}` — ela vai vencer garantido a próxima batalha que "
+        f"participar, e vai saquear `{_VANTAGEM_PERCENTUAL_ROUBO * 100:.0f}%` de XP garantido da "
+        "outra pessoa."
+    )
+    await _apagar_mensagem_depois(confirmacao, 15)
 
 
 class BauView(discord.ui.View):

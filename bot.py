@@ -11547,6 +11547,55 @@ async def cmd_darbosster(ctx, alvo_id: int = None):
     await _apagar_mensagem_depois(confirmacao, 15)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# .bostercall — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Igual o .darbosster, mas em massa: dá o Booster de xp (o mesmo prêmio raro
+# do Baú, x2 em call E mensagem por _BAU_BOOSTER_MINUTOS minutos) + 1 nível
+# de Booster de Call pra TODO MUNDO que estiver, agora, dentro do canal de
+# voz indicado. De propósito NÃO aparece em nenhum lugar do help.
+# Uso (PV ou servidor): .bostercall <ID do canal de voz>
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="bostercall")
+async def cmd_bostercall(ctx, canal_id: int = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if canal_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.bostercall <ID do canal de voz>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    canal_voz = guild.get_channel(canal_id) if guild else None
+    if canal_voz is None:
+        canal_voz = bot.get_channel(canal_id)
+
+    if canal_voz is None or not isinstance(canal_voz, (discord.VoiceChannel, discord.StageChannel)):
+        aviso = await ctx.send(f"❌ Não achei nenhum canal de voz com o ID `{canal_id}`.")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    membros = [m for m in canal_voz.members if not m.bot]
+    if not membros:
+        aviso = await ctx.send(f"⚠️ Não tem ninguém (sem contar bots) em **{canal_voz.name}** agora.")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    for membro in membros:
+        _conceder_xp_booster(membro.id, _BAU_BOOSTER_MINUTOS)
+        _empilhar_call_booster(membro.id)
+
+    nomes = ", ".join(f"`{m.display_name}`" for m in membros)
+    confirmacao = await ctx.send(
+        f"✅ Booster de xp (`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) empilhado por mais "
+        f"`{_BAU_BOOSTER_MINUTOS} min` pra todo mundo em **{canal_voz.name}** "
+        f"(`{len(membros)}` pessoa{'s' if len(membros) != 1 else ''}) — e o Booster de Call de "
+        f"cada um também subiu +1 nível em cima do que já tinha.\n{nomes}"
+    )
+    await _apagar_mensagem_depois(confirmacao, 30)
+
+
 class BauView(discord.ui.View):
     """View do baú — só a PRIMEIRA pessoa que clicar leva o prêmio; quem
     clicar depois disso só recebe um aviso de que já foi levado.

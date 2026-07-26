@@ -11686,6 +11686,8 @@ _BAU_CHANCE_SECRETO = 0.08    # 8% de chance — ainda o prêmio mais raro do ba
 _BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster
 _BAU_XP_MIN = 0.01            # 1%  — mínimo de xp que o dado pode sortear
 _BAU_XP_MAX = 0.20            # 20% — máximo de xp que o dado pode sortear
+_BAU_XP_TETO = 800            # teto máximo de XP por baú — evita que rank alto dispare
+                                # cada vez mais na frente do rank baixo.
 _BAU_BOOSTER_MINUTOS = 5
 _BAU_BOOSTER_MULTIPLICADOR = 2
 
@@ -11924,6 +11926,7 @@ class BauView(discord.ui.View):
             percentual = random.uniform(_BAU_XP_MIN, _BAU_XP_MAX)
             nivel_antigo = dados["nivel"]
             ganho = max(5, round(dados["xp"] * percentual))
+            ganho = min(ganho, _BAU_XP_TETO)
             dados["xp"] += ganho
             dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
             texto_premio = (
@@ -12090,6 +12093,9 @@ _BOSS_BONUS_RARIDADE_CRIATURA = {
 _BOSS_XP_GANHO_MIN = 0.20   # 20% — mínimo de XP que quem vence pode ganhar
 _BOSS_XP_GANHO_MAX = 0.60   # 60% — máximo de XP que quem vence pode ganhar
 _BOSS_XP_GANHO_SEM_XP = (30, 80)   # recompensa fixa pra quem ainda não tem XP acumulado
+_BOSS_XP_GANHO_TETO = 3000   # teto máximo de XP por vitória — evita que rank alto dispare
+                              # cada vez mais na frente do rank baixo. Ajuste esse número pra
+                              # combinar com o nível mais alto real do seu servidor.
 
 _boss_ativo_no_canal: set = set()   # channel_id -> impede 2 boss ao mesmo tempo no mesmo canal
 
@@ -12118,13 +12124,16 @@ def _boss_chance_grupo(convocacoes: list) -> float:
 
 def _boss_calcular_ganho_xp(user_id: int) -> tuple:
     """Sorteia quanto de XP essa pessoa ganha por vencer o boss: entre 20%
-    e 60% do XP que ela já tem — ou uma recompensa fixa se ainda não tiver
-    XP nenhum acumulado (pra ninguém sair de mãos vazias)."""
+    e 60% do XP que ela já tem — travado num teto máximo (_BOSS_XP_GANHO_TETO)
+    pra não deixar quem já é rank alto disparar cada vez mais na frente —
+    ou uma recompensa fixa se ainda não tiver XP nenhum acumulado (pra
+    ninguém sair de mãos vazias)."""
     dados = xp_stats[user_id]
     xp_atual = dados.get("xp", 0)
     if xp_atual > 0:
         percentual = random.uniform(_BOSS_XP_GANHO_MIN, _BOSS_XP_GANHO_MAX)
         ganho = max(1, round(xp_atual * percentual))
+        ganho = min(ganho, _BOSS_XP_GANHO_TETO)
     else:
         percentual = 0.0
         ganho = random.randint(*_BOSS_XP_GANHO_SEM_XP)
@@ -12869,6 +12878,9 @@ _BOSS2_BONUS_RARIDADE_CRIATURA = {
 _BOSS2_XP_GANHO_MIN = 0.25   # 25% — mínimo de XP que quem vence pode ganhar (um pouco melhor que o boss 1)
 _BOSS2_XP_GANHO_MAX = 0.70   # 70% — máximo de XP que quem vence pode ganhar
 _BOSS2_XP_GANHO_SEM_XP = (40, 100)   # recompensa fixa pra quem ainda não tem XP acumulado
+_BOSS2_XP_GANHO_TETO = 4000   # teto máximo de XP por vitória — um pouco mais alto que o boss 1
+                                # (Dourakhar é mais raro/difícil), mas ainda travado pra não
+                                # deixar o rank alto disparar cada vez mais na frente.
 
 
 def _boss2_chance_grupo(convocacoes: list) -> float:
@@ -12884,13 +12896,16 @@ def _boss2_chance_grupo(convocacoes: list) -> float:
 
 def _boss2_calcular_ganho_xp(user_id: int) -> tuple:
     """Sorteia quanto de XP essa pessoa ganha por vencer Dourakhar: entre
-    25% e 70% do XP que ela já tem — um pouco melhor que o boss 1 — ou uma
-    recompensa fixa se ainda não tiver XP nenhum acumulado."""
+    25% e 70% do XP que ela já tem — um pouco melhor que o boss 1 — travado
+    num teto máximo (_BOSS2_XP_GANHO_TETO) pra não deixar quem já é rank
+    alto disparar cada vez mais na frente — ou uma recompensa fixa se
+    ainda não tiver XP nenhum acumulado."""
     dados = xp_stats[user_id]
     xp_atual = dados.get("xp", 0)
     if xp_atual > 0:
         percentual = random.uniform(_BOSS2_XP_GANHO_MIN, _BOSS2_XP_GANHO_MAX)
         ganho = max(1, round(xp_atual * percentual))
+        ganho = min(ganho, _BOSS2_XP_GANHO_TETO)
     else:
         percentual = 0.0
         ganho = random.randint(*_BOSS2_XP_GANHO_SEM_XP)
@@ -13323,6 +13338,8 @@ _BOSS3_BONUS_RARIDADE_CRIATURA = {
 _BOSS3_XP_GANHO_MIN = 0.22   # 22% — mínimo de XP que quem vence pode ganhar (entre o boss1 e o boss2)
 _BOSS3_XP_GANHO_MAX = 0.65   # 65% — máximo de XP que quem vence pode ganhar
 _BOSS3_XP_GANHO_SEM_XP = (35, 90)   # recompensa fixa pra quem ainda não tem XP acumulado
+_BOSS3_XP_GANHO_TETO = 3500   # teto máximo de XP por vitória — entre o teto do boss1 e do
+                                # boss2 — evita que rank alto dispare cada vez mais na frente.
 
 
 def _boss3_chance_grupo(convocacoes: list) -> float:
@@ -13338,13 +13355,16 @@ def _boss3_chance_grupo(convocacoes: list) -> float:
 
 def _boss3_calcular_ganho_xp(user_id: int) -> tuple:
     """Sorteia quanto de XP essa pessoa ganha por vencer Zephyrus: entre
-    22% e 65% do XP que ela já tem — ou uma recompensa fixa se ainda não
+    22% e 65% do XP que ela já tem — travado num teto máximo
+    (_BOSS3_XP_GANHO_TETO) pra não deixar quem já é rank alto disparar
+    cada vez mais na frente — ou uma recompensa fixa se ainda não
     tiver XP nenhum acumulado."""
     dados = xp_stats[user_id]
     xp_atual = dados.get("xp", 0)
     if xp_atual > 0:
         percentual = random.uniform(_BOSS3_XP_GANHO_MIN, _BOSS3_XP_GANHO_MAX)
         ganho = max(1, round(xp_atual * percentual))
+        ganho = min(ganho, _BOSS3_XP_GANHO_TETO)
     else:
         percentual = 0.0
         ganho = random.randint(*_BOSS3_XP_GANHO_SEM_XP)
@@ -13774,6 +13794,9 @@ _BOSS4_BONUS_RARIDADE_CRIATURA = {
 _BOSS4_XP_GANHO_MIN = 0.25    # 25% — mínimo de XP que quem vence pode ganhar (o melhor de todos os bosses)
 _BOSS4_XP_GANHO_MAX = 0.75    # 75% — máximo de XP que quem vence pode ganhar
 _BOSS4_XP_GANHO_SEM_XP = (45, 110)   # recompensa fixa pra quem ainda não tem XP acumulado
+_BOSS4_XP_GANHO_TETO = 4500    # teto máximo de XP por vitória — o maior de todos os bosses
+                                 # (Cthulhu é o mais raro), mas ainda travado pra não deixar
+                                 # o rank alto disparar cada vez mais na frente.
 
 
 def _boss4_criatura_lendaria_mais_forte(user_id: int):
@@ -13823,12 +13846,15 @@ def _boss4_chance_grupo(convocacoes: list) -> float:
 def _boss4_calcular_ganho_xp(user_id: int) -> tuple:
     """Sorteia quanto de XP essa pessoa ganha por vencer Cthulhu: entre 25%
     e 75% do XP que ela já tem — a melhor faixa de recompensa entre todos
-    os bosses — ou uma recompensa fixa se ainda não tiver XP acumulado."""
+    os bosses — travado num teto máximo (_BOSS4_XP_GANHO_TETO) pra não
+    deixar quem já é rank alto disparar cada vez mais na frente — ou uma
+    recompensa fixa se ainda não tiver XP acumulado."""
     dados = xp_stats[user_id]
     xp_atual = dados.get("xp", 0)
     if xp_atual > 0:
         percentual = random.uniform(_BOSS4_XP_GANHO_MIN, _BOSS4_XP_GANHO_MAX)
         ganho = max(1, round(xp_atual * percentual))
+        ganho = min(ganho, _BOSS4_XP_GANHO_TETO)
     else:
         percentual = 0.0
         ganho = random.randint(*_BOSS4_XP_GANHO_SEM_XP)

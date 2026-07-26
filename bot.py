@@ -13550,6 +13550,516 @@ async def cmd_boss3(ctx):
     asyncio.create_task(_apagar_mensagem_depois(msg))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOSS 4 — Cthulhu, o Ancião dos Abismos
+# O boss mais forte e mais EXCLUSIVO de todos: ele simplesmente NÃO aceita
+# nada abaixo de 🟡 Lendária. Quem desafiar (sozinho ou em grupo) sempre
+# convoca a criatura Lendária de MAIOR Nível de Capacidade que já tiver —
+# e quem não tiver nenhuma Lendária desbloqueada é recusado na hora, tanto
+# no botão solo quanto no recrutamento em grupo.
+#
+# Dificuldade mítica, igual Dourakhar/Zephyrus — mas o bônus por
+# participante é o MAIOR de todos os bosses: grupos grandes ganham chance
+# desproporcionalmente mais rápido do que contra qualquer outro boss.
+# ══════════════════════════════════════════════════════════════════════
+
+_BOSS4_CTHULHU_INTRO_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530761640184905859/1785032338734.gif?ex=6a66c05f&is=6a656edf&hm=498a5804dc154079223effab883c04944c32d2451e5506d77a760c00f808017f"
+_BOSS4_CTHULHU_BATALHA_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1530764368453701683/1785032847665.gif?ex=6a66c2e9&is=6a657169&hm=880fe48537da9be053f931f2f76c870f154f3f21d4a02685976ceceec849c994"
+
+_BOSS4_CANAL_ID = _BOSS_CANAL_ID   # mesmo canal dos outros bosses — só aparece aqui
+
+_BOSS4_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
+_BOSS4_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
+
+# Booster exclusivo do Cthulhu: o mais longo de todos os bosses (5 min,
+# igual o do Baú), condizente com ele ser o boss mais forte e difícil.
+_BOSS4_BOOSTER_MINUTOS = 5
+
+_BOSS4_CHANCE_SOLO = 0.01   # 1% — nível mítico, tão difícil sozinho quanto Dourakhar
+
+# Batalha em grupo: a base mais baixa de todos os bosses, mas o bônus por
+# participante é o MAIOR — grupos grandes recuperam terreno muito mais
+# rápido do que contra qualquer outro boss.
+_BOSS4_CHANCE_GRUPO_BASE      = 0.04
+_BOSS4_CHANCE_GRUPO_MAX       = 0.65
+_BOSS4_BONUS_POR_PARTICIPANTE = 0.045
+_BOSS4_BONUS_RARIDADE_CRIATURA = {
+    "comum": 0.0, "raro": 0.0, "epico": 0.0, "lendario": 0.035, "secreto": 0.05, "mitico": 0.06,
+}
+
+_BOSS4_XP_GANHO_MIN = 0.25    # 25% — mínimo de XP que quem vence pode ganhar (o melhor de todos os bosses)
+_BOSS4_XP_GANHO_MAX = 0.75    # 75% — máximo de XP que quem vence pode ganhar
+_BOSS4_XP_GANHO_SEM_XP = (45, 110)   # recompensa fixa pra quem ainda não tem XP acumulado
+
+
+def _boss4_criatura_lendaria_mais_forte(user_id: int):
+    """Cthulhu só aceita quem convocar uma criatura 🟡 Lendária — e sempre
+    puxa a de MAIOR Nível de Capacidade que a pessoa tiver, entre as
+    Lendárias que ela já desbloqueou. Devolve None se a pessoa não tiver
+    nenhuma Lendária (nesse caso, ela é recusada pelo boss)."""
+    desbloqueadas = set(_garantir_criaturas_iniciais(user_id))
+    lendarias = [c for c in _BATALHA_CRIATURAS if c["raridade"] == "lendario" and c["id"] in desbloqueadas]
+    if not lendarias:
+        return None
+    return max(lendarias, key=lambda c: _nivel_criatura(user_id, c["id"]))
+
+
+def _boss4_cards_criaturas(convocacoes: list) -> list:
+    """Igual _boss_cards_criaturas, mas também mostra o Nível de Capacidade
+    de cada Lendária convocada — já que é sempre a mais forte E de maior
+    nível que cada um tem."""
+    cards = []
+    for membro, criatura in convocacoes:
+        info = _RARIDADES[criatura["raridade"]]
+        nivel_atual = _nivel_criatura(membro.id, criatura["id"])
+        nivel_teto = _nivel_criatura_max(criatura["id"])
+        card = discord.Embed(
+            description=(
+                f"{info['emoji']} **{membro.display_name}** convoca **{criatura['nome']}** "
+                f"(*{info['label']}*, Nível `{nivel_atual}/{nivel_teto}`)"
+            ),
+            color=info["cor"],
+        )
+        card.set_thumbnail(url=criatura["gif"])
+        cards.append(card)
+    return cards
+
+
+def _boss4_chance_grupo(convocacoes: list) -> float:
+    """Calcula a chance de vitória do grupo contra Cthulhu: base baixa +
+    um bônus por pessoa (o maior de todos os bosses) + um bônus pela
+    raridade de cada Lendária convocada, travado no teto de
+    _BOSS4_CHANCE_GRUPO_MAX."""
+    chance = _BOSS4_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS4_BONUS_POR_PARTICIPANTE
+    for _membro, criatura in convocacoes:
+        chance += _BOSS4_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+    return min(chance, _BOSS4_CHANCE_GRUPO_MAX)
+
+
+def _boss4_calcular_ganho_xp(user_id: int) -> tuple:
+    """Sorteia quanto de XP essa pessoa ganha por vencer Cthulhu: entre 25%
+    e 75% do XP que ela já tem — a melhor faixa de recompensa entre todos
+    os bosses — ou uma recompensa fixa se ainda não tiver XP acumulado."""
+    dados = xp_stats[user_id]
+    xp_atual = dados.get("xp", 0)
+    if xp_atual > 0:
+        percentual = random.uniform(_BOSS4_XP_GANHO_MIN, _BOSS4_XP_GANHO_MAX)
+        ganho = max(1, round(xp_atual * percentual))
+    else:
+        percentual = 0.0
+        ganho = random.randint(*_BOSS4_XP_GANHO_SEM_XP)
+    return ganho, percentual
+
+
+async def _boss4_premiar_vencedores(guild: discord.Guild, vencedores: list) -> list:
+    """Aplica o ganho de XP de cada vencedor, ativa o Booster de XP de
+    _BOSS4_BOOSTER_MINUTOS (5 min — o maior de todos os bosses) pra cada
+    um deles, atualiza nível e dispara o aviso de level up quando for o
+    caso. Devolve uma lista de (membro, ganho, percentual)."""
+    resultados = []
+    for membro in vencedores:
+        dados = xp_stats[membro.id]
+        nivel_antigo = dados["nivel"]
+        ganho, percentual = _boss4_calcular_ganho_xp(membro.id)
+        dados["xp"] += ganho
+        dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+        if dados["nivel"] > nivel_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
+        # 🎁 Bônus do Cthulhu: Booster de XP de 5 minutos pra quem venceu
+        _conceder_xp_booster(membro.id, _BOSS4_BOOSTER_MINUTOS)
+        resultados.append((membro, ganho, percentual))
+
+    asyncio.create_task(_salvar_xp_stats())
+    asyncio.create_task(_atualizar_ranking_xp())
+    return resultados
+
+
+async def _boss4_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
+    """Roda o confronto solo contra Cthulhu: só 1% de chance de vitória —
+    e se perder, não perde XP nenhum, só o orgulho. Só é chamada depois
+    que o botão já garantiu que `membro` tem uma Lendária."""
+    try:
+        criatura = _boss4_criatura_lendaria_mais_forte(membro.id)
+        info_raridade = _RARIDADES[criatura["raridade"]]
+        nivel_atual = _nivel_criatura(membro.id, criatura["id"])
+        nivel_teto = _nivel_criatura_max(criatura["id"])
+
+        embed_convocacao = discord.Embed(
+            title="🐙 Um desafiante solitário ousa se apresentar!",
+            description=(
+                f"🌑 **Aeon:** ...{membro.mention} decidiu encarar Cthulhu sozinho. As profundezas "
+                f"nem se incomodam em despertar de verdade. 🖤🌊\n"
+                f"🌟 **Celestia:** {membro.display_name} convoca {info_raridade['emoji']} "
+                f"**{criatura['nome']}** (Nível `{nivel_atual}/{nivel_teto}`)!! É NÍVEL MÍTICO, "
+                f"cuidado!! 😳🌟✨"
+            ),
+            color=info_raridade["cor"],
+        )
+        embed_convocacao.set_thumbnail(url=criatura["gif"])
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "🐙 **Cthulhu:** *\"Uma única fagulha... contra o abismo inteiro? Eu nem preciso "
+                "acordar direito pra isso.\"*"
+            ),
+            color=0x0d2b2e,
+        )
+        embed_batalha.set_image(url=_BOSS4_CTHULHU_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        venceu = random.random() < _BOSS4_CHANCE_SOLO
+
+        if venceu:
+            resultados = await _boss4_premiar_vencedores(canal.guild, [membro])
+            _, ganho, percentual = resultados[0]
+            descricao = (
+                f"🏆 **O IMPOSSÍVEL ACONTECEU!!** {membro.mention} e {info_raridade['emoji']} "
+                f"**{criatura['nome']}** derrubaram **CTHULHU, O ANCIÃO DOS ABISMOS**, SOZINHOS!! "
+                f"Só `{_BOSS4_CHANCE_SOLO * 100:.0f}%` de chance!! 🐙⚔️\n\n"
+                f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`) + ⚡ **Booster de XP "
+                f"{_BOSS4_BOOSTER_MINUTOS}min**!\n\n"
+                f"🌑 **Aeon:** ...ele nem viu chegando. Nem os Anciões estão a salvo do próprio "
+                f"orgulho. 🖤🌊\n"
+                f"🌟 **Celestia:** ISSO FOI LENDÁRIO DE VERDADE!! 😭🌟🤍✨ NINGUÉM VAI ACREDITAR NISSO!!"
+            )
+            cor = 0xf5c542
+        else:
+            descricao = (
+                f"🐙 **Cthulhu:** *\"...como eu disse.\"* {info_raridade['emoji']} **{criatura['nome']}** "
+                f"caiu em batalha, e {membro.mention} não conseguiu sozinho dessa vez.\n\n"
+                f"🍃 Nenhum XP foi perdido — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...era esperado. Nem uma Lendária sozinha abala os abismos. 🖤🌑\n"
+                f"🌟 **Celestia:** Contra ele, é MUITO melhor ir em grupo!! Quanto mais gente, mais "
+                f"chance!! 🌸💫"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Cthulhu, o Ancião dos Abismos")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+async def _boss4_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
+    """Roda o confronto em grupo contra Cthulhu: cada participante convoca
+    a Lendária mais forte (maior nível) que já desbloqueou, e a chance de
+    vitória cresce MAIS RÁPIDO com o número de participantes do que contra
+    qualquer outro boss — mas a base é a mais baixa de todos."""
+    try:
+        convocacoes = [(p, _boss4_criatura_lendaria_mais_forte(p.id)) for p in participantes]
+
+        embed_cabecalho = discord.Embed(
+            title=f"⚔️ {len(convocacoes)} guerreiro(a)s ousam despertar o abismo!",
+            description=(
+                "🌟 **Celestia:** ESSE TIME TÁ INDO CONTRA O BOSS MAIS FORTE DE TODOS!! 😱🌟✨ "
+                "Só Lendárias entraram nessa — boa sorte!!"
+            ),
+            color=0x0d2b2e,
+        )
+        cards = _boss4_cards_criaturas(convocacoes)
+
+        # 1º lote: cabeçalho + até 9 cards (10 embeds é o limite do Discord por
+        # mensagem). O resto (grupos grandes) sai em mensagens seguintes.
+        lote = [embed_cabecalho] + cards[:9]
+        restante = cards[9:]
+        msg1 = await canal.send(embeds=lote)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        while restante:
+            msg_extra = await canal.send(embeds=restante[:10])
+            asyncio.create_task(_apagar_mensagem_depois(msg_extra))
+            restante = restante[10:]
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "🐙 **Cthulhu:** *\"Um exército de mortais, cada um com sua melhor Lendária... "
+                "finalmente algo quase digno da minha atenção. Quase.\"*"
+            ),
+            color=0x0d2b2e,
+        )
+        embed_batalha.set_image(url=_BOSS4_CTHULHU_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        chance = _boss4_chance_grupo(convocacoes)
+        venceu = random.random() < chance
+
+        if venceu:
+            resultados = await _boss4_premiar_vencedores(canal.guild, participantes)
+            texto_ganhos = "\n".join(
+                f"✨ {membro.mention} +`{ganho}` XP (`{percentual * 100:.1f}%`) ⚡"
+                for membro, ganho, percentual in resultados
+            )
+            descricao = (
+                f"🏆 **O ABISMO SE CALOU!!** O time de `{len(participantes)}` guerreiro(a)s derrubou "
+                f"**CTHULHU, O ANCIÃO DOS ABISMOS**!! (chance da batalha: `{chance * 100:.0f}%`) 🐙⚔️\n\n"
+                f"{texto_ganhos}\n\n"
+                f"⚡ Todos os vencedores também ganharam um **Booster de XP de {_BOSS4_BOOSTER_MINUTOS} "
+                f"minutos** (xp de call e mensagem em dobro)!\n\n"
+                f"🌑 **Aeon:** ...nem os Anciões dormem tranquilos pra sempre. As sombras vão lembrar "
+                f"disso. 🖤🌊\n"
+                f"🌟 **Celestia:** VOCÊS DERRUBARAM O BOSS MAIS FORTE DE TODOS!!! 😭🌟🤍✨ ISSO É "
+                f"HISTÓRICO!!"
+            )
+            cor = 0xf5c542
+        else:
+            mencoes = ", ".join(p.mention for p in participantes)
+            descricao = (
+                f"🐙 **Cthulhu:** *\"...voltem quando forem mais.\"* Mesmo com `{len(participantes)}` "
+                f"guerreiro(a)s Lendários juntos (`{chance * 100:.0f}%` de chance), o Ancião dos "
+                f"Abismos foi forte demais dessa vez. {mencoes} não conseguiram.\n\n"
+                f"🍃 Ninguém perdeu XP — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...ele é o mais forte de todos por um motivo. 🖤🌑\n"
+                f"🌟 **Celestia:** Quanto mais gente, MUITO mais chance!! Chamem reforços e tentem de "
+                f"novo!! 🌸💫"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Cthulhu, o Ancião dos Abismos")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+class Boss4RecrutamentoView(discord.ui.View):
+    """Botão único de 'Quero Participar!' que fica ativo por
+    _BOSS4_TEMPO_RECRUTAMENTO segundos. Diferente dos outros bosses, quem
+    clicar SEM ter uma criatura 🟡 Lendária desbloqueada é recusado na hora
+    (Cthulhu não aceita menos que isso) — não entra pra lista."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS4_TEMPO_RECRUTAMENTO)
+        self.canal = canal
+        self.participantes: dict = {}   # user_id -> discord.Member
+        self.mensagem: discord.Message = None
+
+    @discord.ui.button(label="🐙 Quero Participar!", style=discord.ButtonStyle.success)
+    async def participar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if interaction.user.id in self.participantes:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já tá na lista, guerreiro(a)!! 😆🌸", ephemeral=True
+            )
+            return
+        if _boss4_criatura_lendaria_mais_forte(interaction.user.id) is None:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...Cthulhu nem notaria suas criaturas atuais. 🖤🌊 Só quem tiver uma "
+                "criatura 🟡 Lendária desbloqueada pode entrar nessa.",
+                ephemeral=True,
+            )
+            return
+
+        self.participantes[interaction.user.id] = interaction.user
+        button.label = f"🐙 Quero Participar! ({len(self.participantes)})"
+        await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            if self.mensagem:
+                await self.mensagem.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+        participantes = list(self.participantes.values())
+        if not participantes:
+            try:
+                msg = await self.canal.send(
+                    "🌑 **Aeon:** ...ninguém digno se juntou a tempo. Cthulhu volta a dormir nas "
+                    "profundezas... por enquanto. 🖤🌊"
+                )
+                asyncio.create_task(_apagar_mensagem_depois(msg))
+            finally:
+                _boss_ativo_no_canal.discard(self.canal.id)
+            return
+
+        asyncio.create_task(_boss4_batalha_grupo(self.canal, participantes))
+
+
+class Boss4EscolhaView(discord.ui.View):
+    """Botões de 'Todos Juntos' e 'Eu Consigo Sozinho' que aparecem quando
+    Cthulhu desperta. A PRIMEIRA escolha feita (por qualquer pessoa) decide
+    o caminho dessa aparição do boss. O botão solo recusa na hora quem não
+    tiver uma Lendária desbloqueada."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS4_TEMPO_ESCOLHA)
+        self.canal = canal
+        self.decidido = False
+        self.mensagem: discord.Message = None
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="🤝 Todos Juntos", style=discord.ButtonStyle.primary)
+    async def todos_juntos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🤝 O CHAMADO FOI FEITO!",
+            description=(
+                f"🌟 **Celestia:** {interaction.user.mention} decidiu enfrentar Cthulhu EM GRUPO!! "
+                f"😱🌟✨\n"
+                f"🌑 **Aeon:** ...só criaturas 🟡 Lendárias vão ser aceitas. Quem tiver uma e coragem, "
+                f"clique no botão abaixo. `{_BOSS4_TEMPO_RECRUTAMENTO}s` pra se juntar ao time. 🖤🌊"
+            ),
+            color=0xff8800,
+        )
+        embed.set_image(url=_BOSS4_CTHULHU_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        view_recrutamento = Boss4RecrutamentoView(self.canal)
+        msg_recrutamento = await self.canal.send(
+            "🐙 Time contra **Cthulhu, o Ancião dos Abismos** — só Lendárias, clique pra participar!",
+            view=view_recrutamento,
+        )
+        view_recrutamento.mensagem = msg_recrutamento
+        asyncio.create_task(_apagar_mensagem_depois(msg_recrutamento))
+
+    @discord.ui.button(label="🐙 Eu Consigo Sozinho", style=discord.ButtonStyle.danger)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        if _boss4_criatura_lendaria_mais_forte(interaction.user.id) is None:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...suas criaturas atuais nem seriam notadas por Cthulhu. 🖤🌊 Só quem "
+                "tiver uma criatura 🟡 Lendária desbloqueada pode desafiá-lo.",
+                ephemeral=True,
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🐙 DESAFIO SOLITÁRIO ACEITO!",
+            description=(
+                f"🌑 **Aeon:** ...{interaction.user.mention} escolheu encarar Cthulhu sozinho. Isso "
+                f"não é coragem, isso é loucura pura. 🖤🌊\n"
+                f"🌟 **Celestia:** SÓ `{_BOSS4_CHANCE_SOLO * 100:.0f}%` DE CHANCE?!?! 😰🌟 É O BOSS "
+                f"MAIS FORTE DE TODOS, TEM CERTEZA?!"
+            ),
+            color=0xff4444,
+        )
+        embed.set_image(url=_BOSS4_CTHULHU_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        asyncio.create_task(_boss4_batalha_solo(self.canal, interaction.user))
+
+    async def on_timeout(self):
+        if self.decidido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            embed = discord.Embed(
+                title="🐙 Cthulhu volta a dormir nas profundezas...",
+                description=(
+                    "🌑 **Aeon:** ...ninguém teve coragem de decidir a tempo. O Ancião se recolhe... "
+                    "por enquanto. 🖤🌊"
+                ),
+                color=0x888888,
+            )
+            await self.mensagem.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+        _boss_ativo_no_canal.discard(self.canal.id)
+
+
+@bot.command(name="boss4")
+async def cmd_boss4(ctx):
+    """🐙 Invoca Cthulhu, o Ancião dos Abismos — o boss mais forte e mais
+    EXCLUSIVO de todos: só aceita quem convocar uma criatura 🟡 Lendária (e
+    sempre puxa a Lendária de maior Nível de Capacidade que a pessoa
+    tiver) — quem não tiver nenhuma é recusado na hora. Dificuldade
+    mítica, com o bônus por participante MAIS FORTE de todos os bosses:
+    quanto mais gente entrar, mais rápido a chance sobe. Só o Reality
+    (CRIADOR_ID) pode chamar. Quem vencer ganha XP e um Booster de XP de
+    5 minutos — o maior de todos os bosses. Uso: .boss4"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BOSS4_CANAL_ID)
+    if canal is None:
+        return
+
+    if canal.id in _boss_ativo_no_canal:
+        aviso = await ctx.send(
+            "🌟 **Celestia:** Já tem um boss ativo por lá!! Espera esse terminar!! 😅🌸"
+        )
+        asyncio.create_task(_apagar_mensagem_depois(aviso))
+        return
+
+    _boss_ativo_no_canal.add(canal.id)
+
+    embed = discord.Embed(
+        title="🐙 NÍVEL MÍTICO — CTHULHU DESPERTOU NOS ABISMOS!!",
+        description=(
+            "🌑 **Aeon:** ...o oceano racha e algo imensurável abre os olhos pela primeira vez em "
+            "eras. Ele nem se dá ao trabalho de se levantar por completo. 🖤🌊\n\n"
+            "🐙 **Cthulhu:** *\"Mortais... e suas criaturinhas fracas. Não me insultem com o que "
+            "vocês chamam de 'comum'. Só as suas Lendárias são dignas de olhar pra mim — as demais, "
+            "eu nem enxergo.\"*\n\n"
+            "🌟 **Celestia:** GENTE ELE SÓ ACEITA CRIATURA 🟡 LENDÁRIA!! 😨🌟 E AINDA POR CIMA É "
+            "NÍVEL **MÍTICO**, O MAIS FORTE DE TODOS OS BOSSES!! Sozinho ou em grupo?? Quanto mais "
+            "gente, MUITO mais chance!! ✨\n\n"
+            f"⏳ Vocês têm `{_BOSS4_TEMPO_ESCOLHA}s` pra decidir."
+        ),
+        color=0x0d2b2e,
+    )
+    embed.set_image(url=_BOSS4_CTHULHU_INTRO_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Nível Mítico: Cthulhu, o Ancião dos Abismos")
+
+    view = Boss4EscolhaView(canal)
+    msg = await canal.send(embed=embed, view=view)
+    view.mensagem = msg
+    asyncio.create_task(_apagar_mensagem_depois(msg))
+
+
 @bot.command(name="surpresachat")
 async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""

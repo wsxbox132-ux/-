@@ -9914,6 +9914,122 @@ async def cmd_reiniciar_ranking(ctx):
     await ctx.send(embed=embed, view=ReiniciarRankingView())
 
 
+class ReiniciarGeralRPGView(discord.ui.View):
+    """View de confirmação do reset GERAL do RPG — a versão "nuclear" do
+    .reiniciarranking: zera xp, nível, criaturas (inclusive Bestas),
+    vitórias/derrotas e favorita de TODO MUNDO, e por cima disso também
+    zera os boosters (Booster de Call e Booster de xp em dobro) e qualquer
+    ovo incubando. Só o Reality (CRIADOR_ID) pode confirmar ou cancelar —
+    qualquer outra pessoa que clicar recebe um aviso de acesso negado."""
+
+    def __init__(self):
+        super().__init__(timeout=60)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != CRIADOR_ID:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+                "🌟 **Celestia:** Só o Reality pode confirmar isso!! 🌸🤍✨",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(
+        label="✅ Confirmar reset geral",
+        style=discord.ButtonStyle.danger,
+        custom_id="reiniciar_geral_rpg_confirmar"
+    )
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global _xp_ranking_pagina_atual
+
+        total_pessoas = len(xp_stats)
+
+        # 🧨 Zera TUDO do RPG, de TODO MUNDO — xp/nível/criaturas/vitórias e
+        # derrotas (xp_stats), cooldown de mensagem, boosters (call e xp em
+        # dobro), cooldown de desafio de batalha e ovos incubando.
+        xp_stats.clear()
+        _xp_ultimo_ganho.clear()
+        _xp_ranking_pagina_atual = 0
+        _call_booster_inicio.clear()
+        _call_booster_nivel_anunciado.clear()
+        _xp_booster_ate.clear()
+        _batalha_ultimo_desafio.clear()
+        _ovos_pendentes.clear()
+        _ovos_dragao_pendentes.clear()
+
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=(
+                "☠️♻️ **RESET GERAL DO RPG CONCLUÍDO.** Xp, nível, criaturas, "
+                "vitórias/derrotas, Booster de Call, Booster de xp em dobro e "
+                f"ovos incubando de **`{total_pessoas}`** pessoa(s) voltaram a "
+                "**0** — do zero, pra todo mundo, sem exceção."
+            ),
+            embed=None,
+            view=self
+        )
+        self.stop()
+
+        # 💾 Persiste o reset em disco na hora — sem isso, um restart do bot
+        # antes do próximo ganho de xp de alguém traria os dados antigos de
+        # volta, já que cada arquivo ainda estaria com o conteúdo de antes.
+        asyncio.create_task(_salvar_xp_stats())
+        asyncio.create_task(_salvar_call_booster_stats())
+        asyncio.create_task(_salvar_xp_booster_stats())
+
+        guild = interaction.guild or (bot.guilds[0] if bot.guilds else None)
+        if guild is not None:
+            await _atualizar_ranking_xp()
+
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.secondary,
+        custom_id="reiniciar_geral_rpg_cancelar"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ Reset cancelado.", embed=None, view=self)
+        self.stop()
+
+
+@bot.command(name="reiniciogeralrpg", aliases=["resetgeralrpg"])
+async def cmd_reiniciogeralrpg(ctx):
+    """Reseta ABSOLUTAMENTE TUDO do RPG, de TODO MUNDO, de uma vez: xp, nível,
+    criaturas desbloqueadas (inclusive Bestas), Níveis de Capacidade,
+    favorita, vitórias e derrotas, Booster de Call, Booster de xp em dobro
+    (baú/boss) e ovos incubando (.ovo/.ovodragao). Diferente do
+    .reiniciarranking (que só zera xp/nível/criaturas), esse também zera os
+    boosters e já salva o reset em disco na hora. Irreversível. Só o Reality
+    pode usar. Uso: .reiniciogeralrpg"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    total_pessoas = len(xp_stats)
+
+    embed = discord.Embed(
+        title="☠️♻️ Reset GERAL do RPG",
+        description=(
+            f"Isso vai **zerar ABSOLUTAMENTE TUDO** de **`{total_pessoas}`** pessoa(s) "
+            "que já têm dados no ranking:\n\n"
+            "• XP e nível\n"
+            "• Criaturas desbloqueadas (inclusive 🐺 Bestas) e Níveis de Capacidade\n"
+            "• Criatura favorita\n"
+            "• Vitórias e derrotas\n"
+            "• 🔥 Booster de Call (streak) de todo mundo\n"
+            "• ⚡ Booster de xp em dobro (baú/boss) de todo mundo\n"
+            "• 🥚 Ovos incubando (`.ovo` e `.ovodragao`)\n\n"
+            "⚠️ **Isso é irreversível e vale pra TODO MUNDO, sem exceção.**\n\n"
+            "Tem certeza?"
+        ),
+        color=0xff0000
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Nível")
+    await ctx.send(embed=embed, view=ReiniciarGeralRPGView())
+
+
 @bot.command(name="xpbackfill")
 async def cmd_xp_backfill(ctx, limite: int = None):
     """Varre o histórico dos 3 canais de ranking e marca como 'elegivel' todo

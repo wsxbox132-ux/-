@@ -8992,6 +8992,17 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "**🔟 Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
+            "**1️⃣1️⃣ ✨ Especiais — o golpe que só desperta no auge**\n"
+            f"A partir do **Nível de Capacidade {_NIVEL_ESPECIAL_MINIMO}** (item 5️⃣ acima), TODA criatura — "
+            "de qualquer raridade, sem exceção — desperta um **golpe especial** só dela. Ele não puxa toda "
+            f"batalha: sempre que a criatura já estiver no Nível {_NIVEL_ESPECIAL_MINIMO}+ existe "
+            f"`{_ESPECIAL_CHANCE_ATIVACAO * 100:.0f}%` de chance dele ativar. Quando ativa, aparece um card "
+            "próprio na sequência da batalha mostrando a criatura usando o golpe, e ela ganha um empurrão "
+            f"extra na chance de vitória — começando em `{_ESPECIAL_BONUS_BASE * 100:.0f}%` no Nível "
+            f"{_NIVEL_ESPECIAL_MINIMO} e crescendo mais `{_ESPECIAL_BONUS_POR_NIVEL_EXTRA * 100:.1f}%` a cada "
+            f"nível acima disso, até o teto de `{_ESPECIAL_BONUS_MAXIMO * 100:.0f}%`. Se os dois lados "
+            "ativarem o especial na mesma batalha, os empurrões competem entre si normalmente. Confira o "
+            "especial de cada criatura na 📖 **Enciclopédia**!\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
             f"depois de `{_BATALHA_TEMPO_SOMEM}s` — não fica lixo acumulando no chat!*\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -9154,15 +9165,32 @@ class EnciclopediaSelect(discord.ui.Select):
                 "use ela em mais batalhas pra deixar cada vez mais forte."
             )
         else:
+            nivel_pessoal = 0
             status = (
                 "🔒 **Você ainda não desbloqueou essa criatura.** "
                 "Vença batalhas usando as que você já tem — como recompensa, "
                 "há chance dela ser sorteada e ir pra sua coleção!"
             )
 
+        # ✨ Golpe especial — desbloqueia a partir do Nível de Capacidade 5
+        # (_NIVEL_ESPECIAL_MINIMO). Mostra o nome sempre, mas só confirma que
+        # já está disponível se a pessoa desbloqueou a criatura E já bateu o nível.
+        especial = _ESPECIAIS_CRIATURAS.get(criatura["id"])
+        texto_especial = ""
+        if especial is not None:
+            if desbloqueada and nivel_pessoal >= _NIVEL_ESPECIAL_MINIMO:
+                texto_especial = (
+                    f"\n\n✨ **Especial:** `{especial['nome']}` — já destravado, pode puxar em batalha!"
+                )
+            else:
+                texto_especial = (
+                    f"\n\n✨ **Especial:** `{especial['nome']}` — destrava no "
+                    f"**Nível de Capacidade {_NIVEL_ESPECIAL_MINIMO}**."
+                )
+
         embed = discord.Embed(
             title=f"{info_raridade['emoji']} {criatura['nome']}",
-            description=f"**Raridade:** {info_raridade['label']}\n\n{status}",
+            description=f"**Raridade:** {info_raridade['label']}\n\n{status}{texto_especial}",
             color=info_raridade["cor"],
         )
         embed.set_image(url=criatura["gif"])
@@ -10242,6 +10270,143 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
 
 
 # ══════════════════════════════════════════════════════════════════════
+# ✨ ESPECIAIS — a partir do Nível de Capacidade 5, TODA criatura (de
+# qualquer raridade, sem exceção) desperta um golpe especial só dela. Ele
+# não puxa toda batalha — senão perderia a graça — então cada vez que uma
+# criatura já elegível (Nível 5+) entra em campo, existe uma chance dela
+# puxar o golpe na hora H. Quando ativa, aparece um card próprio na
+# sequência da batalha mostrando a criatura usando o especial, e ela ganha
+# um empurrão extra na chance de vitória — quanto mais alto o Nível de
+# Capacidade, maior esse empurrão (até um teto).
+# ══════════════════════════════════════════════════════════════════════
+
+_NIVEL_ESPECIAL_MINIMO = 5           # nível de capacidade a partir do qual o especial fica disponível
+_ESPECIAL_CHANCE_ATIVACAO = 0.40     # 40% de chance do especial puxar numa batalha em que já está disponível
+
+_ESPECIAL_BONUS_BASE = 0.08              # empurrão na chance de vitória ao ativar bem no Nível 5
+_ESPECIAL_BONUS_POR_NIVEL_EXTRA = 0.015  # some mais um pouco a cada nível acima do 5
+_ESPECIAL_BONUS_MAXIMO = 0.22             # teto do empurrão, mesmo em níveis bem altos (ex: Vorak'thul no Nível 20)
+
+# Trava separada pra chance final DEPOIS de aplicar o(s) bônus de especial —
+# por cima da trava normal de _chance_vitoria, ninguém fica com 0%/100% aqui também.
+_CHANCE_VITORIA_MINIMA_POS_ESPECIAL = 0.02
+_CHANCE_VITORIA_MAXIMA_POS_ESPECIAL = 0.98
+
+# Cada criatura, de TODA raridade, tem seu golpe especial próprio: um nome
+# e uma frase de efeito usada no card de ativação em batalha (aparece como
+# "**{nome da criatura}** usa **{nome}**!! {descricao}").
+_ESPECIAIS_CRIATURAS = {
+    # ── Comuns ──────────────────────────────────────────────────────────
+    "caveira_perpetua":       {"nome": "Uivo Eterno",                "descricao": "solta um uivo arrepiante que ecoa das profundezas, fazendo o adversário hesitar por um segundo a mais 💀"},
+    "samurai_pix":            {"nome": "Corte Instantâneo",          "descricao": "saca a espada e desfere um corte tão rápido quanto uma transferência via Pix, pegando o oponente de surpresa ⚡💸"},
+    "abandonado":             {"nome": "Fúria do Esquecido",         "descricao": "acumula toda a raiva de ter sido deixado pra trás e explode num golpe cheio de desespero 🔥"},
+    "desconectado":           {"nome": "Última Conexão",             "descricao": "pisca entre sinais fracos e aparece bem atrás do rival antes que ele perceba o ataque 📡"},
+    "rino_acabado":           {"nome": "Investida Final",            "descricao": "junta o que sobrou de força e dispara numa investida bruta, tudo ou nada 🦏"},
+    "plebeu":                 {"nome": "Grito do Povo",              "descricao": "convoca a fúria simples de quem não tem nada a perder e ataca sem medo ✊"},
+    "bandido":                {"nome": "Golpe Sujo",                 "descricao": "puxa um truque baixo no meio do combate, acertando o adversário de surpresa 🗡️"},
+    "ranfroi_ultimo_plebeu":  {"nome": "Herança do Último",          "descricao": "carrega o peso de ser o último dos seus e ataca com tudo que restou de honra 🛡️"},
+    "buzzmole_eletrico":      {"nome": "Descarga do Eco",            "descricao": "libera uma descarga elétrica reverberante que atordoa o rival por um instante ⚡🔊"},
+    "blindado_metaltooth":    {"nome": "Blindagem Ativa",            "descricao": "trava as placas de metal e avança feito uma muralha imparável 🛡️⚙️"},
+
+    # ── Raras ───────────────────────────────────────────────────────────
+    "cavaleiro_elemental":    {"nome": "Fúria dos Quatro Elementos", "descricao": "invoca fogo, água, terra e ar ao mesmo tempo numa explosão elemental 🔥💧🌪️"},
+    "caveira_prisao":         {"nome": "Grilhões Quebrados",         "descricao": "arrebenta correntes invisíveis e avança com a fúria acumulada de anos preso 💀⛓️"},
+    "eco_luz":                {"nome": "Clarão do Eco",              "descricao": "emite um clarão ofuscante que embaralha os sentidos do adversário 💡✨"},
+    "cientista_louco":        {"nome": "Experimento Instável",       "descricao": "injeta uma fórmula própria e experimental, ganhando um surto de força imprevisível 🧪⚗️"},
+    "brutal":                 {"nome": "Marreta da Ruína",           "descricao": "ergue os punhos e desce um golpe capaz de rachar o chão da arena 💥"},
+    "cavaleiro_sinistro":     {"nome": "Lâmina do Sinistro",         "descricao": "envolve a espada em uma névoa sombria antes de golpear sem piedade 🌑⚔️"},
+    "kreging":                {"nome": "Investida de Kreging",       "descricao": "solta um rugido característico e avança com uma força bruta única 🦴"},
+    "besta_gelida":           {"nome": "Sopro Glacial",              "descricao": "expira um vento congelante que trava os movimentos do oponente ❄️"},
+    "pai_da_sorte":           {"nome": "Golpe da Sorte",             "descricao": "joga os dados do destino e acerta um golpe surpreendentemente certeiro 🍀🎲"},
+    "besta_do_eco":           {"nome": "Rugido Ressonante",          "descricao": "solta um rugido que ecoa e se multiplica, confundindo o adversário 📢🐾"},
+    "ravok_submetido_eco":    {"nome": "Ruptura das Correntes",      "descricao": "quebra as amarras do Eco que o prendiam e libera uma força reprimida 🔗💥"},
+
+    # ── Épicas ──────────────────────────────────────────────────────────
+    "heroina_esmeraldas":     {"nome": "Lâmina Esmeralda",           "descricao": "invoca lâminas verdes brilhantes que cortam o ar com precisão letal 💚⚔️"},
+    "robin_dourado":          {"nome": "Flecha Dourada",             "descricao": "dispara uma flecha reluzente que nunca erra o alvo ✨🏹"},
+    "buda_eco":               {"nome": "Iluminação do Eco",          "descricao": "entra em um estado de foco absoluto, prevendo cada movimento do rival 🧘💫"},
+    "monstro_portao":         {"nome": "Abertura Abissal",           "descricao": "abre uma fenda entre dimensões e puxa o adversário pra dentro do caos 🌀"},
+    "ultimo_atlanta":         {"nome": "Legado Perdido",             "descricao": "invoca o poder de uma civilização inteira que já não existe mais 🏛️🌊"},
+    "guerreiro_trovao":       {"nome": "Fúria do Trovão",            "descricao": "convoca um raio que cai bem em cima do adversário, ensurdecendo a arena ⚡🌩️"},
+    "anti_elemento":          {"nome": "Anulação Total",             "descricao": "cancela qualquer vantagem elemental do rival, nivelando o combate a força pura ⚫"},
+    "vortex":                 {"nome": "Sucção do Vórtex",           "descricao": "cria um redemoinho que desorienta e enfraquece o adversário 🌪️"},
+    "seraphine_guerreira":    {"nome": "Lança Celestial",            "descricao": "invoca uma lança de luz pura direto dos céus 🌟🔱"},
+    "corrompido":             {"nome": "Toque da Corrupção",         "descricao": "espalha uma energia corrosiva que enfraquece tudo ao redor ☣️"},
+    "ignara_musa_chamas":     {"nome": "Dança das Chamas",           "descricao": "gira envolta em fogo, deixando um rastro incandescente que queima o oponente 🔥💃"},
+    "primeiro_graking":       {"nome": "Primórdio Selvagem",         "descricao": "desperta um instinto ancestral, o primeiro de sua linhagem, num ataque bruto 🦖"},
+    "ophryx_dama_besta":      {"nome": "Chamado da Fera",            "descricao": "solta um chamado que desperta a besta interior, dobrando a ferocidade 🐺👑"},
+    "warden_eco":             {"nome": "Sentinela do Eco",           "descricao": "ergue uma barreira ecoante e contra-ataca com o próprio impacto do rival 🛡️🔊"},
+
+    # ── Lendárias ───────────────────────────────────────────────────────
+    "ultimo_guerreiro":        {"nome": "Testamento do Último Guerreiro", "descricao": "concentra séculos de batalhas numa única investida definitiva ⚔️👑"},
+    "lyria_governante":        {"nome": "Decreto Real",                   "descricao": "convoca a autoridade de seu reino e comanda o campo de batalha à força ⚖️👑"},
+    "kaiju_eco":                {"nome": "Rugido Colossal",                "descricao": "solta um rugido tão imenso que faz o chão da arena tremer 🌊🦖"},
+    "protetor_portao_inferno": {"nome": "Selo Infernal",                  "descricao": "abre uma rachadura pro inferno e deixa chamas eternas engolirem o rival 🔥🚪"},
+    "magmata":                  {"nome": "Erupção Total",                  "descricao": "entra em erupção soltando lava incandescente por toda a arena 🌋"},
+    "vreg_entre_mundos":        {"nome": "Fenda Dimensional",              "descricao": "atravessa realidades paralelas e ataca de um ângulo impossível 🌌🚪"},
+    "azrakiel_monarca":         {"nome": "Julgamento do Monarca",          "descricao": "ergue o cetro e sentencia o rival com um golpe de autoridade absoluta 👑⚡"},
+    "arkanis_primeiro_reis":    {"nome": "Coroação Ancestral",             "descricao": "invoca o poder de todos os reis que vieram antes dele 👑🗡️"},
+    "auremortis_guardia_almas": {"nome": "Lamento das Almas Perdidas",     "descricao": "convoca espíritos presos que se lançam contra o adversário 👻🕯️"},
+    "goldryn_chama_destino":    {"nome": "Consumação do Destino",          "descricao": "envolve o corpo em chamas douradas que consomem tudo em seu caminho 🔥✨"},
+    "thanarion_arauto_fim":     {"nome": "Anúncio do Fim",                 "descricao": "sopra um chifre sombrio que anuncia que a batalha já está decidida ☠️📯"},
+    "nythrax_senhor_sombras":   {"nome": "Domínio das Sombras",            "descricao": "funde-se com a escuridão e ataca de todos os lados ao mesmo tempo 🌑👁️"},
+    "umbrael_observa_alem":     {"nome": "Visão do Além",                  "descricao": "enxerga o próximo movimento do rival antes mesmo dele pensar nisso 👁️🌌"},
+    "noxar_puro_trovao":        {"nome": "Trovão Absoluto",                "descricao": "concentra toda a eletricidade da atmosfera num único raio devastador ⚡🌩️"},
+    "malgorath_ultima_raca":    {"nome": "Grito da Última Raça",           "descricao": "solta o último grito de guerra da sua espécie extinta, cheio de fúria ancestral 🐲"},
+
+    # ── Bestas ──────────────────────────────────────────────────────────
+    "kragor_senhor_presas":   {"nome": "Mordida do Senhor das Presas", "descricao": "crava presas afiadas com uma força capaz de esmagar qualquer armadura 🦷🩸"},
+    "espinho_maldito":        {"nome": "Espinhos da Maldição",         "descricao": "dispara espinhos amaldiçoados que perfuram qualquer defesa 🥀☠️"},
+    "drogan_carniceiro":      {"nome": "Carnificina",                  "descricao": "avança sem piedade numa fúria selvagem incontrolável 🩸⚔️"},
+    "matriarca_abismo":       {"nome": "Chamado do Abismo",             "descricao": "convoca criaturas das profundezas pra cercarem o adversário 🌊👹"},
+    "venomor":                {"nome": "Veneno Mortal",                 "descricao": "injeta uma toxina paralisante que corrói as forças do rival 🐍☣️"},
+
+    # ── Secretas ────────────────────────────────────────────────────────
+    "nyxalith_dragao_eclipse_contaminado": {"nome": "Eclipse Contaminado",    "descricao": "cobre a arena inteira numa escuridão tóxica que corrompe tudo ao redor 🌑☣️🐉"},
+    "magnus_frostbane":                    {"nome": "Flagelo Gélido",          "descricao": "congela até o próprio tempo por um instante, travando qualquer reação 🧊❄️"},
+    "drakonis_prime":                      {"nome": "Fúria Primordial",        "descricao": "desperta um poder tão antigo quanto a própria criação 🐲🔥"},
+    "pirikita":                            {"nome": "Encanto Secreto",         "descricao": "solta um poder misterioso tão fofo quanto devastador, ninguém entende como funciona 💫🌌"},
+    "solarius_guardiao_ordem":             {"nome": "Julgamento Solar",        "descricao": "concentra a luz de mil sóis num único feixe purificador ☀️⚖️"},
+    "vorakthul":                           {"nome": "Despertar de Vorak'thul", "descricao": "abre os olhos ancestrais e libera um poder que poucos já presenciaram 👁️🌌"},
+
+    # ── Míticas ─────────────────────────────────────────────────────────
+    "dragao_mar":       {"nome": "Maré Ancestral",        "descricao": "convoca ondas gigantescas capazes de engolir reinos inteiros 🌊🐉"},
+    "dragao_oriente":   {"nome": "Sopro do Oriente",      "descricao": "solta um sopro sagrado que atravessa céus e nuvens 🐉☁️"},
+    "dragao_caos":      {"nome": "Ruptura do Caos",       "descricao": "espalha uma distorção caótica que desfaz qualquer ordem no campo de batalha 🌀🔥"},
+    "dragao_prisma":    {"nome": "Refração Prismática",   "descricao": "espalha luz refratada em mil direções, cegando e confundindo o rival 🌈💎"},
+    "dragao_serpente":  {"nome": "Constrição Ancestral",  "descricao": "enrosca o corpo serpentino e aperta com uma força esmagadora 🐍🌊"},
+    "dragao_aco":       {"nome": "Blindagem de Aço Puro", "descricao": "endurece as escamas até virarem aço reluzente, indestrutível 🐉⚙️"},
+    "dragao_ilusao":    {"nome": "Miragem Perfeita",      "descricao": "se multiplica em ilusões perfeitas, deixando o rival sem saber onde atacar 🐉👻"},
+    "dragao_harpia":    {"nome": "Voo da Harpia",         "descricao": "mergulha dos céus numa velocidade impossível de acompanhar 🐉🪽"},
+    "dragao_cavernas":  {"nome": "Fúria das Profundezas", "descricao": "desperta ecos de mil anos escondido nas cavernas mais fundas 🐉⛰️"},
+}
+
+
+def _criatura_tem_especial_disponivel(nivel: int) -> bool:
+    """A partir de qual Nível de Capacidade a criatura já pode puxar seu golpe especial."""
+    return nivel >= _NIVEL_ESPECIAL_MINIMO
+
+
+def _bonus_chance_especial(nivel: int) -> float:
+    """Quanto o especial empurra na chance de vitória — cresce um pouco a
+    cada nível acima do mínimo, até o teto _ESPECIAL_BONUS_MAXIMO."""
+    extra = max(0, nivel - _NIVEL_ESPECIAL_MINIMO) * _ESPECIAL_BONUS_POR_NIVEL_EXTRA
+    return min(_ESPECIAL_BONUS_BASE + extra, _ESPECIAL_BONUS_MAXIMO)
+
+
+def _tentar_ativar_especial(criatura_id: str, nivel: int) -> bool:
+    """Sorteia se o especial dessa criatura puxa NESSA batalha — só é possível
+    se ela já tiver Nível de Capacidade suficiente E um especial cadastrado
+    (hoje, todas têm — mas a checagem fica pra segurança caso surja alguma nova
+    criatura sem entrada em _ESPECIAIS_CRIATURAS ainda)."""
+    if criatura_id not in _ESPECIAIS_CRIATURAS:
+        return False
+    if not _criatura_tem_especial_disponivel(nivel):
+        return False
+    return random.random() < _ESPECIAL_CHANCE_ATIVACAO
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 🐺 BESTAS — raridade desbloqueada por CONQUISTA, não por sorteio. Mais
 # fortes que as Lendárias, mas ainda um degrau abaixo das Secretas. A única
 # forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico
@@ -10819,6 +10984,14 @@ async def _executar_batalha(
     nivel_desafiante = _nivel_criatura(desafiante.id, criatura_desafiante["id"])
     nivel_desafiado = _nivel_criatura(desafiado.id, criatura_desafiado["id"])
 
+    # ✨ Sorteia se o golpe especial de cada criatura vai puxar NESSA batalha —
+    # só é possível a partir do Nível de Capacidade 5 (_NIVEL_ESPECIAL_MINIMO),
+    # e mesmo aí não é garantido (_ESPECIAL_CHANCE_ATIVACAO).
+    especial_desafiante = _ESPECIAIS_CRIATURAS.get(criatura_desafiante["id"])
+    especial_desafiado = _ESPECIAIS_CRIATURAS.get(criatura_desafiado["id"])
+    ativou_especial_desafiante = _tentar_ativar_especial(criatura_desafiante["id"], nivel_desafiante)
+    ativou_especial_desafiado = _tentar_ativar_especial(criatura_desafiado["id"], nivel_desafiado)
+
     # 🌟 Se a criatura sorteada é a favorita ativa de quem invocou, marca
     # visualmente — o sorteio já dá prioridade absoluta a ela em _sortear_uma_criatura.
     eh_favorita_desafiante = _favorito_status(desafiante.id)["id"] == criatura_desafiante["id"]
@@ -10870,6 +11043,39 @@ async def _executar_batalha(
     asyncio.create_task(_apagar_mensagem_depois(msg_c2))
     await asyncio.sleep(3)
 
+    # ── ✨ Golpes especiais ───────────────────────────────────────────────
+    # Só aparece pra quem já tem Nível de Capacidade 5+ E o dado decidiu que
+    # o golpe puxa dessa vez (_tentar_ativar_especial, calculado lá em cima).
+    # Mostra um card próprio com a criatura usando o especial, e o efeito na
+    # chance de vitória é aplicado mais abaixo, junto do sorteio do vencedor.
+    if ativou_especial_desafiante:
+        embed_especial_desafiante = discord.Embed(
+            title=f"✨ {desafiante.display_name} ativa o especial!",
+            description=(
+                f"**{criatura_desafiante['nome']}** usa **{especial_desafiante['nome']}**!! "
+                f"{especial_desafiante['descricao']}"
+            ),
+            color=0xffd700,
+        )
+        embed_especial_desafiante.set_image(url=criatura_desafiante["gif"])
+        msg_especial_desafiante = await canal.send(embed=embed_especial_desafiante)
+        asyncio.create_task(_apagar_mensagem_depois(msg_especial_desafiante))
+        await asyncio.sleep(2.2)
+
+    if ativou_especial_desafiado:
+        embed_especial_desafiado = discord.Embed(
+            title=f"✨ {desafiado.display_name} ativa o especial!",
+            description=(
+                f"**{criatura_desafiado['nome']}** usa **{especial_desafiado['nome']}**!! "
+                f"{especial_desafiado['descricao']}"
+            ),
+            color=0xffd700,
+        )
+        embed_especial_desafiado.set_image(url=criatura_desafiado["gif"])
+        msg_especial_desafiado = await canal.send(embed=embed_especial_desafiado)
+        asyncio.create_task(_apagar_mensagem_depois(msg_especial_desafiado))
+        await asyncio.sleep(2.2)
+
     # ── Suspense antes do resultado ──────────────────────────────────────
     aviso = await canal.send("💥⚡ *As duas criaturas colidem em um choque de poder...* ⚡💥")
     await asyncio.sleep(2.5)
@@ -10905,6 +11111,19 @@ async def _executar_batalha(
     else:
         chance_desafiante_vence = _chance_vitoria(
             criatura_desafiante, nivel_desafiante, criatura_desafiado, nivel_desafiado
+        )
+
+        # ✨ Aplica o empurrão dos especiais que ativaram nessa batalha, por
+        # cima do resultado da hierarquia de raridade + Nível de Capacidade.
+        # Se os dois ativarem, os empurrões competem entre si normalmente —
+        # sempre travado numa margem segura no final (ninguém fica 0%/100%).
+        if ativou_especial_desafiante:
+            chance_desafiante_vence += _bonus_chance_especial(nivel_desafiante)
+        if ativou_especial_desafiado:
+            chance_desafiante_vence -= _bonus_chance_especial(nivel_desafiado)
+        chance_desafiante_vence = max(
+            _CHANCE_VITORIA_MINIMA_POS_ESPECIAL,
+            min(_CHANCE_VITORIA_MAXIMA_POS_ESPECIAL, chance_desafiante_vence),
         )
 
         if random.random() < chance_desafiante_vence:
@@ -11126,12 +11345,28 @@ async def _executar_batalha(
         )
     texto_favorita_cansada = ("\n\n" + "\n".join(partes_favorita_cansada)) if partes_favorita_cansada else ""
 
+    # ✨ Recapitula, no resultado final, quais especiais ativaram nessa
+    # batalha e pesaram no sorteio do vencedor (transparência do cálculo).
+    partes_especiais = []
+    if ativou_especial_desafiante:
+        partes_especiais.append(
+            f"✨ O especial **{especial_desafiante['nome']}** de **{criatura_desafiante['nome']}** "
+            f"ativou e pesou na balança!"
+        )
+    if ativou_especial_desafiado:
+        partes_especiais.append(
+            f"✨ O especial **{especial_desafiado['nome']}** de **{criatura_desafiado['nome']}** "
+            f"ativou e pesou na balança!"
+        )
+    texto_especiais = ("\n\n" + "\n".join(partes_especiais)) if partes_especiais else ""
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
             f"**{criatura_vencedora['nome']}** `⭐ Nv.{nivel_novo_criatura_vencedora}` ({vencedor.mention}) derrota "
             f"**{criatura_perdedora['nome']}** `⭐ Nv.{nivel_novo_criatura_perdedora}` ({perdedor.mention})!\n\n"
-            f"{texto_roubo}\n\n"
+            f"{texto_roubo}"
+            f"{texto_especiais}\n\n"
             f"{texto_desbloqueio}"
             f"{texto_nivel_criatura}"
             f"{texto_favorita_cansada}\n\n"
@@ -13575,16 +13810,16 @@ _BOSS4_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar"
 # igual o do Baú), condizente com ele ser o boss mais forte e difícil.
 _BOSS4_BOOSTER_MINUTOS = 5
 
-_BOSS4_CHANCE_SOLO = 0.008   # 0.8% — dificuldade aumentada em ~20% (era 1%)
+_BOSS4_CHANCE_SOLO = 0.01   # 1% — nível mítico, tão difícil sozinho quanto Dourakhar
 
 # Batalha em grupo: a base mais baixa de todos os bosses, mas o bônus por
 # participante é o MAIOR — grupos grandes recuperam terreno muito mais
 # rápido do que contra qualquer outro boss.
-_BOSS4_CHANCE_GRUPO_BASE      = 0.032   # dificuldade aumentada em ~20% (era 0.04)
-_BOSS4_CHANCE_GRUPO_MAX       = 0.52    # dificuldade aumentada em ~20% (era 0.65)
-_BOSS4_BONUS_POR_PARTICIPANTE = 0.036   # dificuldade aumentada em ~20% (era 0.045)
+_BOSS4_CHANCE_GRUPO_BASE      = 0.04
+_BOSS4_CHANCE_GRUPO_MAX       = 0.65
+_BOSS4_BONUS_POR_PARTICIPANTE = 0.045
 _BOSS4_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.0, "epico": 0.0, "lendario": 0.028, "secreto": 0.04, "mitico": 0.048,
+    "comum": 0.0, "raro": 0.0, "epico": 0.0, "lendario": 0.035, "secreto": 0.05, "mitico": 0.06,
 }
 
 _BOSS4_XP_GANHO_MIN = 0.25    # 25% — mínimo de XP que quem vence pode ganhar (o melhor de todos os bosses)

@@ -1784,13 +1784,20 @@ async def on_ready():
     if not loop_ranking_xp.is_running():
         loop_ranking_xp.start()
 
-    # Recupera (melhor esforço) quem já estava numa call válida e desmutada
-    # ANTES do bot (re)iniciar — sem isso, o Booster de Call (streak) só
-    # começa a contar na PRÓXIMA mudança de estado de voz dessa pessoa
-    # (sair, mutar, trocar de canal), o que pode nunca acontecer tão cedo.
-    # É por causa disso que quem já tava numa call há um tempão via
-    # `.verxp` mostrar "Tempo nessa call: 0m00s" e nenhum booster ativo,
-    # mesmo estando lá fazia tempo — o streak nunca tinha sido iniciado.
+    # Recupera a streak do Booster de Call salva em disco (_carregar_call_booster_stats,
+    # chamado quando o módulo subiu) e reconcilia com quem REALMENTE está numa
+    # call válida e desmutada agora:
+    #   • já tinha streak salva E ainda está na mesma call válida agora →
+    #     mantém a streak de onde estava, sem perder nada no reinício.
+    #   • tinha streak salva mas NÃO está mais numa call válida agora (saiu,
+    #     mutou ou trocou de canal enquanto o bot estava fora do ar) →
+    #     descarta, não tem como saber o que rolou nesse meio-tempo.
+    #   • está numa call válida agora mas não tinha streak salva → começa do
+    #     zero, normalmente (é por causa desse caso que quem já tava numa call
+    #     há um tempão via `.verxp` mostrava "Tempo nessa call: 0m00s" e nenhum
+    #     booster ativo, mesmo estando lá fazia tempo — o streak nunca tinha
+    #     sido iniciado).
+    _membros_elegiveis_call_booster: set = set()
     for guild in bot.guilds:
         for canal_voz in guild.voice_channels:
             if canal_voz.id in _XP_CALLS_PRIVADAS:
@@ -1801,7 +1808,16 @@ async def on_ready():
                 estado_voz = membro.voice
                 if estado_voz is not None and (estado_voz.self_mute or estado_voz.mute):
                     continue
-                _call_booster_inicio.setdefault(membro.id, time.time())
+                _membros_elegiveis_call_booster.add(membro.id)
+
+    for uid in list(_call_booster_inicio.keys()):
+        if uid not in _membros_elegiveis_call_booster:
+            _resetar_call_booster(uid)
+
+    for uid in _membros_elegiveis_call_booster:
+        _call_booster_inicio.setdefault(uid, time.time())
+
+    asyncio.create_task(_salvar_call_booster_stats())
 
     # Inicia a checagem periódica de ovos incubando (recompensa do .ovo)
     if not loop_checar_ovos.is_running():
@@ -9407,8 +9423,53 @@ _XP_CALLS_MULTIPLICADOR = {
 # de 1 minuto (mesmo canal e mesmo estilo do aviso de Level Up).
 _CALL_BOOSTER_INTERVALO_MINUTOS = 20
 
+_CALL_BOOSTER_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "call_booster_data.json")
+
 _call_booster_inicio: dict = {}            # user_id -> time.time() de quando a streak ATUAL começou (ininterrupta)
 _call_booster_nivel_anunciado: dict = {}   # user_id -> último nível (x2, x3, x4...) já avisado no canal, pra não repetir
+
+
+def _carregar_call_booster_stats() -> None:
+    """Carrega a streak do Booster de Call salva em disco (na pasta do volume,
+    _ANJO_DATA_DIR), se existir. Roda antes do bot conectar — é isso que
+    permite a streak de quem já estava numa call sobreviver a um reinício
+    do bot (Railway ou qualquer outro), em vez de voltar pro nível 1 na hora.
+    A reconciliação final (quem realmente ainda está numa call válida agora)
+    acontece no on_ready, depois que o bot já sabe quem está conectado."""
+    if not os.path.exists(_CALL_BOOSTER_DATA_FILE):
+        return
+    try:
+        with open(_CALL_BOOSTER_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for uid_str, inicio in dados.get("inicio", {}).items():
+            _call_booster_inicio[int(uid_str)] = inicio
+        for uid_str, nivel in dados.get("nivel_anunciado", {}).items():
+            _call_booster_nivel_anunciado[int(uid_str)] = nivel
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_call_booster_stats() -> None:
+    """Salva a streak do Booster de Call em disco de forma atômica (escreve em
+    .tmp e substitui) — pra não perder o progresso quando o bot reiniciar."""
+    dados = {
+        "inicio": {str(uid): inicio for uid, inicio in _call_booster_inicio.items()},
+        "nivel_anunciado": {str(uid): nivel for uid, nivel in _call_booster_nivel_anunciado.items()},
+    }
+    tmp_path = _CALL_BOOSTER_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_ANJO_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _CALL_BOOSTER_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_xp_stats_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
 
 
 def _nivel_call_booster(user_id: int) -> int:
@@ -9426,14 +9487,18 @@ def _nivel_call_booster(user_id: int) -> int:
 def _resetar_call_booster(user_id: int) -> None:
     """Zera a streak do Booster de Call de alguém — perde o multiplicador na
     hora (saiu da call, mutou, ou trocou de canal)."""
+    tinha_streak = user_id in _call_booster_inicio
     _call_booster_inicio.pop(user_id, None)
     _call_booster_nivel_anunciado.pop(user_id, None)
+    if tinha_streak:
+        asyncio.create_task(_salvar_call_booster_stats())
 
 
 def _iniciar_call_booster(user_id: int) -> None:
     """Começa (ou reinicia do zero) a contagem da streak do Booster de Call."""
     _call_booster_inicio[user_id] = time.time()
     _call_booster_nivel_anunciado[user_id] = 1
+    asyncio.create_task(_salvar_call_booster_stats())
 
 
 def _empilhar_call_booster(user_id: int, ciclos: int = 1) -> None:
@@ -9445,6 +9510,7 @@ def _empilhar_call_booster(user_id: int, ciclos: int = 1) -> None:
     avanco_segundos = ciclos * _CALL_BOOSTER_INTERVALO_MINUTOS * 60
     inicio_atual = _call_booster_inicio.get(user_id, time.time())
     _call_booster_inicio[user_id] = inicio_atual - avanco_segundos
+    asyncio.create_task(_salvar_call_booster_stats())
 
 
 async def _anunciar_call_booster(guild: discord.Guild, membro: discord.Member, nivel: int) -> None:
@@ -9549,6 +9615,7 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
             if nivel_boost > _call_booster_nivel_anunciado.get(membro.id, 1):
                 _call_booster_nivel_anunciado[membro.id] = nivel_boost
                 asyncio.create_task(_anunciar_call_booster(guild, membro, nivel_boost))
+                asyncio.create_task(_salvar_call_booster_stats())
 
             ganho_call = max(1, round(ganho_call))
 
@@ -9904,6 +9971,10 @@ async def cmd_xp_backfill(ctx, limite: int = None):
 
 # Carrega o histórico de XP salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_xp_stats()
+
+# Carrega a streak salva do Booster de Call — a reconciliação final (quem
+# realmente ainda está numa call válida) acontece no on_ready.
+_carregar_call_booster_stats()
 
 # ══════════════════════════════════════════════════════════════════════
 # BATALHA DE CRIATURAS — "Eu te desafio @alguém"
@@ -11695,8 +11766,51 @@ _BAU_MIMIC_GIF = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/c105
 _BAU_MIMIC_XP_MIN = 0.01      # 1%  — perda mínima de xp se o baú for um Mimic
 _BAU_MIMIC_XP_MAX = 0.20      # 20% — perda máxima de xp se o baú for um Mimic
 
+_XP_BOOSTER_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "xp_booster_data.json")
+
 _xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp em dobro expira
 
+
+def _carregar_xp_booster_stats() -> None:
+    """Carrega os boosters de xp em dobro (baú/boss/.darbosster) salvos em
+    disco, se existirem. Roda antes do bot conectar — é isso que permite um
+    booster ainda ativo sobreviver a um reinício do bot, em vez de sumir na
+    hora. Boosters que já expiraram durante o tempo em que o bot ficou fora
+    do ar são simplesmente ignorados (a checagem `time.time() < ate` já
+    cuida disso sozinha)."""
+    if not os.path.exists(_XP_BOOSTER_DATA_FILE):
+        return
+    try:
+        with open(_XP_BOOSTER_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        agora = time.time()
+        for uid_str, ate in dados.get("ate", {}).items():
+            if ate > agora:   # não vale a pena carregar o que já expirou
+                _xp_booster_ate[int(uid_str)] = ate
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_xp_booster_stats() -> None:
+    """Salva os boosters de xp em dobro em disco de forma atômica (escreve em
+    .tmp e substitui) — pra não perder o progresso quando o bot reiniciar."""
+    dados = {
+        "ate": {str(uid): ate for uid, ate in _xp_booster_ate.items()},
+    }
+    tmp_path = _XP_BOOSTER_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_ANJO_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _XP_BOOSTER_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_xp_stats_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
 
 
 def _conceder_xp_booster(user_id: int, minutos: float) -> None:
@@ -11707,6 +11821,12 @@ def _conceder_xp_booster(user_id: int, minutos: float) -> None:
     agora = time.time()
     inicio = max(agora, _xp_booster_ate.get(user_id, 0))
     _xp_booster_ate[user_id] = inicio + minutos * 60
+    asyncio.create_task(_salvar_xp_booster_stats())
+
+
+# Carrega os boosters de xp em dobro salvos em disco (baú/boss/.darbosster) —
+# só é possível chamar aqui porque a função já foi definida acima.
+_carregar_xp_booster_stats()
 
 
 # ══════════════════════════════════════════════════════════════════════

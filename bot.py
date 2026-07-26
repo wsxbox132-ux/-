@@ -11491,6 +11491,10 @@ async def cmd_uparcriatura(ctx, alvo_id: int = None):
 # dela); mais raro um booster de 5 minutos que DOBRA o xp ganho em call e
 # em mensagem nesse período; e, RARÍSSIMO (o prêmio mais difícil de todos),
 # uma criatura de raridade 🌌 Secreta — a única forma de conseguir uma.
+#
+# .baumimic joga um baú visualmente IDÊNTICO, mas que é, na verdade, um
+# Mimic disfarçado: quem clicar primeiro cai numa armadilha e PERDE entre
+# _BAU_MIMIC_XP_MIN e _BAU_MIMIC_XP_MAX do XP dela, em vez de ganhar algo.
 # ══════════════════════════════════════════════════════════════════════
 
 _BAU_GIF = "https://static2.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/be/e0/WQOIGADT.gif"
@@ -11503,7 +11507,12 @@ _BAU_XP_MAX = 0.20            # 20% — máximo de xp que o dado pode sortear
 _BAU_BOOSTER_MINUTOS = 5
 _BAU_BOOSTER_MULTIPLICADOR = 2
 
+_BAU_MIMIC_GIF = "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/c105ac18-b254-4cb1-9e1d-eb83be6b6939/df17unu-65c15ff8-39f7-4a3a-b865-14090f46e4c5.gif?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiIvZi9jMTA1YWMxOC1iMjU0LTRjYjEtOWUxZC1lYjgzYmU2YjY5MzkvZGYxN3VudS02NWMxNWZmOC0zOWY3LTRhM2EtYjg2NS0xNDA5MGY0NmU0YzUuZ2lmIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.QfbOzXs4HatDKEoHtYg_R2SEZ_jSZkyFVCO7Bq9t8S8"
+_BAU_MIMIC_XP_MIN = 0.01      # 1%  — perda mínima de xp se o baú for um Mimic
+_BAU_MIMIC_XP_MAX = 0.20      # 20% — perda máxima de xp se o baú for um Mimic
+
 _xp_booster_ate: dict = {}    # user_id -> time.time() de quando o booster de xp em dobro expira
+
 
 
 def _conceder_xp_booster(user_id: int, minutos: float) -> None:
@@ -11603,12 +11612,18 @@ class BauView(discord.ui.View):
     `forcar_secreto=True` é usado pelo .bausecreto: o visual e o texto são
     IDÊNTICOS ao baú normal (mesmo título, mesma descrição, mesmo gif) — só
     que quem clicar primeiro leva garantidamente uma criatura 🌌 Secreta
-    ainda não desbloqueada, sem precisar do sorteio de _BAU_CHANCE_SECRETO."""
+    ainda não desbloqueada, sem precisar do sorteio de _BAU_CHANCE_SECRETO.
 
-    def __init__(self, forcar_secreto: bool = False):
+    `forcar_mimic=True` é usado pelo .baumimic: visual e texto também
+    IDÊNTICOS ao baú normal ANTES de abrir (é um Mimic disfarçado, ninguém
+    pode desconfiar!) — mas quem clicar primeiro cai numa armadilha e PERDE
+    entre _BAU_MIMIC_XP_MIN e _BAU_MIMIC_XP_MAX do XP dela, em vez de ganhar."""
+
+    def __init__(self, forcar_secreto: bool = False, forcar_mimic: bool = False):
         super().__init__(timeout=None)
         self.aberto = False
         self.forcar_secreto = forcar_secreto
+        self.forcar_mimic = forcar_mimic
 
     @discord.ui.button(label="🔓 Abrir o Baú", style=discord.ButtonStyle.success, custom_id="bau_abrir")
     async def abrir(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -11623,6 +11638,41 @@ class BauView(discord.ui.View):
         dados = xp_stats[membro.id]
         dados.setdefault("criaturas", [])
 
+        imagem_resultado = _BAU_GIF
+
+        if self.forcar_mimic:
+            # 👹 Era um Mimic disfarçado o tempo todo — em vez de prêmio,
+            # rouba um % do XP atual da pessoa (entre _BAU_MIMIC_XP_MIN e
+            # _BAU_MIMIC_XP_MAX). Não passa por nenhum outro sorteio.
+            percentual = random.uniform(_BAU_MIMIC_XP_MIN, _BAU_MIMIC_XP_MAX)
+            perda = max(1, round(dados["xp"] * percentual))
+            dados["xp"] = max(0, dados["xp"] - perda)
+            dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+            imagem_resultado = _BAU_MIMIC_GIF
+            texto_premio = (
+                f"👹💥 **ERA UM MIMIC!!** {membro.mention} abriu o baú e ele MOSTROU OS DENTES — "
+                f"em vez de prêmio, levou uma mordida de **`-{perda}` XP** (`{percentual * 100:.1f}%`)! "
+                "Que golpe de sorte ruim... 😨"
+            )
+
+            asyncio.create_task(_salvar_xp_stats())
+            asyncio.create_task(_atualizar_ranking_xp())
+
+            for item in self.children:
+                item.disabled = True
+
+            embed_resultado = discord.Embed(
+                title="👹 Era um Mimic!!",
+                description=texto_premio,
+                color=0xaa2e2e,
+                timestamp=discord.utils.utcnow(),
+            )
+            embed_resultado.set_image(url=imagem_resultado)
+            embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Baú do Tesouro")
+            await interaction.response.edit_message(embed=embed_resultado, view=self)
+            self.stop()
+            return
+
         # 🌌 Prêmio mais raro de todos: uma criatura Secreta ainda não
         # desbloqueada. Se a pessoa já tiver as 6, cai pro sorteio normal
         # (booster/xp) em vez de travar sem ter mais nada pra dar — mesmo
@@ -11632,7 +11682,6 @@ class BauView(discord.ui.View):
             if c["raridade"] == "secreto" and c["id"] not in dados["criaturas"]
         ]
 
-        imagem_resultado = _BAU_GIF
         sai_secreto = bool(_secretos_faltando) and (self.forcar_secreto or random.random() < _BAU_CHANCE_SECRETO)
 
         if sai_secreto:
@@ -11751,6 +11800,31 @@ async def cmd_bausecreto(ctx):
         return
 
     await canal.send(embed=_montar_embed_bau(), view=BauView(forcar_secreto=True))
+
+
+@bot.command(name="baumimic")
+async def cmd_baumimic(ctx):
+    """Joga um baú IDÊNTICO ao .bau normal (mesmo visual, mesmo texto,
+    ninguém no chat consegue diferenciar) — mas é, na verdade, um Mimic
+    disfarçado: quem clicar primeiro cai numa armadilha e PERDE entre
+    `_BAU_MIMIC_XP_MIN` e `_BAU_MIMIC_XP_MAX` (até 20%) do XP dela, em vez
+    de ganhar. Só o Reality pode usar. Uso: .baumimic"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BAU_CANAL_ID)
+    if canal is None:
+        return
+
+    await canal.send(embed=_montar_embed_bau(), view=BauView(forcar_mimic=True))
 
 
 # ══════════════════════════════════════════════════════════════════════

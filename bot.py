@@ -11032,14 +11032,10 @@ async def _executar_batalha(
     # Salva sempre — mesmo sem roubo de XP, o placar de vitórias/derrotas mudou
     asyncio.create_task(_salvar_xp_stats())
 
-    # ── Conclusão dramática ───────────────────────────────────────────────
-    if vantagem_usada_por is not None:
-        texto_roubo = (
-            f"🍀✨ **VANTAGEM!** **{vencedor.display_name}** tinha uma vantagem secreta e venceu essa "
-            f"batalha garantido — saqueou **`{xp_roubado}` XP** (`{percentual * 100:.0f}%`) de "
-            f"**{perdedor.display_name}**!"
-        )
-    elif xp_roubado > 0:
+    # ── Conclusão dramática — propositalmente usa o MESMO texto de sempre,
+    # mesmo quando o resultado veio de uma Vantagem: ninguém no chat pode
+    # perceber que essa batalha foi "arranjada". ──
+    if xp_roubado > 0:
         texto_roubo = (
             f"💰 O dado sorteou **`{percentual * 100:.1f}%`**! "
             f"**{vencedor.display_name}** saqueou **`{xp_roubado}` XP** de **{perdedor.display_name}**!"

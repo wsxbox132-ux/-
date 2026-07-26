@@ -13575,16 +13575,16 @@ _BOSS4_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar"
 # igual o do Baú), condizente com ele ser o boss mais forte e difícil.
 _BOSS4_BOOSTER_MINUTOS = 5
 
-_BOSS4_CHANCE_SOLO = 0.01   # 1% — nível mítico, tão difícil sozinho quanto Dourakhar
+_BOSS4_CHANCE_SOLO = 0.008   # 0.8% — dificuldade aumentada em ~20% (era 1%)
 
 # Batalha em grupo: a base mais baixa de todos os bosses, mas o bônus por
 # participante é o MAIOR — grupos grandes recuperam terreno muito mais
 # rápido do que contra qualquer outro boss.
-_BOSS4_CHANCE_GRUPO_BASE      = 0.04
-_BOSS4_CHANCE_GRUPO_MAX       = 0.65
-_BOSS4_BONUS_POR_PARTICIPANTE = 0.045
+_BOSS4_CHANCE_GRUPO_BASE      = 0.032   # dificuldade aumentada em ~20% (era 0.04)
+_BOSS4_CHANCE_GRUPO_MAX       = 0.52    # dificuldade aumentada em ~20% (era 0.65)
+_BOSS4_BONUS_POR_PARTICIPANTE = 0.036   # dificuldade aumentada em ~20% (era 0.045)
 _BOSS4_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.0, "epico": 0.0, "lendario": 0.035, "secreto": 0.05, "mitico": 0.06,
+    "comum": 0.0, "raro": 0.0, "epico": 0.0, "lendario": 0.028, "secreto": 0.04, "mitico": 0.048,
 }
 
 _BOSS4_XP_GANHO_MIN = 0.25    # 25% — mínimo de XP que quem vence pode ganhar (o melhor de todos os bosses)

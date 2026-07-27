@@ -10256,6 +10256,10 @@ _batalha_canal_ativo: set = set()   # channel_id -> impede 2 batalhas rolando ao
 _BATALHA_CHANCE_SEM_ROUBO = 0.15    # 15% de chance do vencedor não levar XP NENHUM
 _BATALHA_ROUBO_MIN = 0.01           # 1%  — mínimo que o dado pode sortear
 _BATALHA_ROUBO_MAX = 0.20           # 20% — máximo que o dado pode sortear
+_BATALHA_ROUBO_TETO = 500           # teto máximo de XP roubado por batalha — sem isso, quem
+                                      # já é rank alto rouba uma quantidade cada vez maior de
+                                      # quem também é rank alto (ou parecido), ficando desigual
+                                      # contra o rank baixo. Ajuste pra combinar com seu servidor.
 
 # ══════════════════════════════════════════════════════════════════════
 # ⚡ GOLPES ESPECIAIS — chance rara de aparecer no meio de um desafio
@@ -10272,6 +10276,9 @@ _CHANCE_GOLPE_ESPECIAL = 0.12   # 12% de chance de aparecer em cada desafio
 # chance de "não roubar nada" (_BATALHA_CHANCE_SEM_ROUBO).
 _GOLPE_ESPECIAL_ROUBO_MIN = 0.15    # 15%
 _GOLPE_ESPECIAL_ROUBO_MAX = 0.35    # 35%
+_GOLPE_ESPECIAL_ROUBO_TETO = 800    # teto máximo de XP roubado com Golpe Especial — mais alto
+                                      # que o teto normal (é sorte rara, merece ser melhor), mas
+                                      # ainda travado pra não ficar desigual entre rank baixo e alto.
 
 _GOLPES_ESPECIAIS = [
     {"nome": "Investida das Sombras",   "emoji": "🌑", "frase": "atravessa o adversário como um sopro de trevas"},
@@ -10908,6 +10915,9 @@ _BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sum
 _vantagem_ativa: set = set()      # user_ids com Vantagem pendente pra próxima batalha
 _VANTAGEM_ROUBO_MIN = 0.20        # 20% — mínimo de xp roubado garantido quando a Vantagem é usada
 _VANTAGEM_ROUBO_MAX = 0.30        # 30% — máximo de xp roubado garantido quando a Vantagem é usada
+_VANTAGEM_ROUBO_TETO = 700        # teto máximo de XP roubado com a Vantagem — ainda travado,
+                                    # mesmo sendo um roubo garantido, pra não ficar desigual
+                                    # entre rank baixo e alto.
 
 
 async def _apagar_mensagem_depois(mensagem: discord.Message, segundos: int = _BATALHA_TEMPO_SOMEM) -> None:
@@ -11276,17 +11286,17 @@ async def _executar_batalha(
         percentual = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
         if xp_perdedor_antes > 0:
             xp_roubado = max(1, round(xp_perdedor_antes * percentual))
-            xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
+            xp_roubado = min(xp_roubado, xp_perdedor_antes, _VANTAGEM_ROUBO_TETO)  # nunca deixa o xp negativo, e trava no teto
     elif golpe_especial is not None and xp_perdedor_antes > 0:
         # ⚡ Golpe Especial ativo — ignora a chance de "não roubar nada" e usa
         # a faixa turbinada (_GOLPE_ESPECIAL_ROUBO_MIN / _MAX) em vez da normal.
         percentual = random.uniform(_GOLPE_ESPECIAL_ROUBO_MIN, _GOLPE_ESPECIAL_ROUBO_MAX)
         xp_roubado = max(1, round(xp_perdedor_antes * percentual))
-        xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
+        xp_roubado = min(xp_roubado, xp_perdedor_antes, _GOLPE_ESPECIAL_ROUBO_TETO)  # nunca deixa o xp negativo, e trava no teto
     elif xp_perdedor_antes > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
         percentual = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
         xp_roubado = max(1, round(xp_perdedor_antes * percentual))
-        xp_roubado = min(xp_roubado, xp_perdedor_antes)  # nunca deixa o xp negativo
+        xp_roubado = min(xp_roubado, xp_perdedor_antes, _BATALHA_ROUBO_TETO)  # nunca deixa o xp negativo, e trava no teto
 
     if xp_roubado > 0:
         nivel_antigo_vencedor = dados_vencedor["nivel"]

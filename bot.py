@@ -8997,7 +8997,7 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"`{(1-_CHANCE_VITORIA_LENDARIO_SECRETO)*100:.0f}%`\n\n"
             "**8️⃣ 🐺 Bestas — a recompensa de quem treina de verdade**\n"
             "Mais fortes que as 🟡 Lendárias, mas ainda um degrau abaixo das 🌌 Secretas. Não saem de nenhum "
-            "sorteio — a ÚNICA forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico até o "
+            "sorteio — a ÚNICA forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro, 🟣 Épico ou 🟡 Lendário até o "
             f"Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`, item 5️⃣ acima). Ao bater esse nível, você ganha, "
             "na hora e de graça, 1 Besta sorteada entre as do tier correspondente que você ainda não tiver — "
             "garantido, sem depender de sorte nenhuma!\n\n"
@@ -9103,7 +9103,7 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "🌑 **Aeon:** ...e as 🌌 Secretas nem essas vitórias concedem. Só saem do 🪙 Baú, com uma "
             "chance minúscula. As mais raras de todas. 🖤🌌\n"
             "🌟 **Celestia:** E as 🐺 BESTAS não vêm de sorte NENHUMA!! 💪✨ É pura conquista — leva uma "
-            f"criatura ⚪🔵🟣 até o Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`) e ela é sua, garantido!!\n\n"
+            f"criatura ⚪🔵🟣🟡 até o Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`) e ela é sua, garantido!!\n\n"
             "👇 Use o menu abaixo pra escolher uma raridade — ele abre, só pra você, as criaturas "
             "daquela raridade pra conferir os detalhes (e a imagem) de cada uma."
         ),
@@ -10113,8 +10113,8 @@ _RARIDADES = {
     "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
     # 🐺 Bestas: mais fortes que as Lendárias, mas ainda um degrau abaixo das
     # Secretas. Não entram no sorteio normal de recompensa nem no 🪙 Baú — a
-    # ÚNICA forma de conseguir uma é levando uma criatura Comum, Rara ou
-    # Épica até o Nível de Capacidade máximo (ver _BESTAS_POR_TIER e
+    # ÚNICA forma de conseguir uma é levando uma criatura Comum, Rara,
+    # Épica ou Lendária até o Nível de Capacidade máximo (ver _BESTAS_POR_TIER e
     # _checar_desbloqueio_besta, mais abaixo). O peso aqui só importa pra
     # decidir a chance dela ser invocada em batalha depois de já ter sido
     # conquistada.
@@ -10138,6 +10138,7 @@ _BATALHA_CRIATURAS = [
     {"id": "ranfroi_ultimo_plebeu",    "nome": "Ranfroi, o Último Plebeu",     "raridade": "comum",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/342/714/original/rafael-francoi-mk2.gif?1654627365"},
     {"id": "buzzmole_eletrico",        "nome": "Buzzmole Elétrico do Eco",     "raridade": "comum",    "gif": "https://www.natekling.com/uploads/8/2/3/8/8238935/7185980.gif"},
     {"id": "blindado_metaltooth",      "nome": "O Blindado",                   "raridade": "comum",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/342/682/original/rafael-francoi-metaltooth.gif?1654627258"},
+    {"id": "cueio_pistola",            "nome": "Cueio Pistola",                "raridade": "comum",    "gif": "https://i.pinimg.com/originals/8c/d8/9c/8cd89c36fdb3215e7b7f82a8e94605d2.gif"},
 
     # ── Raras ───────────────────────────────────────────────────────────
     {"id": "cavaleiro_elemental",     "nome": "Cavaleiro Elemental",          "raridade": "raro",     "gif": "https://i.pinimg.com/originals/f0/6a/a4/f06aa45318cce9f16f2b3e591a138ae1.gif"},
@@ -10151,6 +10152,7 @@ _BATALHA_CRIATURAS = [
     {"id": "pai_da_sorte",             "nome": "O Pai da Sorte",               "raridade": "raro",     "gif": "https://i.redd.it/9w2ulp6ym1ky.gif"},
     {"id": "besta_do_eco",             "nome": "A Besta do Eco",               "raridade": "raro",     "gif": "https://i.pinimg.com/originals/a2/14/20/a214205173961824624e41024b6c5fdd.gif"},
     {"id": "ravok_submetido_eco",      "nome": "Ravok, o Submetido do Eco",    "raridade": "raro",     "gif": "https://i.pinimg.com/originals/a7/ed/26/a7ed267e84861ec466c82095bb0bad63.gif"},
+    {"id": "yamikiba",                 "nome": "Yamikiba",                     "raridade": "raro",     "gif": "https://cdnb.artstation.com/p/assets/images/images/050/343/457/original/rafael-francoi-neutral-inxikrahbuilder-preview.gif?1654628532"},
 
     # ── Épicas ──────────────────────────────────────────────────────────
     {"id": "heroina_esmeraldas",      "nome": "Heroína das Esmeraldas",       "raridade": "epico",    "gif": "https://i.pinimg.com/originals/40/4f/d9/404fd93484c2592c78a13cf25891c156.gif"},
@@ -10167,6 +10169,9 @@ _BATALHA_CRIATURAS = [
     {"id": "primeiro_graking",         "nome": "O Primeiro Graking",           "raridade": "epico",    "gif": "https://i.pinimg.com/originals/c1/18/60/c11860b4b9e9b179b1b8dbc2ce640839.gif"},
     {"id": "ophryx_dama_besta",        "nome": "Ophryx, a Dama e a Besta",     "raridade": "epico",    "gif": "https://gd-hbimg.huaban.com/bbf9f681a72dc53b226e1efe204770da4f98adf250494-5EKNdd_fw658"},
     {"id": "warden_eco",               "nome": "Warden do Eco",                "raridade": "epico",    "gif": "https://cdna.artstation.com/p/assets/images/images/050/343/624/original/rafael-francoi-ynuyt-unleashed.gif?1654628832"},
+    {"id": "kurojin",                  "nome": "Kurojin",                      "raridade": "epico",    "gif": "https://cdnb.artstation.com/p/assets/images/images/050/343/359/original/rafael-francoi-f2-boss-preview.gif?1654628376"},
+    {"id": "xalkuro",                  "nome": "Xal'Kuro",                     "raridade": "epico",    "gif": "https://i.redd.it/sifc575zp2dy.gif"},
+    {"id": "salafrario",               "nome": "O Salafrário",                 "raridade": "epico",    "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531101852752416848/1785113407534.gif?ex=6a67fd38&is=6a66abb8&hm=631b4328a747f1527a2a2e440694c136d28683eb7ef0dc46e17322d779178db4&"},
 
     # ── Lendárias ───────────────────────────────────────────────────────
     {"id": "ultimo_guerreiro",        "nome": "O Último Guerreiro",           "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/da5bb9cc8fab68c2c3cabe68a7cc7a10cd277939be96-bBi4DQ"},
@@ -10184,21 +10189,25 @@ _BATALHA_CRIATURAS = [
     {"id": "umbrael_observa_alem",    "nome": "Umbrael, o Que Observa Além",  "raridade": "lendario", "gif": "https://gd-hbimg.huaban.com/9064a16a34ed6e88bab3dc8c3815a6258b1d16c54068a-6KOtGT_fw658"},
     {"id": "noxar_puro_trovao",       "nome": "Noxar, o Puro Trovão",         "raridade": "lendario", "gif": "https://i.pinimg.com/originals/c7/6c/87/c76c873ca7d63b7fb29792ad26d36368.gif"},
     {"id": "malgorath_ultima_raca",   "nome": "Malgorath, o Último de Sua Raça", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/df/a8/fc/dfa8fca7813bbb3e42613523c2e2ba43.gif"},
+    {"id": "jigokuken",               "nome": "Jigokuken",                    "raridade": "lendario", "gif": "https://i.pinimg.com/originals/6e/a3/b3/6ea3b3d49760fab3d42b0570f1f9e69a.gif"},
+    {"id": "raiketsu_lamina_dourada", "nome": "Raiketsu, a Lâmina Dourada",   "raridade": "lendario", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531098422952726758/1785112683012.gif?ex=6a67fa06&is=6a66a886&hm=4b58d4ae7eb0fc825c630d44cd22ac4b017c1a78f8881e7b3e6af06ab7adea7a"},
 
     # ── Bestas ──────────────────────────────────────────────────────────
     # Mais fortes que as Lendárias, mas ainda um degrau abaixo das Secretas.
     # Nunca saem de sorteio de vitória nem do 🪙 Baú — a ÚNICA forma de
-    # conseguir uma é levando uma criatura Comum, Rara ou Épica até o Nível
-    # de Capacidade máximo (veja _BESTAS_POR_TIER logo abaixo, que define
-    # qual "tier" desbloqueia qual Besta):
-    #   ⚪ Comum no Nível máximo → sorteia 1 entre Kragor / Espinho Maldito
-    #   🔵 Raro  no Nível máximo → sorteia 1 entre Drogan / A Matriarca do Abismo
-    #   🟣 Épico no Nível máximo → concede Venomor
+    # conseguir uma é levando uma criatura Comum, Rara, Épica ou Lendária até
+    # o Nível de Capacidade máximo (veja _BESTAS_POR_TIER logo abaixo, que
+    # define qual "tier" desbloqueia qual Besta):
+    #   ⚪ Comum    no Nível máximo → sorteia 1 entre Kragor / Espinho Maldito
+    #   🔵 Raro     no Nível máximo → sorteia 1 entre Drogan / A Matriarca do Abismo
+    #   🟣 Épico    no Nível máximo → concede Venomor
+    #   🟡 Lendário no Nível máximo → concede O Último Shogun das Trevas
     {"id": "kragor_senhor_presas",    "nome": "Kragor, Senhor das Presas",     "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530616424576323615/1784997759114.gif?ex=6a663921&is=6a64e7a1&hm=ce8f0e4db85718ec33963682c0cf21136ce59d18b1dfa4861bf64716f9b802c4"},
     {"id": "espinho_maldito",         "nome": "Espinho Maldito",               "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530620836648849519/1784998710439.gif?ex=6a663d3d&is=6a64ebbd&hm=fccdd2a51553437b3244b38e95abec8d7eb2c753a575be68c3c5468a01256fce"},
     {"id": "drogan_carniceiro",       "nome": "Drogan, o Carniceiro",          "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530620836187345046/1784998831160.gif?ex=6a663d3c&is=6a64ebbc&hm=a55e419e47578dc873b7ab25687d4a14d994aa29d954012dd53afba93331834c"},
     {"id": "matriarca_abismo",        "nome": "A Matriarca do Abismo",         "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530621862898438184/1784999080550.gif?ex=6a663e31&is=6a64ecb1&hm=fb9e9ae76d5a675e227bbc929fa5028b415d196abe9c07dc4513c5483f091a45"},
     {"id": "venomor",                 "nome": "Venomor",                       "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530626370051506216/1785000151649.gif?ex=6a664264&is=6a64f0e4&hm=19fd34a9f84377e2b4c3e77b6c57d94ca043d394eb261b834ac2cff5b8f374b0"},
+    {"id": "ultimo_shogun_trevas",    "nome": "O Último Shogun das Trevas",    "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531101852417003722/1785113506856.gif?ex=6a67fd38&is=6a66abb8&hm=28a407b40c11ddc85ead690da23b6275e8bbcf6502b8f846ae62da026e5910be&"},
 
     # ── Secretas ────────────────────────────────────────────────────────
     # Um degrau abaixo das Míticas, mas acima das Lendárias — e MUITO mais
@@ -10509,20 +10518,21 @@ def _chance_vitoria(criatura_a: dict, nivel_a: int, criatura_b: dict, nivel_b: i
 # ══════════════════════════════════════════════════════════════════════
 # 🐺 BESTAS — raridade desbloqueada por CONQUISTA, não por sorteio. Mais
 # fortes que as Lendárias, mas ainda um degrau abaixo das Secretas. A única
-# forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro ou 🟣 Épico
-# até o Nível de Capacidade máximo (_NIVEL_CRIATURA_MAX) — ao bater esse
-# nível, a pessoa recebe automaticamente, de graça, 1 Besta sorteada dentre
-# as do "tier" correspondente (as que ela ainda não tiver). Nunca aparecem
-# no sorteio normal de recompensa de batalha nem no 🪙 Baú — só saem por
-# esse caminho.
+# forma de conseguir uma é levando uma criatura ⚪ Comum, 🔵 Raro, 🟣 Épico
+# ou 🟡 Lendário até o Nível de Capacidade máximo (_NIVEL_CRIATURA_MAX) —
+# ao bater esse nível, a pessoa recebe automaticamente, de graça, 1 Besta
+# sorteada dentre as do "tier" correspondente (as que ela ainda não tiver).
+# Nunca aparecem no sorteio normal de recompensa de batalha nem no 🪙 Baú —
+# só saem por esse caminho.
 # ══════════════════════════════════════════════════════════════════════
 
 # tier de origem (raridade da criatura que bateu o Nível máximo) -> lista de
 # ids de Bestas que podem ser concedidas quando isso acontece.
 _BESTAS_POR_TIER = {
-    "comum": ["kragor_senhor_presas", "espinho_maldito"],
-    "raro":  ["drogan_carniceiro", "matriarca_abismo"],
-    "epico": ["venomor"],
+    "comum":    ["kragor_senhor_presas", "espinho_maldito"],
+    "raro":     ["drogan_carniceiro", "matriarca_abismo"],
+    "epico":    ["venomor"],
+    "lendario": ["ultimo_shogun_trevas"],
 }
 
 

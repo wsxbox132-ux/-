@@ -10532,7 +10532,8 @@ def _sortear_golpe_especial() -> dict | None:
 # administrativo do Reality/CRIADOR_ID — .darcriatura, .uparcriatura,
 # .vantagem (a concessão em si), .darbosster, .bostercall, .darlevel,
 # .ovo (a concessão em si), .reiniciarcriaturas, .reiniciarranking,
-# .xpbackfill, .destravarbesta/corrigirbesta/checarbesta, .rankingdebug,
+# .xpbackfill, .destravarbesta/corrigirbesta/checarbesta,
+# .destravarpet/corrigirpet/checarpet, .rankingdebug,
 # .xpdebug, .castigo — esses são ajustes manuais internos, não "ganhos" do
 # jogo, e não devem aparecer no log. Batalhas onde uma Vantagem foi usada
 # nos bastidores CONTINUAM sendo logadas normalmente (como uma vitória
@@ -11085,6 +11086,31 @@ async def _anunciar_pet_desbloqueado(
         pass
 
 
+def _forcar_verificacao_pet(user_id: int, criatura: dict):
+    """Versão 'preguiçosa' de _checar_desbloqueio_pet: em vez de exigir que
+    o Nível de Capacidade tenha acabado de subir NESSA hora, só olha o
+    estado atual — se `criatura` (🔵 Rara) já está no Nível de Capacidade
+    `_PET_NIVEL_DESBLOQUEIO` ou acima, pra essa pessoa. Usada pelo comando
+    `.destravarpet`, que existe pra corrigir manualmente os casos em que o
+    desbloqueio automático (em batalha) falhou ou não foi anunciado.
+    Sortear e conceder o Pet segue seguro contra duplicação: só concede se
+    ainda faltar algum Pet na coleção da pessoa (mesma checagem de sempre)."""
+    if criatura["raridade"] != "raro":
+        return None
+    if _nivel_criatura(user_id, criatura["id"]) < _PET_NIVEL_DESBLOQUEIO:
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("pets", [])
+    faltando = [p for p in _PETS if p["id"] not in dados["pets"]]
+    if not faltando:
+        return None
+
+    pet_novo = random.choice(faltando)
+    dados["pets"].append(pet_novo["id"])
+    return pet_novo
+
+
 def _pet_bonus_chance_boss(user_id: int) -> float:
     """Bônus total (0.0 se ninguém tiver Pet equipado) que o Pet EQUIPADO
     dessa pessoa soma na chance de vencer um Boss: o bônus base do Nível
@@ -11299,6 +11325,75 @@ async def cmd_destravarbesta(ctx, membro: discord.Member = None):
     nomes = ", ".join(f"🐺 **{besta['nome']}**" for _, besta in concedidas)
     await ctx.send(
         f"✅ Corrigido! {alvo.mention} destravou: {nomes} — confira o canal de anúncios e `.criaturas`. ⚡"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .destravarpet — comando de manutenção/correção. Verifica se a pessoa
+# (ou alguém que o Reality aponte) tem alguma criatura 🔵 Rara já no Nível
+# de Capacidade `_PET_NIVEL_DESBLOQUEIO` (4) ou mais cujo Pet correspondente
+# não foi concedido (por causa de alguma falha no desbloqueio automático em
+# batalha) e concede na hora, anunciando no mesmo canal fixo de sempre
+# (_BESTA_ANUNCIO_CANAL_ID). Idempotente: pode ser chamado várias vezes sem
+# risco de duplicar — só concede enquanto sobrar Pet faltando na coleção.
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="destravarpet", aliases=["corrigirpet", "checarpet"])
+async def cmd_destravarpet(ctx, membro: discord.Member = None):
+    """Corrige o bug de Pet não concedido/anunciado.
+    Uso: .destravarpet            → verifica você mesmo
+         .destravarpet @membro    → só o Reality pode checar outra pessoa
+    """
+    autor = ctx.author
+
+    if membro is not None and membro.id != autor.id and autor.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha de lado* ...você só pode checar as suas próprias criaturas. 🖤🌑"
+        )
+        return
+
+    alvo = membro or autor
+
+    dados = xp_stats[alvo.id]
+    dados.setdefault("criaturas", [])
+
+    candidatas = [
+        c for c in _BATALHA_CRIATURAS
+        if c["id"] in dados["criaturas"]
+        and c["raridade"] == "raro"
+        and _nivel_criatura(alvo.id, c["id"]) >= _PET_NIVEL_DESBLOQUEIO
+    ]
+
+    if not candidatas:
+        await ctx.send(
+            f"🌑 **Aeon:** *verifica em silêncio* ...nenhuma criatura Rara de "
+            f"{alvo.mention} está no Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}` ou mais "
+            "agora. 🖤🌑 Nada pra destravar."
+        )
+        return
+
+    concedidos = []
+    for criatura in candidatas:
+        pet = _forcar_verificacao_pet(alvo.id, criatura)
+        if pet is not None:
+            concedidos.append((criatura, pet))
+
+    if not concedidos:
+        await ctx.send(
+            f"🌟 **Celestia:** Verifiquei tudinho!! 😊🌸 {alvo.mention} já tem todos os Pets "
+            "disponíveis pras criaturas Raras maxadas dela — nada faltando pra destravar!! ✨"
+        )
+        return
+
+    asyncio.create_task(_salvar_xp_stats())
+
+    for criatura, pet in concedidos:
+        if ctx.guild:
+            asyncio.create_task(_anunciar_pet_desbloqueado(ctx.guild, alvo, criatura, pet))
+
+    nomes = ", ".join(f"🐾 **{pet['nome']}**" for _, pet in concedidos)
+    await ctx.send(
+        f"✅ Corrigido! {alvo.mention} destravou: {nomes} — confira o canal de anúncios e `.equiparpet`. ⚡"
     )
 
 

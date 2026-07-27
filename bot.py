@@ -8329,6 +8329,101 @@ async def cmd_ranking_debug(ctx):
     await ctx.send(f"🔍 **Diagnóstico do Ranking de Anjos**\n{texto}")
 
 
+class ConfirmarResetAnjoView(discord.ui.View):
+    """Confirmação do reset do ranking dos Anjos — só o criador do bot pode confirmar."""
+
+    def __init__(self):
+        super().__init__(timeout=30)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != CRIADOR_ID:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+                "🌟 **Celestia:** Só o DEV pode confirmar isso!! 🌸🤍✨",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(
+        label="🗑️ Confirmar Reset",
+        style=discord.ButtonStyle.danger,
+        custom_id="reiniciaranjo_confirmar"
+    )
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global _anjo_ranking_message_id
+
+        for item in self.children:
+            item.disabled = True
+
+        # Zera todas as estatísticas guardadas
+        anjo_stats.clear()
+
+        # Sessões de call em andamento continuam sendo contadas, mas a partir de agora
+        agora = time.time()
+        for uid in list(_anjo_voice_join.keys()):
+            _anjo_voice_join[uid] = agora
+
+        await _salvar_anjo_stats()
+        await _atualizar_ranking_anjo()
+
+        embed_final = discord.Embed(
+            title="🕊️ Ranking dos Anjos Reiniciado",
+            description=(
+                "🌑 **Aeon:** ...zerado. As sombras apagaram todo o histórico. 🖤🌑\n"
+                "🌟 **Celestia:** TUDO ZERADO!! 😤🌸 Todo mundo começa do zero agora!! ✨"
+            ),
+            color=0xe8d5f5
+        )
+        await interaction.response.edit_message(embed=embed_final, view=self)
+        self.stop()
+
+    @discord.ui.button(
+        label="❌ Cancelar",
+        style=discord.ButtonStyle.secondary,
+        custom_id="reiniciaranjo_cancelar"
+    )
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content="❌ Reset do ranking cancelado.", embed=None, view=self
+        )
+        self.stop()
+
+
+@bot.command(name="reiniciaranjo")
+async def cmd_reiniciar_anjo(ctx):
+    """Reinicia (zera) o ranking dos Anjos. Uso: .reiniciaranjo — só o DEV pode usar."""
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    embed = discord.Embed(
+        title="⚠️ Reiniciar Ranking dos Anjos",
+        description=(
+            "Isso vai **zerar TODAS as estatísticas** (mensagens, tempo em call e "
+            "tickets) de todos os Anjos e apagar o histórico salvo.\n\n"
+            "**Essa ação não pode ser desfeita.** Tem certeza?"
+        ),
+        color=0xff4444
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
+    await ctx.send(embed=embed, view=ConfirmarResetAnjoView())
+
+
 # Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_anjo_stats()
 

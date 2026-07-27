@@ -10945,6 +10945,49 @@ async def _anunciar_besta_desbloqueada(
         pass
 
 
+# Canal onde todo desbloqueio de 🦴 Fóssil é anunciado — mesmo canal do chat
+# geral (_XP_CANAL_1 = 1284257046740602901), igual ao anúncio de Besta.
+_FOSSIL_ANUNCIO_CANAL_ID = 1284257046740602901
+
+
+async def _anunciar_fossil_desbloqueado(
+    guild: discord.Guild, membro: discord.Member, fossil: dict
+) -> None:
+    """Manda, no canal fixo _FOSSIL_ANUNCIO_CANAL_ID, o anúncio de que `membro`
+    desenterrou o 🦴 Fóssil `fossil` — sempre mencionando a pessoa E o nome
+    da criatura. Só é chamado quando os dois lados da batalha estavam numa
+    call de voz e a rolagem de _FOSSIL_CHANCE_DESBLOQUEIO deu certo."""
+    canal = guild.get_channel(_FOSSIL_ANUNCIO_CANAL_ID)
+    if canal is None:
+        return
+
+    info_raridade_fossil = _RARIDADES["fosseis"]
+
+    embed = discord.Embed(
+        title="🦴 Fóssil Desenterrado!",
+        description=(
+            f"🎧 Os dois lados da batalha estavam numa call de voz, e o dado só tinha "
+            f"`{_FOSSIL_CHANCE_DESBLOQUEIO * 100:.0f}%` de chance — mas **{membro.display_name}** "
+            f"desenterrou {info_raridade_fossil['emoji']} **{fossil['nome']}** "
+            f"(*{info_raridade_fossil['label']}*)!!\n\n"
+            "🌑 **Aeon:** *observa os ossos antigos* ...algo raro veio à tona. As sombras sentem "
+            "o peso dos séculos nisso. 🖤🦴\n"
+            f"🌟 **Celestia:** UAU {membro.mention} QUE SORTE ABSURDA!! 😱🦴✨ Achado de call, "
+            "achado de sorte!! 💫"
+        ),
+        color=info_raridade_fossil["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_author(name=membro.display_name, icon_url=membro.display_avatar.url)
+    embed.set_image(url=fossil["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+
+    try:
+        await canal.send(content=membro.mention, embed=embed)
+    except discord.HTTPException:
+        pass
+
+
 def _forcar_verificacao_besta(user_id: int, criatura: dict):
     """Versão 'preguiçosa' de _checar_desbloqueio_besta: em vez de exigir que
     o Nível de Capacidade tenha acabado de subir NESSA hora, só olha o
@@ -12140,6 +12183,13 @@ async def _executar_batalha(
     if besta_nova_perdedor is not None and canal.guild:
         asyncio.create_task(
             _anunciar_besta_desbloqueada(canal.guild, perdedor, criatura_perdedora, besta_nova_perdedor)
+        )
+
+    # ── Anuncia no canal fixo (_FOSSIL_ANUNCIO_CANAL_ID) sempre que um
+    # Fóssil for desenterrado agora, mencionando quem foi e qual Fóssil. ──
+    if criatura_fossil_nova is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_fossil_desbloqueado(canal.guild, vencedor, criatura_fossil_nova)
         )
 
     # ── 🐾 Desbloqueio de Pet — vale pros dois lados, pela mesma razão da

@@ -2086,6 +2086,81 @@ async def on_raw_bulk_message_delete(payload: discord.RawBulkMessageDeleteEvent)
         print(f"[logs-chat] ERRO on_raw_bulk_message_delete: {e!r}")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# COBRANÇA DE TICKETS — 01TicketKing (710034409214181396)
+# Monitora tickets abertos por membros que têm o cargo
+# TICKET_COBRANCA_CARGO_ID. Quando o dono do ticket manda uma mensagem e
+# quem reivindicou ainda não respondeu, dispara um timer de 1h. Se a 1h
+# passar sem resposta do responsável, o bot cobra no canal de logs,
+# marcando quem reivindicou + o cargo de suporte — e repete a cobrança a
+# cada 1h até alguém responder.
+# ══════════════════════════════════════════════════════════════════════
+
+TICKET_COBRANCA_CARGO_ID   = 1290029492856815696  # só monitora tickets cujo dono tem esse cargo
+TICKET_COBRANCA_SUPORTE_ID = 1284266788674080784  # cargo extra marcado na cobrança
+TICKET_COBRANCA_LOGS_ID    = 1290058994794106881  # canal onde a cobrança é postada
+TICKET_COBRANCA_INTERVALO  = 3600  # 1 hora, em segundos
+
+# canal_id -> {"dono_id": int, "reivindicador_id": int|None, "aguardando": bool, "task": asyncio.Task|None}
+_tickets_cobranca: dict = {}
+
+
+def _extrair_mencao_id(texto: str):
+    """Extrai o ID de uma menção <@id> ou <@!id> dentro de um texto. Retorna None se não achar."""
+    m = re.search(r"<@!?(\d+)>", texto or "")
+    return int(m.group(1)) if m else None
+
+
+def _ticket_cobranca_cancelar(canal_id: int):
+    """Cancela o timer e limpa o controle de cobrança de um ticket (fechado ou respondido)."""
+    info = _tickets_cobranca.pop(canal_id, None)
+    if info and info.get("task"):
+        info["task"].cancel()
+
+
+async def _ticket_cobranca_loop(guild: discord.Guild, canal_id: int):
+    """A cada 1h, se quem reivindicou o ticket ainda não respondeu, cobra no canal de logs."""
+    try:
+        while True:
+            await asyncio.sleep(TICKET_COBRANCA_INTERVALO)
+
+            info = _tickets_cobranca.get(canal_id)
+            if info is None or not info.get("aguardando"):
+                return  # já foi respondido, ticket fechado, ou saiu do controle
+
+            canal_logs = guild.get_channel(TICKET_COBRANCA_LOGS_ID)
+            if canal_logs is None:
+                print(f"[cobranca-ticket] Canal de logs {TICKET_COBRANCA_LOGS_ID} não encontrado.")
+                continue
+
+            canal_ticket = guild.get_channel(canal_id)
+            reiv_id = info.get("reivindicador_id")
+            dono_id = info.get("dono_id")
+
+            reiv_mention  = f"<@{reiv_id}>" if reiv_id else "*(ninguém reivindicou este ticket ainda)*"
+            dono_mention  = f"<@{dono_id}>" if dono_id else "a pessoa"
+            canal_mention = canal_ticket.mention if canal_ticket else f"`{canal_id}`"
+
+            try:
+                await canal_logs.send(
+                    f"⏰ {reiv_mention} <@&{TICKET_COBRANCA_SUPORTE_ID}> — {dono_mention} está esperando "
+                    f"resposta em {canal_mention} há mais de 1 hora! Vai lá responder 🙏"
+                )
+            except discord.HTTPException as e:
+                print(f"[cobranca-ticket] ERRO ao enviar cobrança do canal {canal_id}: {e!r}")
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        print(f"[cobranca-ticket] ERRO no loop do canal {canal_id}: {e!r}")
+
+
+@bot.event
+async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
+    # Limpa o controle de cobrança quando o canal do ticket é fechado/apagado
+    _ticket_cobranca_cancelar(channel.id)
+# ══════════════════════════════════════════════════════════════════════
+
+
 @bot.event
 async def on_message(message: discord.Message):
     # ── Detecção de ticket do 01TicketKing ────────────────────────────────────
@@ -2098,8 +2173,66 @@ async def on_message(message: discord.Message):
                 break
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Cobrança de tickets: detecta abertura e reivindicação (01TicketKing) ──
+    if message.author.id == TICKET_BOT_ID and message.channel.id != CANAL_LOGS_TICKET_ID and message.embeds and message.guild:
+        try:
+            embed_cobranca = message.embeds[0]
+            titulo_cobranca = (embed_cobranca.title or "").strip().lower()
+            descricao_cobranca = embed_cobranca.description or ""
+
+            if titulo_cobranca == "ticket aberto":
+                dono_id = _extrair_mencao_id(descricao_cobranca)
+                if dono_id is not None:
+                    dono_membro = message.guild.get_member(dono_id)
+                    if dono_membro is None:
+                        try:
+                            dono_membro = await message.guild.fetch_member(dono_id)
+                        except discord.NotFound:
+                            dono_membro = None
+                    cargo_gatilho = message.guild.get_role(TICKET_COBRANCA_CARGO_ID)
+                    if dono_membro and cargo_gatilho and cargo_gatilho in dono_membro.roles:
+                        _tickets_cobranca[message.channel.id] = {
+                            "dono_id": dono_id,
+                            "reivindicador_id": None,
+                            "aguardando": False,
+                            "task": None,
+                        }
+                        print(f"[cobranca-ticket] Monitorando ticket {message.channel.id} (dono {dono_id})")
+
+            elif titulo_cobranca == "ticket reivindicado":
+                info_cobranca = _tickets_cobranca.get(message.channel.id)
+                if info_cobranca is not None:
+                    reiv_id = _extrair_mencao_id(descricao_cobranca)
+                    if reiv_id is not None:
+                        info_cobranca["reivindicador_id"] = reiv_id
+                        print(f"[cobranca-ticket] Ticket {message.channel.id} reivindicado por {reiv_id}")
+        except Exception as e:
+            print(f"[cobranca-ticket] ERRO ao processar embed do 01TicketKing: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     if message.author.bot:
         return
+
+    # ── Cobrança de tickets: cliente mandou mensagem / responsável respondeu ──
+    if message.guild is not None and message.channel.id in _tickets_cobranca:
+        try:
+            info_cobranca = _tickets_cobranca[message.channel.id]
+            if message.author.id == info_cobranca.get("dono_id") and info_cobranca.get("reivindicador_id"):
+                if not info_cobranca.get("aguardando"):
+                    info_cobranca["aguardando"] = True
+                    info_cobranca["task"] = asyncio.create_task(
+                        _ticket_cobranca_loop(message.guild, message.channel.id)
+                    )
+                    print(f"[cobranca-ticket] Timer de 1h iniciado no canal {message.channel.id}")
+            elif message.author.id == info_cobranca.get("reivindicador_id") and info_cobranca.get("aguardando"):
+                info_cobranca["aguardando"] = False
+                if info_cobranca.get("task"):
+                    info_cobranca["task"].cancel()
+                info_cobranca["task"] = None
+                print(f"[cobranca-ticket] Responsável respondeu no canal {message.channel.id}, timer cancelado")
+        except Exception as e:
+            print(f"[cobranca-ticket] ERRO ao processar mensagem no canal {message.channel.id}: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ── Ranking de Anjos: conta mensagens de quem tem o cargo Anjo ─────────────
     try:

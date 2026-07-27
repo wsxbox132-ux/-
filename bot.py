@@ -9185,13 +9185,13 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"Mas cuidado: existe `{_BATALHA_CHANCE_SEM_ROUBO * 100:.0f}%` de chance do vencedor "
             "não levar **nada**, mesmo ganhando — é sorte pura!\n\n"
             "**4️⃣ Desbloqueando criaturas**\n"
-            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário, 🐺 Bestas, 🌌 Secreto ou "
-            "🐉 Mítico — e quanto mais rara, menos ela costuma aparecer nos sorteios. Todo mundo já começa com as "
-            "⚪ Comuns desbloqueadas; Raras, Épicas e Lendárias saem **de recompensa** pra quem **vence** uma "
-            "batalha — o jogo sorteia uma criatura nova (que você ainda não tem) e ela entra pra sua coleção pra "
-            "sempre. Quem perde não ganha nada disso. 🐺 Bestas, 🌌 Secretas e 🐉 Míticas seguem caminhos próprios "
-            "pra desbloquear — veja os itens 8️⃣ e 9️⃣ abaixo. Veja a lista completa na 📖 **Enciclopédia** "
-            "(mensagem fixa aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
+            "Toda criatura tem uma **raridade** — ⚪ Comum, 🔵 Raro, 🟣 Épico, 🟡 Lendário, 🐺 Bestas, 🦴 Fóssil, "
+            "🌌 Secreto ou 🐉 Mítico — e quanto mais rara, menos ela costuma aparecer nos sorteios. Todo mundo já "
+            "começa com as ⚪ Comuns desbloqueadas; Raras, Épicas e Lendárias saem **de recompensa** pra quem "
+            "**vence** uma batalha — o jogo sorteia uma criatura nova (que você ainda não tem) e ela entra pra "
+            "sua coleção pra sempre. Quem perde não ganha nada disso. 🐺 Bestas, 🦴 Fósseis, 🌌 Secretas e 🐉 "
+            "Míticas seguem caminhos próprios pra desbloquear — veja os itens 8️⃣, 9️⃣ e 🔟 abaixo. Veja a lista "
+            "completa na 📖 **Enciclopédia** (mensagem fixa aqui embaixo) e confira sua coleção com `.criaturas`.\n\n"
             "**5️⃣ ⭐ Nível de Capacidade — quanto mais usa, mais forte fica**\n"
             "Além da raridade, toda criatura tem um **Nível de Capacidade** individual (de 1 a "
             f"{_NIVEL_CRIATURA_MAX}), que é **por pessoa**. Ela sempre começa no Nível 1, e cada vez que "
@@ -9215,8 +9215,9 @@ def _montar_embed_info_batalha() -> discord.Embed:
             f"⚪↔🟣 **2 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[2]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[2])*100:.0f}%`\n"
             f"⚪↔🟡 **3 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[3]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[3])*100:.0f}%`\n"
             f"⚪↔🐺 **4 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[4]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[4])*100:.0f}%`\n"
-            f"⚪↔🌌 **5 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[5]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[5])*100:.0f}%`\n"
-            f"⚪↔🐉 **6 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[6]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[6])*100:.0f}%`\n"
+            f"⚪↔🦴 **5 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[5]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[5])*100:.0f}%`\n"
+            f"⚪↔🌌 **6 raridades de distância:** `{_CHANCE_VITORIA_POR_DEGRAU[6]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[6])*100:.0f}%`\n"
+            f"⚪↔🐉 **7 raridades de distância (máxima):** `{_CHANCE_VITORIA_POR_DEGRAU[7]*100:.0f}%` x `{(1-_CHANCE_VITORIA_POR_DEGRAU[7])*100:.0f}%`\n"
             f"Mesma raridade (ex: Épico vs Épico) é sempre `{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` x "
             f"`{_CHANCE_VITORIA_POR_DEGRAU[0]*100:.0f}%` como ponto de partida — e o Nível de Capacidade de "
             f"cada criatura (item acima) ainda refina esse número um pouco pra cima ou pra baixo.\n"
@@ -9236,7 +9237,14 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
             f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**🔟 🐾 Pets — companheiros de suporte contra Boss**\n"
+            "**🔟 🦴 Fósseis — só desenterrados em call**\n"
+            "Um degrau abaixo das 🌌 Secretas, mas mais fortes que as 🟡 Lendárias. Não entram no sorteio "
+            "normal, no 🪙 Baú nem no `.ovo` — a ÚNICA forma de conseguir um é **vencendo** uma batalha de "
+            "desafio com você **E** a pessoa que te desafiou (ou que você desafiou) **os dois numa call de "
+            f"voz** no momento em que a batalha termina. Só nessas condições rola uma chance de "
+            f"`{_FOSSIL_CHANCE_DESBLOQUEIO * 100:.0f}%` de desenterrar um Fóssil novo — se algum dos dois "
+            "não estiver em call, a rolagem nem acontece.\n\n"
+            "**1️⃣1️⃣ 🐾 Pets — companheiros de suporte contra Boss**\n"
             f"Leve uma criatura 🔵 Rara até o Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}` e "
             "ganhe, de graça, um Pet sorteado. Pets não batalham no PvP — são suporte: EQUIPADOS "
             f"(`.equiparpet <nome>`), somam entre `{_PET_BONUS_BOSS_NIVEL1*100:.0f}%` e "
@@ -9244,7 +9252,7 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "Nível do Pet, de 1 a 5) e têm chance de upar uma das suas criaturas depois de uma "
             "vitória. Só sobem de Nível enfrentando Boss, e cada um destrava uma habilidade "
             "especial própria no Nível 3. Veja todos na 📖 Enciclopédia!\n\n"
-            "**1️⃣1️⃣ Pra poder batalhar**\n"
+            "**1️⃣2️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9341,6 +9349,9 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             "vitórias!!\n"
             "🌑 **Aeon:** ...e as 🌌 Secretas nem essas vitórias concedem. Só saem do 🪙 Baú, com uma "
             "chance minúscula. As mais raras de todas. 🖤🌌\n"
+            "🌟 **Celestia:** E os 🦴 FÓSSEIS só aparecem pra quem tá DE CALL!! 😆🎧✨ Vence uma batalha "
+            "com você e a outra pessoa os dois numa call de voz, e rola uma chancezinha de desenterrar "
+            "um!!\n"
             "🌟 **Celestia:** E as 🐺 BESTAS não vêm de sorte NENHUMA!! 💪✨ É pura conquista — leva uma "
             f"criatura ⚪🔵🟣🟡 até o Nível de Capacidade máximo (`{_NIVEL_CRIATURA_MAX}`) e ela é sua, garantido!!\n\n"
             "👇 Use o menu abaixo pra escolher uma raridade — ele abre, só pra você, as criaturas "
@@ -9443,7 +9454,7 @@ class EnciclopediaRaridadeSelect(discord.ui.Select):
     abre — só pra quem clicou — o menu com as criaturas daquela raridade
     (EnciclopediaSelect). Isso existe como um passo à parte (em vez de um
     select por raridade direto na mensagem fixa) porque o Discord só permite
-    5 menus por mensagem, e com 6 raridades (contando a 🌌 Secreta) não
+    5 menus por mensagem, e com 8 raridades (contando 🦴 Fóssil e 🌌 Secreta) não
     caberia mais um select fixo por raridade — assim sobra espaço mesmo se
     surgirem raridades novas no futuro."""
 
@@ -10428,10 +10439,15 @@ _RARIDADES = {
     # decidir a chance dela ser invocada em batalha depois de já ter sido
     # conquistada.
     "bestas":   {"label": "Besta",    "emoji": "🐺", "cor": 0x922b21, "peso": 6},
+    # 🦴 Fósseis: um degrau abaixo das Secretas, mas mais fortes que as
+    # Lendárias — ver a lógica de desbloqueio própria delas mais abaixo
+    # (_FOSSIL_CHANCE_DESBLOQUEIO), gatilhada só quando os dois lados de uma
+    # batalha estão numa call de voz.
+    "fosseis":  {"label": "Fóssil",   "emoji": "🦴", "cor": 0xc2a878, "peso": 3},
     "secreto":  {"label": "Secreto",  "emoji": "🌌", "cor": 0x6c2eb5, "peso": 2},
     "mitico":   {"label": "Mítico",   "emoji": "🐉", "cor": 0xe0115f, "peso": 5},
 }
-_ORDEM_RARIDADES = ("mitico", "secreto", "bestas", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+_ORDEM_RARIDADES = ("mitico", "secreto", "fosseis", "bestas", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
 
 # Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
 # um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
@@ -10517,6 +10533,23 @@ _BATALHA_CRIATURAS = [
     {"id": "matriarca_abismo",        "nome": "A Matriarca do Abismo",         "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530621862898438184/1784999080550.gif?ex=6a663e31&is=6a64ecb1&hm=fb9e9ae76d5a675e227bbc929fa5028b415d196abe9c07dc4513c5483f091a45"},
     {"id": "venomor",                 "nome": "Venomor",                       "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1530626370051506216/1785000151649.gif?ex=6a664264&is=6a64f0e4&hm=19fd34a9f84377e2b4c3e77b6c57d94ca043d394eb261b834ac2cff5b8f374b0"},
     {"id": "ultimo_shogun_trevas",    "nome": "O Último Shogun das Trevas",    "raridade": "bestas",   "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531101852417003722/1785113506856.gif?ex=6a67fd38&is=6a66abb8&hm=28a407b40c11ddc85ead690da23b6275e8bbcf6502b8f846ae62da026e5910be&"},
+
+    # ── Fósseis ─────────────────────────────────────────────────────────
+    # Um degrau abaixo das Secretas, mas mais fortes que as Lendárias. Não
+    # entram no sorteio normal de recompensa nem no 🪙 Baú/.ovo — a ÚNICA
+    # forma de conseguir uma é vencendo uma batalha de "eu te desafio" com
+    # os DOIS lados (desafiante e desafiado) numa call de voz no momento:
+    # aí sim rola uma chance de _FOSSIL_CHANCE_DESBLOQUEIO de o vencedor
+    # desenterrar um Fóssil novo (ver _executar_batalha, mais abaixo).
+    {"id": "kharox",                  "nome": "Kharox",                        "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/39675b30-c22a-4fee-9169-796d8df605c3/sovanjedi-QxpAB2XnRkgnAb8AG_sZT-jho_4x.gif?width=1920"},
+    {"id": "tyrgath",                 "nome": "Tyrgath",                       "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/39675b30-c22a-4fee-9169-796d8df605c3/sovanjedi-_Zu5_q0u8pF02EL_xZ-di-goremagala_4x.gif?width=1920"},
+    {"id": "fossorak",                "nome": "Fossorak",                      "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/39675b30-c22a-4fee-9169-796d8df605c3/sovanjedi-Erok4gaSmAq53n-OFHmo7-barioth_4x.gif?width=1920"},
+    {"id": "rexolith",                "nome": "Rexolith",                      "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/e5cf266b-89a9-4f7d-b581-9adc6e1bc374/sovanjedi-yORqbtobG_AsZfkJjT7qL-zin_4x.gif?width=1920"},
+    {"id": "titanclaw",               "nome": "Titanclaw",                     "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/365c202e-1fc3-4676-93fa-ff982bc10652/sovanjedi-u6eIN5WKwTqaZt2wt8WJl-magna_4x.gif?width=1920"},
+    {"id": "skullmaw",                "nome": "Skullmaw",                      "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/365c202e-1fc3-4676-93fa-ff982bc10652/sovanjedi-GQrOL3cptWN7yFxDRmhMW-khezu_4x.gif?width=1920"},
+    {"id": "paleotyr",                "nome": "Paleotyr",                      "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/abae2a03-07c5-42ac-b5c0-59dd1cd60907/sovanjedi-8vvofnFCout2lpQqfWKuv-NorthernMountain_idle.gif?width=750&quality=100"},
+    {"id": "ossaraith",                "nome": "Ossaraith",                     "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/365c202e-1fc3-4676-93fa-ff982bc10652/sovanjedi-EjBUt_WUHgQhErjz52ysz-goss_4x.gif?width=750&quality=100"},
+    {"id": "necrolith",               "nome": "Necrolith",                     "raridade": "fosseis",  "gif": "https://images.cara.app/production/posts/5e343483-c057-4aa8-a379-c27c02fd22d5/sovanjedi-ICTTsVYhJNyqg7CjKSeeQ-danaumus_TWEAKS_x4.gif?width=1920"},
 
     # ── Secretas ────────────────────────────────────────────────────────
     # Um degrau abaixo das Míticas, mas acima das Lendárias — e MUITO mais
@@ -10656,20 +10689,21 @@ async def _log_rpg(guild: discord.Guild, titulo: str, descricao: str, cor: int =
 
 # ── Hierarquia de força das raridades ──────────────────────────────────────
 # Cada raridade tem uma força relativa (_ORDEM_RARIDADES, do mais forte pro
-# mais fraco: 🐉 Mítico > 🌌 Secreto > 🐺 Bestas > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
+# mais fraco: 🐉 Mítico > 🌌 Secreto > 🦴 Fóssil > 🐺 Bestas > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
 # Quanto maior a distância de raridade entre duas criaturas, mais a balança
 # pende pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
 # Um ⚪ Comum sempre pode dar a zebra contra um 🟣 Épico, só que é raro.
 # Chave = quantos "degraus" de raridade separam as duas criaturas na
-# hierarquia (0 = mesma raridade, 6 = a maior distância possível).
+# hierarquia (0 = mesma raridade, 7 = a maior distância possível).
 _CHANCE_VITORIA_POR_DEGRAU = {
     0: 0.50,   # mesma raridade — força bruta pura, sorteio justo
     1: 0.63,   # 1 degrau de diferença (ex: 🔵 Raro vs ⚪ Comum)
     2: 0.74,   # 2 degraus de diferença (ex: 🟣 Épico vs ⚪ Comum)
     3: 0.83,   # 3 degraus de diferença (ex: 🟡 Lendário vs ⚪ Comum)
     4: 0.90,   # 4 degraus de diferença (ex: 🐺 Bestas vs ⚪ Comum)
-    5: 0.96,   # 5 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
-    6: 0.98,   # 6 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
+    5: 0.93,   # 5 degraus de diferença (ex: 🦴 Fóssil vs ⚪ Comum)
+    6: 0.96,   # 6 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
+    7: 0.98,   # 7 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
 }
 
 # Excepção específica: 🟡 Lendário contra 🐉 Mítico OU 🌌 Secreto é MUITO mais
@@ -11709,6 +11743,13 @@ def _registrar_uso_favorito(user_id: int, criatura_id: str) -> bool:
 _MITICO_VITORIAS_INTERVALO = 10      # a cada quantas vitórias rola a chance de Mítica
 _MITICO_CHANCE_DESBLOQUEIO = 0.01    # 1% de chance nessa rolagem
 
+# 🦴 Fósseis — diferente do Mítico (que precisa de um MÚLTIPLO de vitórias),
+# o Fóssil rola em TODA vitória, sem intervalo — mas só entra em jogo quando
+# os dois lados da batalha (desafiante e desafiado) estão numa call de voz
+# no momento em que ela acontece. Sem os dois em call, a rolagem nem
+# acontece — não importa quantas vitórias a pessoa já tenha.
+_FOSSIL_CHANCE_DESBLOQUEIO = 0.02     # 2% de chance nessa rolagem (só quando os dois estão em call)
+
 _BATALHA_TEMPO_ACEITE = 60          # segundos que o desafiado tem pra aceitar/recusar
 _BATALHA_TEMPO_SOMEM  = 60          # segundos até cada mensagem da batalha sumir sozinha
 
@@ -12022,13 +12063,14 @@ async def _executar_batalha(
     # 🐉 Míticas ficam de fora desse sorteio normal — elas têm uma checagem
     # especial própria logo abaixo, bem mais rara. 🌌 Secretas também ficam
     # de fora — essas só saem do 🪙 Baú (.bau), nunca como recompensa de
-    # batalha. 🐺 Bestas também ficam de fora — essas só saem quando uma
-    # criatura Comum/Rara/Épica bate o Nível de Capacidade máximo (ver
-    # _checar_desbloqueio_besta logo abaixo). ──
+    # batalha. 🦴 Fósseis também ficam de fora — só saem com os dois lados em
+    # call, ver checagem própria logo abaixo. 🐺 Bestas também ficam de fora —
+    # essas só saem quando uma criatura Comum/Rara/Épica bate o Nível de
+    # Capacidade máximo (ver _checar_desbloqueio_besta logo abaixo). ──
     dados_vencedor.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto", "bestas")
+        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")
     ]
     criatura_nova = None
     if _nao_possuidas:
@@ -12053,6 +12095,27 @@ async def _executar_batalha(
         if _miticas_faltando:
             criatura_mitica_nova = random.choice(_miticas_faltando)
             dados_vencedor["criaturas"].append(criatura_mitica_nova["id"])
+
+    # ── 🦴 Desbloqueio de Fóssil — só entra em jogo quando os DOIS lados da
+    # batalha (desafiante E desafiado) estão numa call de voz no exato
+    # momento em que ela termina. Se essa condição bater, rola
+    # _FOSSIL_CHANCE_DESBLOQUEIO de chance do vencedor desenterrar um Fóssil
+    # novo — sem depender de vitórias acumuladas nem de intervalo nenhum,
+    # diferente do Mítico. Se algum dos dois não estiver em call, a rolagem
+    # nem acontece. ──
+    criatura_fossil_nova = None
+    _ambos_em_call = (
+        desafiante.voice is not None and desafiante.voice.channel is not None
+        and desafiado.voice is not None and desafiado.voice.channel is not None
+    )
+    if _ambos_em_call and random.random() < _FOSSIL_CHANCE_DESBLOQUEIO:
+        _fosseis_faltando = [
+            c for c in _BATALHA_CRIATURAS
+            if c["raridade"] == "fosseis" and c["id"] not in dados_vencedor["criaturas"]
+        ]
+        if _fosseis_faltando:
+            criatura_fossil_nova = random.choice(_fosseis_faltando)
+            dados_vencedor["criaturas"].append(criatura_fossil_nova["id"])
 
     # ── 🐺 Desbloqueio de Besta — vale pros dois lados, já que os dois
     # "usaram" sua criatura nessa batalha e qualquer uma das duas pode ter
@@ -12187,6 +12250,14 @@ async def _executar_batalha(
             f"{info_raridade_mitica['emoji']} **{criatura_mitica_nova['nome']}** "
             f"(*{info_raridade_mitica['label']}*)!! 🐉✨"
         )
+    if criatura_fossil_nova is not None:
+        info_raridade_fossil = _RARIDADES[criatura_fossil_nova["raridade"]]
+        partes_desbloqueio.append(
+            f"🦴✨ **ACHADO RARÍSSIMO!!** Os dois estavam numa call, e o dado só tinha "
+            f"{_FOSSIL_CHANCE_DESBLOQUEIO * 100:.0f}% de chance — mas **{vencedor.display_name}** "
+            f"desenterrou {info_raridade_fossil['emoji']} **{criatura_fossil_nova['nome']}** "
+            f"(*{info_raridade_fossil['label']}*)!! 🦴✨"
+        )
     if besta_nova_vencedor is not None:
         info_raridade_besta = _RARIDADES["bestas"]
         partes_desbloqueio.append(
@@ -12287,6 +12358,12 @@ async def _executar_batalha(
         partes_log.append(
             f"🐉 **{vencedor.display_name}** desbloqueou o Mítico {info_r['emoji']} "
             f"**{criatura_mitica_nova['nome']}**!"
+        )
+    if criatura_fossil_nova is not None:
+        info_r = _RARIDADES[criatura_fossil_nova["raridade"]]
+        partes_log.append(
+            f"🦴 **{vencedor.display_name}** desenterrou o Fóssil {info_r['emoji']} "
+            f"**{criatura_fossil_nova['nome']}** (os dois estavam em call)!"
         )
     if besta_nova_vencedor is not None:
         partes_log.append(
@@ -13269,7 +13346,7 @@ _BOSS_CHANCE_GRUPO_BASE      = 0.12
 _BOSS_CHANCE_GRUPO_MAX       = 0.70
 _BOSS_BONUS_POR_PARTICIPANTE = 0.035
 _BOSS_BONUS_RARIDADE_CRIATURA = {
-    "comum": 0.0, "raro": 0.02, "epico": 0.035, "lendario": 0.06, "secreto": 0.09, "mitico": 0.12,
+    "comum": 0.0, "raro": 0.02, "epico": 0.035, "lendario": 0.06, "fosseis": 0.075, "secreto": 0.09, "mitico": 0.12,
 }
 
 _BOSS_XP_GANHO_MIN = 0.20   # 20% — mínimo de XP que quem vence pode ganhar
@@ -13762,9 +13839,9 @@ async def _ovo_chocar(user_id: int) -> None:
     dados.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto", "bestas")
+        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")
     ]
-    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto", "bestas")]
+    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")]
     pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
     criatura_nascida = random.choices(pool, weights=pesos, k=1)[0]
     if criatura_nascida["id"] not in dados["criaturas"]:

@@ -15467,6 +15467,580 @@ async def cmd_boss4(ctx):
     asyncio.create_task(_apagar_mensagem_depois(msg))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOSS 5 — Kaelith, a Ceifadora dos Reis
+# A própria Morte em pessoa — tão temida quanto Dourakhar (boss2), mas
+# ligeiramente mais fraca que ele: Dourakhar continua sendo o boss mais
+# forte de todos. Mesma lógica de sempre (encarar sozinho ou chamar o
+# time todo), nível mítico.
+#
+# Kaelith não dá tanto XP quanto os outros bosses — é a recompensa de XP
+# mais modesta de todas — mas compensa com dois prêmios extras pra quem
+# vence: um Booster de XP de 10 minutos (o mais longo de todos os bosses)
+# e uma CHANCE de vir junto um 🥚 ovo aleatório, sorteado só entre
+# criaturas 🟣 Épicas e 🟡 Lendárias. Se a criatura que sair já estiver na
+# coleção da pessoa, em vez de não fazer nada ela sobe 1 Nível de
+# Capacidade (mesma lógica de .uparcriatura), travado no teto máximo.
+# ══════════════════════════════════════════════════════════════════════
+
+# ⚠️ Esses gifs são links temporários do CDN do Discord (parâmetros ?ex=...),
+# que expiram sozinhos depois de um tempo (geralmente ~24h-48h). Se pararem
+# de aparecer nos embeds, pegue links novos (clique direito na imagem no
+# Discord > Copiar link) e troque aqui embaixo — ou, melhor ainda, subam
+# os gifs num host permanente (imgur, ibb.co etc.) pra nunca mais precisar trocar.
+_BOSS5_KAELITH_INTRO_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1531429255978942464/1785191174797.gif?ex=6a692e23&is=6a67dca3&hm=a82d8cbf2e94d0f9fda33c4a8ee2aa985bcbbb8763d0118cd08c8b333910bb2a&"
+_BOSS5_KAELITH_BATALHA_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1531429255328698379/1785191374952.gif?ex=6a692e23&is=6a67dca3&hm=6229f85c09a13d8deb3ae310b676f4191af497c9a7cc2d27ccc709475f1ac7a4&"
+
+_BOSS5_CANAL_ID = _BOSS_CANAL_ID   # mesmo canal dos outros bosses — só aparece aqui
+
+_BOSS5_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
+_BOSS5_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
+
+# Booster exclusivo de Kaelith: o MAIS LONGO de todos os bosses (10 min),
+# uma forma de compensar o XP mais baixo que ela dá.
+_BOSS5_BOOSTER_MINUTOS = 10
+
+# Nível mítico, ligeiramente mais fácil que Dourakhar (boss2) em todos os
+# números — mas ainda o segundo boss mais difícil do servidor.
+_BOSS5_CHANCE_SOLO = 0.012   # 1.2% — um pouco mais generoso que o 1% de Dourakhar
+
+_BOSS5_CHANCE_GRUPO_BASE      = 0.055
+_BOSS5_CHANCE_GRUPO_MAX       = 0.48
+_BOSS5_BONUS_POR_PARTICIPANTE = 0.019
+_BOSS5_BONUS_RARIDADE_CRIATURA = {
+    "comum": 0.0, "raro": 0.01, "epico": 0.018, "lendario": 0.03, "secreto": 0.045, "mitico": 0.06,
+}
+
+# XP mais modesto que qualquer outro boss — Kaelith compensa com o Booster
+# de 10 min e a chance de ovo Épico/Lendário, não com XP bruto.
+_BOSS5_XP_GANHO_MIN = 0.15    # 15% — mínimo de XP que quem vence pode ganhar (o mais baixo de todos os bosses)
+_BOSS5_XP_GANHO_MAX = 0.45    # 45% — máximo de XP que quem vence pode ganhar
+_BOSS5_XP_GANHO_SEM_XP = (20, 55)   # recompensa fixa pra quem ainda não tem XP acumulado
+_BOSS5_XP_GANHO_TETO = 2000    # teto máximo de XP por vitória — o menor de todos os bosses
+
+# 🥚 Chance de vir um ovo junto com a vitória, sorteado só entre criaturas
+# 🟣 Épicas e 🟡 Lendárias (pool restrito — nunca sai Comum/Rara/Mítica/etc
+# desse ovo). Ajuste esse número se quiser o ovo mais raro ou mais comum.
+_BOSS5_CHANCE_OVO = 0.35   # 35% de chance por vencedor
+_BOSS5_OVO_RARIDADES = ("epico", "lendario")
+
+
+def _boss5_chance_grupo(convocacoes: list) -> float:
+    """Calcula a chance de vitória do grupo contra Kaelith: base + um
+    bônus por pessoa + um bônus pela raridade de cada criatura convocada,
+    sempre travado no teto de _BOSS5_CHANCE_GRUPO_MAX — ligeiramente mais
+    generoso que Dourakhar (boss2), mas ainda nível mítico."""
+    chance = _BOSS5_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS5_BONUS_POR_PARTICIPANTE
+    for _membro, criatura in convocacoes:
+        chance += _BOSS5_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+    return min(chance, _BOSS5_CHANCE_GRUPO_MAX)
+
+
+def _boss5_calcular_ganho_xp(user_id: int) -> tuple:
+    """Sorteia quanto de XP essa pessoa ganha por vencer Kaelith: entre 15%
+    e 45% do XP que ela já tem — a faixa mais baixa entre todos os bosses —
+    travado num teto máximo (_BOSS5_XP_GANHO_TETO) pra não deixar quem já é
+    rank alto disparar cada vez mais na frente — ou uma recompensa fixa se
+    ainda não tiver XP nenhum acumulado."""
+    dados = xp_stats[user_id]
+    xp_atual = dados.get("xp", 0)
+    if xp_atual > 0:
+        percentual = random.uniform(_BOSS5_XP_GANHO_MIN, _BOSS5_XP_GANHO_MAX)
+        ganho = max(1, round(xp_atual * percentual))
+        ganho = min(ganho, _BOSS5_XP_GANHO_TETO)
+    else:
+        percentual = 0.0
+        ganho = random.randint(*_BOSS5_XP_GANHO_SEM_XP)
+    return ganho, percentual
+
+
+def _boss5_sortear_criatura_ovo() -> dict:
+    """Sorteia uma criatura aleatória só entre 🟣 Épicas e 🟡 Lendárias
+    (ponderada pelo peso normal de raridade) — é essa a criatura que pode
+    vir no ovo de Kaelith."""
+    pool = [c for c in _BATALHA_CRIATURAS if c["raridade"] in _BOSS5_OVO_RARIDADES]
+    pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
+    return random.choices(pool, weights=pesos, k=1)[0]
+
+
+def _boss5_conceder_ovo(user_id: int) -> dict:
+    """Sorteia o ovo de Kaelith pra essa pessoa (só Épica ou Lendária). Se
+    ela ainda não tiver essa criatura, ela é adicionada normalmente à
+    coleção. Se ela JÁ tiver (repetida), em vez de não fazer nada, a
+    criatura sobe 1 Nível de Capacidade — empurrando os usos pro limiar do
+    próximo nível, igual `.uparcriatura` — travado no teto máximo (se já
+    estiver no máximo, o ovo simplesmente não muda nada). Devolve um dict
+    com `criatura`, `era_nova`, `nivel_novo` (ou None se era nova) e
+    `upou` (True se realmente subiu de nível agora)."""
+    criatura = _boss5_sortear_criatura_ovo()
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+
+    if criatura["id"] not in dados["criaturas"]:
+        dados["criaturas"].append(criatura["id"])
+        return {"criatura": criatura, "era_nova": True, "nivel_novo": None, "upou": False}
+
+    teto = _nivel_criatura_max(criatura["id"])
+    nivel_atual = _nivel_criatura(user_id, criatura["id"])
+    if nivel_atual >= teto:
+        return {"criatura": criatura, "era_nova": False, "nivel_novo": nivel_atual, "upou": False}
+
+    tabela = (
+        _NIVEL_CRIATURA_USOS_ACUMULADOS_ESTENDIDO
+        if criatura["id"] in _NIVEL_CRIATURA_MAX_ESPECIAL
+        else _NIVEL_CRIATURA_USOS_ACUMULADOS
+    )
+    dados.setdefault("usos_criaturas", {})
+    dados["usos_criaturas"][criatura["id"]] = max(
+        dados["usos_criaturas"].get(criatura["id"], 0),
+        tabela[nivel_atual],   # limiar de usos mínimos pro PRÓXIMO nível
+    )
+    nivel_novo = _calcular_nivel_criatura(dados["usos_criaturas"][criatura["id"]], criatura["id"])
+    return {"criatura": criatura, "era_nova": False, "nivel_novo": nivel_novo, "upou": True}
+
+
+def _boss5_texto_ovo(membro: discord.Member, resultado_ovo: dict) -> str:
+    """Monta a linha de texto que descreve o que aconteceu com o ovo de
+    Kaelith de `membro`, pra ser encaixada no embed de resultado."""
+    criatura = resultado_ovo["criatura"]
+    info = _RARIDADES[criatura["raridade"]]
+    if resultado_ovo["era_nova"]:
+        return (
+            f"🥚✨ O ovo de {membro.mention} choca na hora e revela {info['emoji']} "
+            f"**{criatura['nome']}** (*{info['label']}*) — nova na coleção!"
+        )
+    if resultado_ovo["upou"]:
+        return (
+            f"🥚⭐ O ovo de {membro.mention} revela {info['emoji']} **{criatura['nome']}**, que "
+            f"ela já tinha — a criatura sobe pro Nível de Capacidade `{resultado_ovo['nivel_novo']}`!"
+        )
+    return (
+        f"🥚 O ovo de {membro.mention} revela {info['emoji']} **{criatura['nome']}**, mas ela já "
+        f"estava no Nível de Capacidade máximo — nada mudou dessa vez."
+    )
+
+
+async def _boss5_premiar_vencedores(guild: discord.Guild, vencedores: list) -> list:
+    """Aplica o ganho de XP de cada vencedor (a faixa mais baixa entre
+    todos os bosses), ativa o Booster de XP de _BOSS5_BOOSTER_MINUTOS (10
+    min — o mais longo de todos), atualiza nível e dispara o aviso de
+    level up quando for o caso. Além disso, sorteia pra CADA vencedor uma
+    chance (`_BOSS5_CHANCE_OVO`) de vir junto um 🥚 ovo Épico ou Lendário.
+    Devolve uma lista de (membro, ganho, percentual, resultado_ovo|None)."""
+    resultados = []
+    for membro in vencedores:
+        dados = xp_stats[membro.id]
+        nivel_antigo = dados["nivel"]
+        ganho, percentual = _boss5_calcular_ganho_xp(membro.id)
+        dados["xp"] += ganho
+        dados["nivel"], _, _ = _calcular_nivel(dados["xp"])
+        if dados["nivel"] > nivel_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados["nivel"]))
+        # 🎁 Bônus de Kaelith: Booster de XP de 10 minutos (o mais longo de
+        # todos os bosses) pra quem venceu.
+        _conceder_xp_booster(membro.id, _BOSS5_BOOSTER_MINUTOS)
+
+        # 🥚 Chance de ovo Épico/Lendário — só pra quem venceu.
+        resultado_ovo = None
+        if random.random() < _BOSS5_CHANCE_OVO:
+            resultado_ovo = _boss5_conceder_ovo(membro.id)
+
+        resultados.append((membro, ganho, percentual, resultado_ovo))
+
+    asyncio.create_task(_salvar_xp_stats())
+    asyncio.create_task(_atualizar_ranking_xp())
+
+    for membro, ganho, percentual, resultado_ovo in resultados:
+        detalhe_ovo = ""
+        if resultado_ovo is not None:
+            info = _RARIDADES[resultado_ovo["criatura"]["raridade"]]
+            detalhe_ovo = f" + 🥚 ovo revelou {info['emoji']} {resultado_ovo['criatura']['nome']}"
+        asyncio.create_task(_log_rpg(
+            guild,
+            "☠️ Recompensa — Kaelith",
+            f"✨ **{membro.display_name}** ganhou **`{ganho}` XP** (`{percentual * 100:.1f}%`) + "
+            f"⚡ Booster de XP de `{_BOSS5_BOOSTER_MINUTOS}min` por vencer Kaelith{detalhe_ovo}.",
+        ))
+
+    return resultados
+
+
+async def _boss5_batalha_solo(canal: discord.TextChannel, membro: discord.Member) -> None:
+    """Roda o confronto solo contra Kaelith: só 1.2% de chance de vitória —
+    e se perder, não perde XP nenhum, só o orgulho."""
+    try:
+        criatura = _boss_criatura_mais_forte(membro.id)
+        info_raridade = _RARIDADES[criatura["raridade"]]
+
+        embed_convocacao = discord.Embed(
+            title="💀👑 Um desafiante solitário ousa se apresentar!",
+            description=(
+                f"🌑 **Aeon:** ...{membro.mention} decidiu encarar Kaelith sozinho. As sombras "
+                f"observam em silêncio — nem elas sabem se isso é coragem. 🖤⚰️\n"
+                f"🌟 **Celestia:** {membro.display_name} convoca {info_raridade['emoji']} "
+                f"**{criatura['nome']}**!! É NÍVEL MÍTICO, cuidado!! 😳🌟✨"
+            ),
+            color=info_raridade["cor"],
+        )
+        embed_convocacao.set_thumbnail(url=criatura["gif"])
+        msg1 = await canal.send(embed=embed_convocacao)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "💀 **Kaelith:** *\"Coroas caem como folhas no outono diante da minha foice. "
+                "Você nem usa uma... mas eu ainda assim vim colher.\"*"
+            ),
+            color=0x1c1128,
+        )
+        embed_batalha.set_image(url=_BOSS5_KAELITH_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        venceu = random.random() < _BOSS5_CHANCE_SOLO
+
+        if venceu:
+            resultados = await _boss5_premiar_vencedores(canal.guild, [membro])
+            _, ganho, percentual, resultado_ovo = resultados[0]
+            descricao = (
+                f"🏆 **A CEIFADORA FOI CEIFADA!!** {membro.mention} e {info_raridade['emoji']} "
+                f"**{criatura['nome']}** derrubaram **KAELITH, A CEIFADORA DOS REIS**, SOZINHOS!! "
+                f"Só `{_BOSS5_CHANCE_SOLO * 100:.1f}%` de chance!! ☠️⚔️\n\n"
+                f"✨ Recompensa: **`+{ganho}` XP** (`{percentual * 100:.1f}%`) + ⚡ **Booster de XP "
+                f"{_BOSS5_BOOSTER_MINUTOS}min**!\n"
+            )
+            if resultado_ovo is not None:
+                descricao += _boss5_texto_ovo(membro, resultado_ovo) + "\n"
+            descricao += (
+                f"\n🌑 **Aeon:** ...até a própria Morte hesitou por um segundo. As sombras "
+                f"guardarão isso. 🖤⚰️\n"
+                f"🌟 **Celestia:** VOCÊ CEIFOU A CEIFADORA!! 😭🌟🤍✨ ISSO VAI VIRAR LENDA!!"
+            )
+            cor = 0xf5c542
+        else:
+            descricao = (
+                f"💀 **Kaelith:** *\"...como sempre.\"* {info_raridade['emoji']} **{criatura['nome']}** "
+                f"caiu em batalha, e {membro.mention} não conseguiu sozinho dessa vez.\n\n"
+                f"🍃 Nenhum XP foi perdido — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...era esperado. Poucos sobrevivem sozinhos a uma foice dessas. 🖤🌑\n"
+                f"🌟 **Celestia:** Não desanima!! 🌸😢 Contra ela, é MUITO melhor ir em grupo!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Kaelith, a Ceifadora dos Reis")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+async def _boss5_batalha_grupo(canal: discord.TextChannel, participantes: list) -> None:
+    """Roda o confronto em grupo contra Kaelith: cada participante convoca
+    a criatura mais forte que já desbloqueou, e a chance de vitória cresce
+    com o número (e a força) das criaturas convocadas — nível mítico,
+    ligeiramente mais fácil que Dourakhar (boss2), mas ainda muito difícil."""
+    try:
+        convocacoes = [(p, _boss_criatura_mais_forte(p.id)) for p in participantes]
+
+        embed_cabecalho = discord.Embed(
+            title=f"⚔️ {len(convocacoes)} guerreiro(a)s ousam encarar a Ceifadora!",
+            description=(
+                "🌟 **Celestia:** ESSE TIME TÁ INDO CONTRA O NÍVEL MÍTICO!! 😱🌟✨ Boa sorte "
+                "pra todos!!"
+            ),
+            color=0x1c1128,
+        )
+        cards = _boss_cards_criaturas(convocacoes)
+
+        # 1º lote: cabeçalho + até 9 cards (10 embeds é o limite do Discord por
+        # mensagem). O resto (grupos grandes) sai em mensagens seguintes.
+        lote = [embed_cabecalho] + cards[:9]
+        restante = cards[9:]
+        msg1 = await canal.send(embeds=lote)
+        asyncio.create_task(_apagar_mensagem_depois(msg1))
+        while restante:
+            msg_extra = await canal.send(embeds=restante[:10])
+            asyncio.create_task(_apagar_mensagem_depois(msg_extra))
+            restante = restante[10:]
+        await asyncio.sleep(3)
+
+        embed_batalha = discord.Embed(
+            description=(
+                "💀 **Kaelith:** *\"Um exército inteiro... pra proteger reis que já estão mortos "
+                "e ainda não sabem. Venham, então — a colheita será generosa hoje.\"*"
+            ),
+            color=0x1c1128,
+        )
+        embed_batalha.set_image(url=_BOSS5_KAELITH_BATALHA_GIF)
+        aviso = await canal.send(embed=embed_batalha)
+        await asyncio.sleep(3)
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+
+        chance = _boss5_chance_grupo(convocacoes)
+        venceu = random.random() < chance
+
+        if venceu:
+            resultados = await _boss5_premiar_vencedores(canal.guild, participantes)
+            texto_ganhos = "\n".join(
+                f"✨ {membro.mention} +`{ganho}` XP (`{percentual * 100:.1f}%`) ⚡"
+                for membro, ganho, percentual, _ovo in resultados
+            )
+            textos_ovo = "\n".join(
+                _boss5_texto_ovo(membro, resultado_ovo)
+                for membro, _g, _p, resultado_ovo in resultados
+                if resultado_ovo is not None
+            )
+            descricao = (
+                f"🏆 **A CEIFADORA FOI CEIFADA!!** O time de `{len(participantes)}` guerreiro(a)s "
+                f"derrubou **KAELITH, A CEIFADORA DOS REIS**!! (chance da batalha: `{chance * 100:.0f}%`) "
+                f"☠️⚔️\n\n"
+                f"{texto_ganhos}\n\n"
+                f"⚡ Todos os vencedores também ganharam um **Booster de XP de {_BOSS5_BOOSTER_MINUTOS} "
+                f"minutos** (xp de call e mensagem em dobro)!"
+            )
+            if textos_ovo:
+                descricao += f"\n\n{textos_ovo}"
+            descricao += (
+                f"\n\n🌑 **Aeon:** ...nem a própria Morte esperava perder pra formigas organizadas. "
+                f"As sombras se curvam. 🖤⚰️\n"
+                f"🌟 **Celestia:** VOCÊS CEIFARAM A CEIFADORA!!! 😭🌟🤍✨ ISSO VAI FICAR NA HISTÓRIA!!"
+            )
+            cor = 0xf5c542
+        else:
+            mencoes = ", ".join(p.mention for p in participantes)
+            descricao = (
+                f"💀 **Kaelith:** *\"...voltem quando forem mais próximos da realeza que eu venho "
+                f"colher.\"* Mesmo com `{len(participantes)}` guerreiro(a)s juntos (`{chance * 100:.0f}%` "
+                f"de chance), a Ceifadora dos Reis foi forte demais dessa vez. {mencoes} não "
+                f"conseguiram.\n\n"
+                f"🍃 Ninguém perdeu XP — só a derrota amarga mesmo.\n\n"
+                f"🌑 **Aeon:** ...nível mítico não perdoa fácil. As sombras respeitam a tentativa. 🖤🌑\n"
+                f"🌟 **Celestia:** Vamos treinar e tentar de novo!! 🌸💫 Chamem mais gente!!"
+            )
+            cor = 0x8b0000
+
+        embed_resultado = discord.Embed(
+            title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()
+        )
+        embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Kaelith, a Ceifadora dos Reis")
+        msg2 = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg2))
+    finally:
+        _boss_ativo_no_canal.discard(canal.id)
+
+
+class Boss5RecrutamentoView(discord.ui.View):
+    """Botão único de 'Quero Participar!' que fica ativo por
+    _BOSS5_TEMPO_RECRUTAMENTO segundos, juntando o time que vai enfrentar
+    Kaelith em conjunto. Quando o tempo acaba, a batalha começa sozinha."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS5_TEMPO_RECRUTAMENTO)
+        self.canal = canal
+        self.participantes: dict = {}   # user_id -> discord.Member
+        self.mensagem: discord.Message = None
+
+    @discord.ui.button(label="⚔️ Quero Participar!", style=discord.ButtonStyle.success)
+    async def participar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if interaction.user.id in self.participantes:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já tá na lista, guerreiro(a)!! 😆🌸", ephemeral=True
+            )
+            return
+
+        self.participantes[interaction.user.id] = interaction.user
+        button.label = f"⚔️ Quero Participar! ({len(self.participantes)})"
+        await interaction.response.edit_message(view=self)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            if self.mensagem:
+                await self.mensagem.edit(view=self)
+        except discord.HTTPException:
+            pass
+
+        participantes = list(self.participantes.values())
+        if not participantes:
+            try:
+                msg = await self.canal.send(
+                    "🌑 **Aeon:** ...ninguém teve coragem de se juntar a tempo. Kaelith sorri e "
+                    "se dissolve de volta nas sombras... por enquanto. 🖤⚰️"
+                )
+                asyncio.create_task(_apagar_mensagem_depois(msg))
+            finally:
+                _boss_ativo_no_canal.discard(self.canal.id)
+            return
+
+        asyncio.create_task(_boss5_batalha_grupo(self.canal, participantes))
+
+
+class Boss5EscolhaView(discord.ui.View):
+    """Botões de 'Todos Juntos' e 'Eu Consigo Sozinho' que aparecem quando
+    Kaelith surge. A PRIMEIRA escolha feita (por qualquer pessoa) decide
+    o caminho dessa aparição do boss."""
+
+    def __init__(self, canal: discord.TextChannel):
+        super().__init__(timeout=_BOSS5_TEMPO_ESCOLHA)
+        self.canal = canal
+        self.decidido = False
+        self.mensagem: discord.Message = None
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="🤝 Todos Juntos", style=discord.ButtonStyle.primary)
+    async def todos_juntos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🤝 O CHAMADO FOI FEITO!",
+            description=(
+                f"🌟 **Celestia:** {interaction.user.mention} decidiu enfrentar Kaelith EM "
+                f"GRUPO!! 😱🌟✨\n"
+                f"🌑 **Aeon:** ...quem tiver coragem, clique no botão abaixo. `{_BOSS5_TEMPO_RECRUTAMENTO}s` "
+                f"pra se juntar ao time. 🖤⚰️"
+            ),
+            color=0xff8800,
+        )
+        embed.set_image(url=_BOSS5_KAELITH_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        view_recrutamento = Boss5RecrutamentoView(self.canal)
+        msg_recrutamento = await self.canal.send(
+            "☠️ Time contra **Kaelith, a Ceifadora dos Reis** — clique pra participar!",
+            view=view_recrutamento,
+        )
+        view_recrutamento.mensagem = msg_recrutamento
+        asyncio.create_task(_apagar_mensagem_depois(msg_recrutamento))
+
+    @discord.ui.button(label="🗡️ Eu Consigo Sozinho", style=discord.ButtonStyle.danger)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.bot:
+            return
+        if self.decidido:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** ...essa decisão já foi tomada. 🖤🌑", ephemeral=True
+            )
+            return
+        self.decidido = True
+        self._travar_botoes()
+        self.stop()
+
+        embed = discord.Embed(
+            title="🗡️ DESAFIO SOLITÁRIO ACEITO!",
+            description=(
+                f"🌑 **Aeon:** ...{interaction.user.mention} escolheu encarar Kaelith sozinho. "
+                f"Isso não é coragem, isso é desafiar a própria Morte de frente. 🖤⚰️\n"
+                f"🌟 **Celestia:** SÓ `{_BOSS5_CHANCE_SOLO * 100:.1f}%` DE CHANCE?!?! 😰🌟 É NÍVEL "
+                f"MÍTICO, TEM CERTEZA?!"
+            ),
+            color=0xff4444,
+        )
+        embed.set_image(url=_BOSS5_KAELITH_INTRO_GIF)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        asyncio.create_task(_boss5_batalha_solo(self.canal, interaction.user))
+
+    async def on_timeout(self):
+        if self.decidido or self.mensagem is None:
+            return
+        self._travar_botoes()
+        try:
+            embed = discord.Embed(
+                title="⚰️ Kaelith se dissolve nas sombras...",
+                description=(
+                    "🌑 **Aeon:** ...ninguém teve coragem de decidir a tempo. A Ceifadora dos "
+                    "Reis se retira... por enquanto. 🖤⚰️"
+                ),
+                color=0x888888,
+            )
+            await self.mensagem.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+        _boss_ativo_no_canal.discard(self.canal.id)
+
+
+@bot.command(name="boss5")
+async def cmd_boss5(ctx):
+    """☠️👑 Invoca Kaelith, a Ceifadora dos Reis — nível mítico, ligeiramente
+    mais fraca que Dourakhar (boss2, o boss mais forte de todos), mas ainda
+    um dos bosses mais difíceis do servidor. Só o Reality (CRIADOR_ID) pode
+    chamar. O chat escolhe entre encarar sozinho (~1.2% de chance) ou juntar
+    um time (mais gente = mais chance). Quem vencer ganha o XP mais modesto
+    entre todos os bosses, mas leva um Booster de XP de 10 minutos — o mais
+    longo de todos — e tem 35% de chance de vir junto um 🥚 ovo aleatório
+    entre criaturas Épicas e Lendárias (se for repetido, a criatura sobe de
+    Nível de Capacidade em vez de não fazer nada). Uso: .boss5"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    try:
+        await ctx.message.delete()
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        pass
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        return
+    canal = guild.get_channel(_BOSS5_CANAL_ID)
+    if canal is None:
+        return
+
+    if canal.id in _boss_ativo_no_canal:
+        aviso = await ctx.send(
+            "🌟 **Celestia:** Já tem um boss ativo por lá!! Espera esse terminar!! 😅🌸"
+        )
+        asyncio.create_task(_apagar_mensagem_depois(aviso))
+        return
+
+    _boss_ativo_no_canal.add(canal.id)
+
+    embed = discord.Embed(
+        title="☠️👑 NÍVEL MÍTICO — KAELITH, A CEIFADORA DOS REIS, DESPERTOU!!",
+        description=(
+            "🌑 **Aeon:** ...o silêncio chega antes dela. Nem o vento ousa se mexer. 🖤⚰️\n\n"
+            "💀 **Kaelith:** *\"Eu sou Kaelith. Reis, impérios, coroas... tudo cai perante minha "
+            "foice, mais cedo ou mais tarde. Vocês não são diferentes.\"*\n\n"
+            "🌟 **Celestia:** GENTE ISSO AQUI TAMBÉM É NÍVEL **MÍTICO**!! 😨🌟 Ela é só um pouquinho "
+            "mais fraca que Dourakhar, mas ainda MUITO perigosa!! Sozinho ou em grupo?? ✨\n\n"
+            f"⏳ Vocês têm `{_BOSS5_TEMPO_ESCOLHA}s` pra decidir."
+        ),
+        color=0x1c1128,
+    )
+    embed.set_image(url=_BOSS5_KAELITH_INTRO_GIF)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Nível Mítico: Kaelith, a Ceifadora dos Reis")
+
+    view = Boss5EscolhaView(canal)
+    msg = await canal.send(embed=embed, view=view)
+    view.mensagem = msg
+    asyncio.create_task(_apagar_mensagem_depois(msg))
+
+
 @bot.command(name="surpresachat")
 async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""

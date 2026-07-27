@@ -8443,7 +8443,7 @@ def _emoji_da_cor(chave: str):
 #                  trocar de favorita livremente a qualquer momento — mesmo com
 #                  outra(s) criatura(s) ainda de castigo — sem perder o cooldown delas.
 # }
-xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}, "favorito": {"id": None, "usos": 0, "cansacos": {}}})
+xp_stats: dict = defaultdict(lambda: {"xp": 0, "nivel": 0, "level_message_id": None, "elegivel": False, "cor": _COR_PADRAO, "vitorias": 0, "derrotas": 0, "criaturas": [], "usos_criaturas": {}, "favorito": {"id": None, "usos": 0, "cansacos": {}}, "pets": [], "usos_pets": {}, "pet_equipado": None})
 _xp_ultimo_ganho: dict = {}   # user_id -> time.time() do último ganho (cooldown)
 _xp_ranking_message_id = None   # ID da ÚNICA mensagem do ranking — navegada com as setinhas ◀ ▶, nunca duplicada
 _xp_ranking_pagina_atual: int = 0   # índice (0-based) da página do ranking sendo exibida agora
@@ -8544,6 +8544,9 @@ def _carregar_xp_stats() -> None:
                 "criaturas":        valores.get("criaturas", []),
                 "usos_criaturas":   valores.get("usos_criaturas", {}),
                 "favorito":         _migrar_favorito(valores.get("favorito")),
+                "pets":             valores.get("pets", []),
+                "usos_pets":        valores.get("usos_pets", {}),
+                "pet_equipado":     valores.get("pet_equipado"),
             }
         # Compatibilidade: versões antigas (antes das setinhas ◀ ▶) salvavam
         # "ranking_message_ids" — uma LISTA de páginas empilhadas. A versão
@@ -9138,7 +9141,15 @@ def _montar_embed_info_batalha() -> discord.Embed:
             "A raridade mais forte de todas, e também a mais rara de conseguir: não entram no sorteio "
             f"normal — a cada `{_MITICO_VITORIAS_INTERVALO}` vitórias suas, rola uma chance de só "
             f"`{_MITICO_CHANCE_DESBLOQUEIO * 100:.0f}%` de destravar um.\n\n"
-            "**🔟 Pra poder batalhar**\n"
+            "**🔟 🐾 Pets — companheiros de suporte contra Boss**\n"
+            f"Leve uma criatura 🔵 Rara até o Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}` e "
+            "ganhe, de graça, um Pet sorteado. Pets não batalham no PvP — são suporte: EQUIPADOS "
+            f"(`.equiparpet <nome>`), somam entre `{_PET_BONUS_BOSS_NIVEL1*100:.0f}%` e "
+            f"`{_PET_BONUS_BOSS_NIVEL5*100:.0f}%` na chance de vencer qualquer Boss (conforme o "
+            "Nível do Pet, de 1 a 5) e têm chance de upar uma das suas criaturas depois de uma "
+            "vitória. Só sobem de Nível enfrentando Boss, e cada um destrava uma habilidade "
+            "especial própria no Nível 3. Veja todos na 📖 Enciclopédia!\n\n"
+            "**1️⃣1️⃣ Pra poder batalhar**\n"
             "Os dois precisam ter o cargo do ranking de nível e já ter algum XP acumulado. "
             f"E cada pessoa só pode lançar um novo desafio a cada `{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`.\n\n"
             "💨 *Todas as mensagens da batalha (convite, criaturas e resultado) somem sozinhas "
@@ -9252,7 +9263,20 @@ def _montar_embed_enciclopedia() -> discord.Embed:
             value="\n".join(f"• {nome}" for nome in nomes),
             inline=False,
         )
-    embed.set_footer(text=f"🌑 Aeon & ☀️ Celestia — {len(_BATALHA_CRIATURAS)} criaturas ao todo")
+
+    embed.add_field(
+        name=f"🐾 Pets ({len(_PETS)})",
+        value=(
+            "\n".join(f"• {p['nome']}" for p in _PETS) + "\n\n"
+            f"Desbloqueados ao levar uma criatura 🔵 Rara até o Nível de Capacidade "
+            f"`{_PET_NIVEL_DESBLOQUEIO}` — não entram em batalha, são SUPORTE: quando equipados "
+            "(`.equiparpet <nome>`), somam bônus na chance de vencer Boss e podem upar suas "
+            "criaturas. Confira os detalhes de cada um no menu abaixo!"
+        ),
+        inline=False,
+    )
+
+    embed.set_footer(text=f"🌑 Aeon & ☀️ Celestia — {len(_BATALHA_CRIATURAS)} criaturas e {len(_PETS)} pets ao todo")
     return embed
 
 
@@ -9362,14 +9386,71 @@ class EnciclopediaRaridadeSelect(discord.ui.Select):
         )
 
 
+class EnciclopediaPetsSelect(discord.ui.Select):
+    """Menu de seleção com todos os 🐾 Pets — como são só 8 (bem abaixo do
+    limite de 25 opções do Discord), não precisa de um passo intermediário
+    por raridade, igual as criaturas. Ao escolher um, a pessoa recebe (de
+    forma privada) a imagem, se já desbloqueou, o Nível atual e a
+    habilidade especial dele."""
+
+    def __init__(self):
+        options = [
+            discord.SelectOption(label=p["nome"][:100], value=p["id"], emoji="🐾")
+            for p in _PETS
+        ]
+        super().__init__(
+            placeholder="🐾 Ver detalhes de um Pet...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            custom_id="enciclopedia_pets_select",
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        pet = next((p for p in _PETS if p["id"] == self.values[0]), None)
+        if pet is None:
+            await interaction.response.send_message("⚠️ Pet não encontrado.", ephemeral=True)
+            return
+
+        desbloqueado = pet["id"] in set(_pets_desbloqueados(interaction.user.id))
+
+        if desbloqueado:
+            nivel_pessoal = _nivel_pet(interaction.user.id, pet["id"])
+            equipado = xp_stats[interaction.user.id].get("pet_equipado") == pet["id"]
+            status = (
+                "🔓 **Você já tem esse Pet!**" + (" 🐾 *(equipado agora)*" if equipado else "") + "\n"
+                f"⭐ **Nível atual:** `{nivel_pessoal}/{_PET_NIVEL_MAX}` — só sobe enfrentando Boss.\n\n"
+                f"**{pet['habilidade_nome']}** (destrava no Nível `{_PET_NIVEL_HABILIDADE}`): "
+                f"{pet['habilidade_descricao']}"
+                + ("\n\n✨ *Habilidade já ativa!*" if nivel_pessoal >= _PET_NIVEL_HABILIDADE else "")
+            )
+        else:
+            status = (
+                "🔒 **Você ainda não desbloqueou esse Pet.** Leve uma criatura 🔵 Rara até o "
+                f"Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}` — tem chance dele ser sorteado "
+                "e ir pra sua coleção de graça!\n\n"
+                f"**{pet['habilidade_nome']}:** {pet['habilidade_descricao']}"
+            )
+
+        embed = discord.Embed(
+            title=f"🐾 {pet['nome']}",
+            description=status,
+            color=0x9b59b6,
+        )
+        embed.set_image(url=pet["gif"])
+        embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Enciclopédia de Pets")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 class EnciclopediaView(discord.ui.View):
-    """View persistente (sobrevive a reinícios do bot) com um único menu
-    pra escolher a raridade — que abre, de forma privada, o menu com as
-    criaturas daquela raridade especificamente."""
+    """View persistente (sobrevive a reinícios do bot) com o menu pra
+    escolher a raridade de criatura — que abre, de forma privada, o menu
+    com as criaturas daquela raridade — e o menu de 🐾 Pets, lado a lado."""
 
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(EnciclopediaRaridadeSelect())
+        self.add_item(EnciclopediaPetsSelect())
 
 
 async def _achar_mensagem_enciclopedia(canal: discord.TextChannel):
@@ -10761,6 +10842,399 @@ def _forcar_verificacao_besta(user_id: int, criatura: dict):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 🐾 PETS — desbloqueados quando uma criatura 🔵 Rara sua bate o Nível de
+# Capacidade 4 pela PRIMEIRA vez: na hora, sorteia (de graça) 1 Pet dentre
+# os que você ainda não tem — igualzinho ao desbloqueio de 🐺 Besta (ver
+# _checar_desbloqueio_besta acima), só que fixo no Nível 4 em vez do teto,
+# e exclusivo das criaturas Raras.
+#
+# Pets NÃO entram em batalha PvP (não são "criaturas") — são só SUPORTE
+# pro Boss: quando EQUIPADO (`.equiparpet <nome>`), o Pet soma um bônus
+# fixo na chance de vencer QUALQUER Boss (entre 2% e 5%, crescendo com o
+# Nível do próprio Pet) e tem uma chance de upar +1 o Nível de Capacidade
+# de uma das suas criaturas toda vez que participa de uma VITÓRIA contra
+# um Boss. Pets têm Nível de 1 a 5 — e SÓ sobem enfrentando Boss (vencendo
+# ou perdendo, não importa, igual criatura) — e destravam uma habilidade
+# especial própria, diferente pra cada Pet, ao chegar no Nível 3.
+# ══════════════════════════════════════════════════════════════════════
+
+_PET_NIVEL_MAX = 5
+_PET_NIVEL_HABILIDADE = 3   # nível em que a habilidade especial de cada Pet é destravada
+
+# Quantos confrontos de Boss (vencendo ou perdendo — só precisa PARTICIPAR
+# com o Pet equipado) são necessários pra cada Nível. Índice 0 (0 usos) já
+# garante o Nível 1; índice 4 é o mínimo pro Nível 5 (o teto).
+_PET_NIVEL_USOS_ACUMULADOS = [0, 2, 5, 9, 14]
+
+# Bônus na chance de vencer um Boss (soma direto na chance final, igual o
+# bônus de raridade de criatura convocada) de acordo com o Nível do Pet
+# EQUIPADO — sobe linear de 2% (Nível 1) até 5% (Nível 5).
+_PET_BONUS_BOSS_NIVEL1 = 0.02
+_PET_BONUS_BOSS_NIVEL5 = 0.05
+
+# Chance-base do Pet equipado upar em +1 o Nível de Capacidade de uma
+# criatura aleatória (dentre as que ainda não estão no teto) toda vez que
+# ele participa de uma VITÓRIA contra um Boss.
+_PET_CHANCE_UPAR_CRIATURA = 0.20
+
+# Só criaturas 🔵 Raras concedem Pet, sempre ao bater ESSE Nível de
+# Capacidade específico (não precisa ser o teto — diferente das Bestas).
+_PET_NIVEL_DESBLOQUEIO = 4
+
+_PETS = [
+    {
+        "id": "monstrinho",
+        "nome": "Monstrinho",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410248198258888/1785186432942.gif?ex=6a691c6f&is=6a67caef&hm=4432eae4146ab6da26807f04c75dbde63df9f7dc4cad6ab13466b5ee86e2d57d&",
+        "habilidade_nome": "🍖 Voracidade",
+        "habilidade_descricao": "Soma +20 pontos percentuais na chance dele upar uma criatura sua depois de vencer um Boss.",
+        "habilidade_tipo": "chance_upar_extra",
+        "habilidade_valor": 0.20,
+    },
+    {
+        "id": "vampy",
+        "nome": "Vampy",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410247774900438/1785186421135.gif?ex=6a691c6f&is=6a67caef&hm=efa2f12767946aab1c7de01f05c655ab71f59fbceeaa7af6200d33ef7e93323e&",
+        "habilidade_nome": "🩸 Sede Ancestral",
+        "habilidade_descricao": "Suga um extra de `40` a `120` XP direto pra você sempre que vencem um Boss juntos.",
+        "habilidade_tipo": "xp_flat_vitoria",
+        "habilidade_valor": (40, 120),
+    },
+    {
+        "id": "kitsura",
+        "nome": "Kitsura",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410248500379648/1785186503259.gif?ex=6a691c6f&is=6a67caef&hm=c1fbc8ec4a818715875587c06071141004463e71a725b8af9586e0ae335e757d&",
+        "habilidade_nome": "🦊 Ilusão da Raposa",
+        "habilidade_descricao": "A chance dela upar uma criatura sua depois de vencer um Boss vira GARANTIDA (100%).",
+        "habilidade_tipo": "upar_garantido",
+        "habilidade_valor": None,
+    },
+    {
+        "id": "drax",
+        "nome": "Drax",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410248802504847/1785186661353.gif?ex=6a691c6f&is=6a67caef&hm=28f50e34bfbf2fee22720bd4d24cdc7d319ff63d4fc8add71dd737130353f404&",
+        "habilidade_nome": "🔥 Fúria Draconiana",
+        "habilidade_descricao": "Soma mais `+2%` fixos na chance de vencer QUALQUER Boss, além do bônus normal do Nível dele.",
+        "habilidade_tipo": "bonus_chance_extra",
+        "habilidade_valor": 0.02,
+    },
+    {
+        "id": "lilo",
+        "nome": "Lilo",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410249125203999/1785186871194.gif?ex=6a691c6f&is=6a67caef&hm=c719c8464520ddef5ca5593bc2bfc286b872770f964ae6c3c66dd4d87b0e639e&",
+        "habilidade_nome": "🌙 Consolo Selvagem",
+        "habilidade_descricao": "Mesmo numa DERROTA contra o Boss, garante um consolo de `20` a `60` XP.",
+        "habilidade_tipo": "xp_flat_derrota",
+        "habilidade_valor": (20, 60),
+    },
+    {
+        "id": "aeon_celestia",
+        "nome": "Aeon e Celestia",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410249431646359/1785186907093.gif?ex=6a691c6f&is=6a67caef&hm=96d4a27952131d1d8d0b41a504d92bfbbeb50d551334f6b73d3c31ed1916bf49&",
+        "habilidade_nome": "🌗 Equilíbrio das Trevas e da Luz",
+        "habilidade_descricao": "Soma `+1%` na chance de vitória em GRUPO contra o Boss pra CADA outro participante da batalha.",
+        "habilidade_tipo": "bonus_grupo_participante",
+        "habilidade_valor": 0.01,
+    },
+    {
+        "id": "loki",
+        "nome": "Loki",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410249813065955/1785186977070.gif?ex=6a691c6f&is=6a67caef&hm=327467c57a994e455420f5a59d77319be3f381ada027e5f324ba724dcab5c0fe&",
+        "habilidade_nome": "🃏 Trapaça do Caos",
+        "habilidade_descricao": "Soma mais `+3%` fixos na chance de vencer QUALQUER Boss, além do bônus normal do Nível dele.",
+        "habilidade_tipo": "bonus_chance_extra",
+        "habilidade_valor": 0.03,
+    },
+    {
+        "id": "layla",
+        "nome": "Layla",
+        "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531410250266181752/1785187039526.gif?ex=6a691c6f&is=6a67caef&hm=9858b27fa61518fb3d4e61c3b46350151c8bdee861d4839fffd120b7fc97b998&",
+        "habilidade_nome": "🌸 Bênção Silenciosa",
+        "habilidade_descricao": "Soma +10 pontos percentuais na chance dela upar uma criatura sua depois de vencer um Boss.",
+        "habilidade_tipo": "chance_upar_extra",
+        "habilidade_valor": 0.10,
+    },
+]
+
+
+def _pet_nivel_max() -> int:
+    return _PET_NIVEL_MAX
+
+
+def _calcular_nivel_pet(usos: int) -> int:
+    """Converte quantos confrontos de Boss um Pet já participou (equipado)
+    no Nível correspondente, de acordo com _PET_NIVEL_USOS_ACUMULADOS."""
+    nivel = 1
+    for indice, limite in enumerate(_PET_NIVEL_USOS_ACUMULADOS):
+        if usos >= limite:
+            nivel = indice + 1
+    return min(nivel, _PET_NIVEL_MAX)
+
+
+def _usos_pet(user_id: int, pet_id: str) -> int:
+    """Quantos confrontos de Boss essa pessoa já enfrentou com esse Pet equipado."""
+    dados = xp_stats[user_id]
+    dados.setdefault("usos_pets", {})
+    return dados["usos_pets"].get(pet_id, 0)
+
+
+def _nivel_pet(user_id: int, pet_id: str) -> int:
+    """Nível atual desse Pet, PRA ESSA pessoa."""
+    return _calcular_nivel_pet(_usos_pet(user_id, pet_id))
+
+
+def _registrar_uso_pet(user_id: int, pet_id: str) -> tuple:
+    """Soma +1 confronto de Boss a esse Pet (pra essa pessoa) e devolve
+    (nivel_antigo, nivel_novo) — útil pra saber se ele acabou de subir de
+    Nível com esse confronto."""
+    dados = xp_stats[user_id]
+    dados.setdefault("usos_pets", {})
+    usos_antes = dados["usos_pets"].get(pet_id, 0)
+    nivel_antigo = _calcular_nivel_pet(usos_antes)
+    usos_depois = usos_antes + 1
+    dados["usos_pets"][pet_id] = usos_depois
+    nivel_novo = _calcular_nivel_pet(usos_depois)
+    return nivel_antigo, nivel_novo
+
+
+def _encontrar_pet_por_nome(busca: str) -> dict:
+    """Acha um Pet em _PETS a partir de um nome digitado (com ou sem
+    acento/maiúsculas) — igual _encontrar_criatura_por_nome, só que pra Pets."""
+    alvo = _normalizar_texto(busca)
+    for p in _PETS:
+        if _normalizar_texto(p["nome"]) == alvo:
+            return p
+    for p in _PETS:
+        if _normalizar_texto(p["nome"]).startswith(alvo):
+            return p
+    candidatos = [p for p in _PETS if alvo in _normalizar_texto(p["nome"])]
+    return candidatos[0] if len(candidatos) == 1 else None
+
+
+def _pets_desbloqueados(user_id: int) -> list:
+    """Lista de ids dos Pets já desbloqueados por essa pessoa."""
+    dados = xp_stats[user_id]
+    dados.setdefault("pets", [])
+    return dados["pets"]
+
+
+def _obter_pet_equipado(user_id: int) -> dict:
+    """Devolve o dict do Pet atualmente EQUIPADO por essa pessoa, ou None
+    se ela não tiver nenhum equipado (ou o equipado não existir mais)."""
+    dados = xp_stats[user_id]
+    pet_id = dados.get("pet_equipado")
+    if not pet_id or pet_id not in _pets_desbloqueados(user_id):
+        return None
+    return next((p for p in _PETS if p["id"] == pet_id), None)
+
+
+def _checar_desbloqueio_pet(user_id: int, criatura: dict, nivel_antigo: int, nivel_novo: int):
+    """Se `criatura` é 🔵 Rara e acabou de bater o Nível de Capacidade
+    `_PET_NIVEL_DESBLOQUEIO` (4) AGORA — subiu de nível nessa mesma
+    batalha/ação e o nível novo já bate ou passa esse marco, o antigo
+    ainda não batia — sorteia 1 Pet ainda não possuído e concede pra
+    `user_id`. Devolve o Pet concedido (dict) ou None se nada foi
+    desbloqueado (raridade errada, marco errado ou já tem todos os Pets)."""
+    if criatura["raridade"] != "raro":
+        return None
+    if not (nivel_novo > nivel_antigo and nivel_novo >= _PET_NIVEL_DESBLOQUEIO and nivel_antigo < _PET_NIVEL_DESBLOQUEIO):
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("pets", [])
+    faltando = [p for p in _PETS if p["id"] not in dados["pets"]]
+    if not faltando:
+        return None
+
+    pet_novo = random.choice(faltando)
+    dados["pets"].append(pet_novo["id"])
+    return pet_novo
+
+
+async def _anunciar_pet_desbloqueado(
+    guild: discord.Guild, membro: discord.Member, criatura_origem: dict, pet: dict
+) -> None:
+    """Manda, no canal fixo _BESTA_ANUNCIO_CANAL_ID (mesmo do chat geral),
+    o anúncio de que `membro` destravou o Pet `pet` ao levar `criatura_origem`
+    até o Nível de Capacidade `_PET_NIVEL_DESBLOQUEIO`."""
+    canal = guild.get_channel(_BESTA_ANUNCIO_CANAL_ID)
+    if canal is None:
+        return
+
+    embed = discord.Embed(
+        title="🐾 Pet Destravado!",
+        description=(
+            f"✨ **{membro.display_name}** levou **{criatura_origem['nome']}** até o "
+            f"**Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}`** e, de recompensa, destravou "
+            f"o Pet **{pet['nome']}**!!\n\n"
+            f"Use `.equiparpet {pet['nome']}` pra equipar — Pets dão bônus na chance de vencer "
+            "Boss e ajudam a upar suas criaturas!\n\n"
+            "🌑 **Aeon:** ...um novo companheiro. As sombras aceitam a companhia dele. 🖤🐾\n"
+            f"🌟 **Celestia:** AAAAA {membro.mention} GANHOU UM PETZINHO NOVO!! 😭🌟🤍✨ TÃO FOFO!!"
+        ),
+        color=0x9b59b6,
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_author(name=membro.display_name, icon_url=membro.display_avatar.url)
+    embed.set_image(url=pet["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+
+    try:
+        await canal.send(content=membro.mention, embed=embed)
+    except discord.HTTPException:
+        pass
+
+
+def _pet_bonus_chance_boss(user_id: int) -> float:
+    """Bônus total (0.0 se ninguém tiver Pet equipado) que o Pet EQUIPADO
+    dessa pessoa soma na chance de vencer um Boss: o bônus base do Nível
+    dele (2% a 5%, linear) + o bônus extra da habilidade especial, SE ela
+    for do tipo "bonus_chance_extra" e o Pet já tiver batido o Nível
+    _PET_NIVEL_HABILIDADE."""
+    pet = _obter_pet_equipado(user_id)
+    if pet is None:
+        return 0.0
+    nivel = _nivel_pet(user_id, pet["id"])
+    faixa = _PET_BONUS_BOSS_NIVEL5 - _PET_BONUS_BOSS_NIVEL1
+    bonus = _PET_BONUS_BOSS_NIVEL1 + faixa * ((nivel - 1) / (_PET_NIVEL_MAX - 1))
+    if nivel >= _PET_NIVEL_HABILIDADE and pet["habilidade_tipo"] == "bonus_chance_extra":
+        bonus += pet["habilidade_valor"]
+    return bonus
+
+
+def _pet_bonus_grupo_extra(participantes: list) -> float:
+    """Bônus extra de GRUPO da habilidade especial 'bonus_grupo_participante'
+    (Aeon e Celestia): soma, pra CADA participante que tiver esse Pet
+    equipado E já no Nível de habilidade, `valor` de bônus por CADA OUTRO
+    participante da batalha."""
+    bonus_total = 0.0
+    for membro in participantes:
+        pet = _obter_pet_equipado(membro.id)
+        if pet is None or pet["habilidade_tipo"] != "bonus_grupo_participante":
+            continue
+        nivel = _nivel_pet(membro.id, pet["id"])
+        if nivel >= _PET_NIVEL_HABILIDADE:
+            bonus_total += pet["habilidade_valor"] * max(0, len(participantes) - 1)
+    return bonus_total
+
+
+def _pet_upar_criatura_aleatoria(user_id: int):
+    """Escolhe, entre as criaturas já desbloqueadas dessa pessoa que AINDA
+    não estão no Nível de Capacidade máximo, uma aleatória, e empurra os
+    usos dela pro limiar mínimo do próximo Nível (mesma lógica do
+    `.uparcriatura`). Devolve (criatura, nivel_novo, besta_nova, pet_novo)
+    — besta_nova/pet_novo vêm preenchidos se esse "up" de brinde acabou de
+    destravar uma Besta ou um Pet novo (cascata) — ou None se não tinha
+    nenhuma criatura elegível pra upar."""
+    desbloqueadas = set(_garantir_criaturas_iniciais(user_id))
+    candidatas = [
+        c for c in _BATALHA_CRIATURAS
+        if c["id"] in desbloqueadas and _nivel_criatura(user_id, c["id"]) < _nivel_criatura_max(c["id"])
+    ]
+    if not candidatas:
+        return None
+
+    criatura = random.choice(candidatas)
+    criatura_id = criatura["id"]
+    nivel_antigo = _nivel_criatura(user_id, criatura_id)
+
+    tabela = (
+        _NIVEL_CRIATURA_USOS_ACUMULADOS_ESTENDIDO
+        if criatura_id in _NIVEL_CRIATURA_MAX_ESPECIAL
+        else _NIVEL_CRIATURA_USOS_ACUMULADOS
+    )
+    dados = xp_stats[user_id]
+    dados.setdefault("usos_criaturas", {})
+    dados["usos_criaturas"][criatura_id] = max(
+        dados["usos_criaturas"].get(criatura_id, 0),
+        tabela[nivel_antigo],   # limiar de usos mínimos pro PRÓXIMO nível
+    )
+    nivel_novo = _calcular_nivel_criatura(dados["usos_criaturas"][criatura_id], criatura_id)
+
+    besta_nova = _checar_desbloqueio_besta(user_id, criatura, nivel_antigo, nivel_novo)
+    pet_novo = _checar_desbloqueio_pet(user_id, criatura, nivel_antigo, nivel_novo)
+
+    return criatura, nivel_novo, besta_nova, pet_novo
+
+
+async def _pet_pos_boss(guild: discord.Guild, membro: discord.Member, venceu: bool):
+    """Chamada depois de CADA confronto de Boss (solo ou grupo, vencendo
+    ou perdendo) pra CADA participante: registra +1 uso no Pet EQUIPADO
+    dessa pessoa (se tiver algum), checa se ele upou de Nível, e aplica os
+    efeitos de suporte (chance de upar uma criatura na vitória, habilidade
+    especial a partir do Nível 3...). Devolve um texto pronto (ou None) pra
+    encaixar no resultado do Boss."""
+    pet = _obter_pet_equipado(membro.id)
+    if pet is None:
+        return None
+
+    nivel_antigo, nivel_novo = _registrar_uso_pet(membro.id, pet["id"])
+    habilidade_ativa = nivel_novo >= _PET_NIVEL_HABILIDADE
+    partes = []
+
+    if nivel_novo > nivel_antigo:
+        partes.append(f"🐾 **{pet['nome']}** ({membro.display_name}) subiu pro Nível `{nivel_novo}/{_PET_NIVEL_MAX}`!")
+        if nivel_novo == _PET_NIVEL_HABILIDADE:
+            partes.append(f"✨ Habilidade especial destravada: **{pet['habilidade_nome']}**!")
+
+    def _somar_xp_extra(ganho_extra: int):
+        dados_membro = xp_stats[membro.id]
+        nivel_xp_antigo = dados_membro["nivel"]
+        dados_membro["xp"] += ganho_extra
+        dados_membro["nivel"], _, _ = _calcular_nivel(dados_membro["xp"])
+        if dados_membro["nivel"] > nivel_xp_antigo and guild is not None:
+            asyncio.create_task(_anunciar_level_up(guild, membro, dados_membro["nivel"]))
+
+    if venceu:
+        chance_upar = _PET_CHANCE_UPAR_CRIATURA
+        garantido = False
+        if habilidade_ativa:
+            if pet["habilidade_tipo"] == "chance_upar_extra":
+                chance_upar += pet["habilidade_valor"]
+            elif pet["habilidade_tipo"] == "upar_garantido":
+                garantido = True
+            elif pet["habilidade_tipo"] == "xp_flat_vitoria":
+                ganho_extra = random.randint(*pet["habilidade_valor"])
+                _somar_xp_extra(ganho_extra)
+                partes.append(f"{pet['habilidade_nome']}: +`{ganho_extra}` XP extra pra {membro.mention}!")
+
+        if garantido or random.random() < chance_upar:
+            resultado_up = _pet_upar_criatura_aleatoria(membro.id)
+            if resultado_up is not None:
+                criatura_upada, nivel_criatura_novo, besta_nova, pet_novo_cascata = resultado_up
+                partes.append(
+                    f"🐾 **{pet['nome']}** ajudou **{criatura_upada['nome']}** ({membro.display_name}) a "
+                    f"subir pro Nível de Capacidade `{nivel_criatura_novo}`!"
+                )
+                if besta_nova is not None and guild is not None:
+                    asyncio.create_task(_anunciar_besta_desbloqueada(guild, membro, criatura_upada, besta_nova))
+                if pet_novo_cascata is not None and guild is not None:
+                    asyncio.create_task(_anunciar_pet_desbloqueado(guild, membro, criatura_upada, pet_novo_cascata))
+    else:
+        if habilidade_ativa and pet["habilidade_tipo"] == "xp_flat_derrota":
+            ganho_extra = random.randint(*pet["habilidade_valor"])
+            _somar_xp_extra(ganho_extra)
+            partes.append(f"{pet['habilidade_nome']}: +`{ganho_extra}` XP de consolo pra {membro.mention}!")
+
+    if partes:
+        asyncio.create_task(_salvar_xp_stats())
+
+    return "\n".join(partes) if partes else None
+
+
+async def _pet_pos_boss_grupo(guild: discord.Guild, participantes: list, venceu: bool):
+    """Roda `_pet_pos_boss` pra CADA participante de um confronto de Boss
+    (uma batalha solo só passa uma lista de 1 elemento) e junta as notas de
+    todo mundo num texto só, pronto pra encaixar no resultado."""
+    notas = []
+    for membro in participantes:
+        nota = await _pet_pos_boss(guild, membro, venceu)
+        if nota:
+            notas.append(nota)
+    return "\n".join(notas) if notas else None
+
+
+# ══════════════════════════════════════════════════════════════════════
 # .destravarbesta — comando de manutenção/correção. Verifica se a pessoa
 # (ou alguém que o Reality aponte) tem alguma criatura ⚪/🔵/🟣 já no Nível
 # de Capacidade máximo cuja Besta correspondente não foi concedida (por
@@ -11415,6 +11889,26 @@ async def _executar_batalha(
             _anunciar_besta_desbloqueada(canal.guild, perdedor, criatura_perdedora, besta_nova_perdedor)
         )
 
+    # ── 🐾 Desbloqueio de Pet — vale pros dois lados, pela mesma razão da
+    # Besta acima: os dois "usaram" sua criatura nessa batalha, e qualquer
+    # uma das duas pode ter batido o Nível de Capacidade 4 agora. Só
+    # concede quando a criatura em questão é 🔵 Rara e esse Nível 4 acabou
+    # de ser alcançado NESSA batalha — ver _checar_desbloqueio_pet. ──
+    pet_novo_vencedor = _checar_desbloqueio_pet(
+        vencedor.id, criatura_vencedora, nivel_antigo_criatura_vencedora, nivel_novo_criatura_vencedora
+    )
+    pet_novo_perdedor = _checar_desbloqueio_pet(
+        perdedor.id, criatura_perdedora, nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora
+    )
+    if pet_novo_vencedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_pet_desbloqueado(canal.guild, vencedor, criatura_vencedora, pet_novo_vencedor)
+        )
+    if pet_novo_perdedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_pet_desbloqueado(canal.guild, perdedor, criatura_perdedora, pet_novo_perdedor)
+        )
+
     # ⚡ Golpe Especial — chance rara (_CHANCE_GOLPE_ESPECIAL) de aparecer nessa
     # batalha, sempre do lado de quem já venceu. Se a Vantagem foi usada, o
     # resultado já veio "arranjado" — golpe especial não entra em jogo aqui,
@@ -11745,6 +12239,27 @@ async def cmd_criaturas(ctx, membro: discord.Member = None):
         if linhas:
             embed.add_field(name=f"{info['emoji']} {info['label']}", value="\n".join(linhas), inline=False)
 
+    pets_desbloqueados = set(_pets_desbloqueados(alvo.id))
+    pet_equipado_id = xp_stats[alvo.id].get("pet_equipado")
+    linhas_pets = []
+    for p in _PETS:
+        if p["id"] in pets_desbloqueados:
+            nivel_pet_atual = _nivel_pet(alvo.id, p["id"])
+            marcador = " 🐾*(equipado)*" if p["id"] == pet_equipado_id else ""
+            linhas_pets.append(f"🔓 {p['nome']} `⭐ Nv.{nivel_pet_atual}/{_PET_NIVEL_MAX}`{marcador}")
+        else:
+            linhas_pets.append(f"🔒 {p['nome']}")
+    embed.add_field(
+        name=f"🐾 Pets ({len(pets_desbloqueados)}/{len(_PETS)})",
+        value=(
+            "\n".join(linhas_pets) + "\n\n"
+            "*Desbloqueados ao levar uma criatura 🔵 Rara até o Nível de Capacidade "
+            f"`{_PET_NIVEL_DESBLOQUEIO}`. Equipe um com `.equiparpet <nome>` — eles dão bônus na "
+            "chance de vencer Boss e ajudam a upar suas criaturas!*"
+        ),
+        inline=False,
+    )
+
     embed.add_field(
         name="⚡ Golpes Especiais",
         value=(
@@ -11873,6 +12388,94 @@ async def cmd_favorito(ctx, *, nome: str = None):
         f"agora é sua favorita — ela vai entrar em TODA batalha sua a partir de agora, até usar "
         f"`{_FAVORITO_USOS_ATE_CANSAR}` vezes seguidas e precisar descansar!\n"
         f"🌑 **Aeon:** ...as sombras vão priorizá-la. Escolha bem. 🖤🌑"
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# COMANDO .equiparpet — escolhe qual Pet fica ATIVO (equipado) pra dar
+# suporte nas batalhas contra Boss. Só um Pet por vez; trocar de Pet NÃO
+# zera o progresso de Nível dele (fica salvo por Pet, igual o Nível de
+# Capacidade das criaturas) — só o Pet equipado no momento é quem soma o
+# bônus de chance contra Boss e ajuda a upar criaturas.
+# ══════════════════════════════════════════════════════════════════════
+
+_PET_PALAVRAS_REMOVER = {"remover", "limpar", "cancelar", "nenhum", "nenhuma", "tirar", "desequipar"}
+
+
+@bot.command(name="equiparpet", aliases=["pet", "usarpet", "meupet"])
+async def cmd_equiparpet(ctx, *, nome: str = None):
+    """Equipa (ou consulta) seu Pet ativo pras batalhas contra Boss.
+    Uso:
+      .equiparpet <nome do pet>  → equipa esse Pet (precisa já tê-lo desbloqueado)
+      .equiparpet                → mostra o Pet equipado agora (ou sua lista de Pets, se nenhum)
+      .equiparpet remover        → desequipa, sem trocar por outro
+    """
+    autor = ctx.author
+    pets_possuidos = _pets_desbloqueados(autor.id)
+
+    # ── Sem argumento nenhum: só mostra o status atual ───────────────────
+    if nome is None:
+        pet_atual = _obter_pet_equipado(autor.id)
+        if pet_atual:
+            nivel_atual = _nivel_pet(autor.id, pet_atual["id"])
+            bonus = _pet_bonus_chance_boss(autor.id) * 100
+            linha_habilidade = (
+                f"✨ Habilidade **{pet_atual['habilidade_nome']}** já ativa!"
+                if nivel_atual >= _PET_NIVEL_HABILIDADE
+                else f"🔒 Habilidade **{pet_atual['habilidade_nome']}** destrava no Nível `{_PET_NIVEL_HABILIDADE}`."
+            )
+            await ctx.send(
+                f"🐾 Seu Pet equipado agora é **{pet_atual['nome']}** `Nv.{nivel_atual}/{_PET_NIVEL_MAX}` — "
+                f"soma `+{bonus:.1f}%` na chance de vencer Boss.\n{linha_habilidade}"
+            )
+        elif pets_possuidos:
+            nomes = ", ".join(
+                f"**{p['nome']}** `Nv.{_nivel_pet(autor.id, p['id'])}`"
+                for p in _PETS if p["id"] in pets_possuidos
+            )
+            await ctx.send(
+                f"🌟 **Celestia:** Você tem Pets, mas nenhum equipado agora!! 😅🌸 Seus Pets: {nomes}. "
+                "Use `.equiparpet <nome>` pra escolher um!"
+            )
+        else:
+            await ctx.send(
+                "🌑 **Aeon:** ...você ainda não tem nenhum Pet. 🖤🐾 Leve uma criatura 🔵 Rara até o "
+                f"Nível de Capacidade `{_PET_NIVEL_DESBLOQUEIO}` em batalhas — tem chance dela render um Pet de graça."
+            )
+        return
+
+    # ── Desequipar, sem trocar por outro ──────────────────────────────
+    if _normalizar_texto(nome) in _PET_PALAVRAS_REMOVER:
+        dados = xp_stats[autor.id]
+        if not dados.get("pet_equipado"):
+            await ctx.send("🌟 **Celestia:** Você já não tinha nenhum Pet equipado!! 🌸")
+            return
+        dados["pet_equipado"] = None
+        asyncio.create_task(_salvar_xp_stats())
+        await ctx.send("🌑 **Aeon:** ...Pet desequipado. Nenhum bônus de suporte ativo agora. 🖤🐾")
+        return
+
+    # ── Equipar um Pet específico ─────────────────────────────────────
+    pet = _encontrar_pet_por_nome(nome)
+    if pet is None:
+        await ctx.send(f"⚠️ Não encontrei nenhum Pet chamado `{nome}`. Confira o nome certinho.")
+        return
+
+    if pet["id"] not in pets_possuidos:
+        await ctx.send(
+            f"🌟 **Celestia:** Você ainda não desbloqueou **{pet['nome']}**!! 😅🌸 "
+            "Só dá pra equipar Pets que já são seus."
+        )
+        return
+
+    dados = xp_stats[autor.id]
+    dados["pet_equipado"] = pet["id"]
+    asyncio.create_task(_salvar_xp_stats())
+
+    nivel_atual = _nivel_pet(autor.id, pet["id"])
+    await ctx.send(
+        f"🐾 **{pet['nome']}** `Nv.{nivel_atual}/{_PET_NIVEL_MAX}` equipado!! 😆✨ Ele vai te ajudar "
+        "nas próximas batalhas contra Boss — vença ou perca, ele sobe de Nível junto com você."
     )
 
 
@@ -12506,8 +13109,10 @@ def _boss_chance_grupo(convocacoes: list) -> float:
     um bônus pela raridade de cada criatura convocada, sempre travado no
     teto de _BOSS_CHANCE_GRUPO_MAX pra continuar sendo um boss difícil."""
     chance = _BOSS_CHANCE_GRUPO_BASE + len(convocacoes) * _BOSS_BONUS_POR_PARTICIPANTE
-    for _membro, criatura in convocacoes:
+    for membro, criatura in convocacoes:
         chance += _BOSS_BONUS_RARIDADE_CRIATURA.get(criatura["raridade"], 0.0)
+        chance += _pet_bonus_chance_boss(membro.id)   # 🐾 bônus do Pet equipado (2% a 5%, + habilidade)
+    chance += _pet_bonus_grupo_extra([m for m, _c in convocacoes])   # 🐾 habilidade de grupo (Aeon e Celestia)
     return min(chance, _BOSS_CHANCE_GRUPO_MAX)
 
 
@@ -12587,7 +13192,8 @@ async def _boss_batalha_solo(canal: discord.TextChannel, membro: discord.Member)
         except discord.HTTPException:
             pass
 
-        venceu = random.random() < _BOSS_CHANCE_SOLO
+        venceu = random.random() < (_BOSS_CHANCE_SOLO + _pet_bonus_chance_boss(membro.id))
+        notas_pet = await _pet_pos_boss_grupo(canal.guild, [membro], venceu)   # 🐾 sobe o Pet, chance de upar criatura...
 
         if venceu:
             resultados = await _boss_premiar_vencedores(canal.guild, [membro])
@@ -12609,6 +13215,9 @@ async def _boss_batalha_solo(canal: discord.TextChannel, membro: discord.Member)
                 f"🌟 **Celestia:** Não desanima!! 🌸😢 Da próxima, chama a galera pra ir junto!!"
             )
             cor = 0x8b0000
+
+        if notas_pet:
+            descricao += f"\n\n{notas_pet}"
 
         embed_resultado = discord.Embed(
             title="⚔️ FIM DO CONFRONTO!", description=descricao, color=cor, timestamp=discord.utils.utcnow()

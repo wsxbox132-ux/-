@@ -10984,6 +10984,19 @@ _RARIDADES = {
     "raro":     {"label": "Raro",     "emoji": "🔵", "cor": 0x3498db, "peso": 25},
     "epico":    {"label": "Épico",    "emoji": "🟣", "cor": 0x9b59b6, "peso": 15},
     "lendario": {"label": "Lendário", "emoji": "🟡", "cor": 0xf1c40f, "peso": 10},
+    # 🌀 Elementais: mais fortes que as Lendárias, mas ainda um degrau abaixo
+    # das Bestas — o resto das raridades acima delas (Bestas, Fósseis,
+    # Secretas, Míticas) elas não chegam a bater de frente com tanta força.
+    # Não entram no sorteio normal de recompensa nem no 🪙 Baú/.ovo — a ÚNICA
+    # forma de conseguir um é levando uma criatura 🟣 Épica até o Nível de
+    # Capacidade 6 (ver _ELEMENTAL_NIVEL_DESBLOQUEIO e
+    # _checar_desbloqueio_elemental, mais abaixo): ao bater esse nível, a
+    # pessoa recebe automaticamente, de graça, 1 Elemental ALEATÓRIO dentre
+    # os que ainda não tiver. Além disso, todo Elemental USADO numa batalha
+    # (convocado, ganhando ou perdendo — não importa) já concede na hora,
+    # pra quem o usou, um Booster de xp em dobro por
+    # _ELEMENTAL_BOOSTER_MINUTOS minutos (ver _executar_batalha).
+    "elemental": {"label": "Elemental", "emoji": "🌀", "cor": 0xe67e22, "peso": 7},
     # 🐺 Bestas: mais fortes que as Lendárias, mas ainda um degrau abaixo das
     # Secretas. Não entram no sorteio normal de recompensa nem no 🪙 Baú — a
     # ÚNICA forma de conseguir uma é levando uma criatura Comum, Rara,
@@ -11000,7 +11013,7 @@ _RARIDADES = {
     "secreto":  {"label": "Secreto",  "emoji": "🌌", "cor": 0x6c2eb5, "peso": 2},
     "mitico":   {"label": "Mítico",   "emoji": "🐉", "cor": 0xe0115f, "peso": 5},
 }
-_ORDEM_RARIDADES = ("mitico", "secreto", "fosseis", "bestas", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
+_ORDEM_RARIDADES = ("mitico", "secreto", "fosseis", "bestas", "elemental", "lendario", "epico", "raro", "comum")  # do mais raro pro mais comum, pra exibição
 
 # Cada criatura tem um "id" fixo (usado para salvar quem já desbloqueou),
 # um "nome" de exibição, o "gif" e a "raridade" (chave de _RARIDADES).
@@ -11069,6 +11082,28 @@ _BATALHA_CRIATURAS = [
     {"id": "malgorath_ultima_raca",   "nome": "Malgorath, o Último de Sua Raça", "raridade": "lendario", "gif": "https://i.pinimg.com/originals/df/a8/fc/dfa8fca7813bbb3e42613523c2e2ba43.gif"},
     {"id": "jigokuken",               "nome": "Jigokuken",                    "raridade": "lendario", "gif": "https://i.pinimg.com/originals/6e/a3/b3/6ea3b3d49760fab3d42b0570f1f9e69a.gif"},
     {"id": "raiketsu_lamina_dourada", "nome": "Raiketsu, a Lâmina Dourada",   "raridade": "lendario", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531098422952726758/1785112683012.gif?ex=6a67fa06&is=6a66a886&hm=4b58d4ae7eb0fc825c630d44cd22ac4b017c1a78f8881e7b3e6af06ab7adea7a"},
+
+    # ── Elementais ──────────────────────────────────────────────────────
+    # Destravados por CONQUISTA, não por sorteio — mais fortes que as
+    # Lendárias, mas ainda um degrau abaixo das Bestas. A única forma de
+    # conseguir um é levando uma criatura 🟣 Épica até o Nível de Capacidade
+    # 6 (veja _ELEMENTAL_NIVEL_DESBLOQUEIO e _checar_desbloqueio_elemental,
+    # mais abaixo) — é sempre um Elemental ALEATÓRIO dentre os que a pessoa
+    # ainda não tem. Todo Elemental USADO numa batalha (ganhando ou
+    # perdendo, não importa) também concede na hora um Booster de xp em
+    # dobro por _ELEMENTAL_BOOSTER_MINUTOS minutos pra quem o convocou.
+    {"id": "ignar_senhor_chamas",      "nome": "Ignar, o Senhor das Chamas Eternas", "raridade": "elemental", "gif": "https://images.cara.app/production/posts/87424233-d5f7-43cd-988b-5e1b151d4835/sunpixels-AoOvOaapYAziRLRy67LQ6-firee.gif?width=750&quality=100"},
+    {"id": "zephros_soberano_ventos",  "nome": "Zephros, o Soberano dos Ventos",     "raridade": "elemental", "gif": "https://images.cara.app/production/posts/aa3523f4-44cd-4f6f-99eb-3819331ead94/sunpixels-0VDPXm8ZraKByQgekVp0J-air.gif?width=750&quality=100"},
+    {"id": "granor_colosso_pedra",     "nome": "Granor, o Colosso de Pedra",         "raridade": "elemental", "gif": "https://images.cara.app/production/posts/8acf2d4e-77c7-4c20-a674-7cd29d623659/sunpixels-Mj80n0EV-_lHz9IbhkoFP-gf.gif?width=750&quality=100"},
+    {"id": "pyroth_devorador_vulcoes", "nome": "Pyroth, o Devorador de Vulcões",     "raridade": "elemental", "gif": "https://images.cara.app/production/posts/a38409ff-ef92-4890-a848-93c23b4233ad/sunpixels-sIGdQ9FU-zs5U1MeFpcE5-eeasd.gif?width=750&quality=100"},
+    {"id": "sylvara_guardia_floresta", "nome": "Sylvara, a Guardiã da Floresta Ancestral", "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531800568241197147/1785280104128.gif?ex=6a6a87f2&is=6a693672&hm=ab516e494a292d2013a33f5afa07c486bb99ecc7fbddd999310c7b33b401b47a"},
+    {"id": "nereia_rainha_mares",      "nome": "Nereia, a Rainha das Marés",         "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531800691901730886/1785280137642.gif?ex=6a6a8810&is=6a693690&hm=cf17a7d242a0f5763f6ff2ea4d89ba25f9d6abcd7e210f0fb27915feb37f9216"},
+    {"id": "lumiel_arauto_aurora",     "nome": "Lumiel, o Arauto da Aurora",         "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531800926137090208/1785280195193.gif?ex=6a6a8848&is=6a6936c8&hm=a37ea0db0607dfdd33dd72b7344576024d2ba814d8e1c5646ebb22a34a66ae88"},
+    {"id": "nocthar_monarca_sombras",  "nome": "Nocthar, o Monarca das Sombras",     "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531801365662404678/1785280298784.gif?ex=6a6a88b1&is=6a693731&hm=9f7e3de1c1ee64e62d615afd557e3480ea59da248a8477c2648f37af011c55de"},
+    {"id": "zephor_portador_raios",    "nome": "Zephor, o Portador dos Raios",       "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531801627856470118/1785280362728.gif?ex=6a6a88ef&is=6a69376f&hm=241d97ed04603d1cd85cf5bf624b83fef20510ab79e2a07da78e46ae49c7788a"},
+    {"id": "venyx_portador_praga",     "nome": "Venyx, o Portador da Praga",         "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531801741555929218/1785280389431.gif?ex=6a6a890a&is=6a69378a&hm=95d8b56837124085b7c9707af19ef88e86b4ecd6232149784e6674ec86d304b3"},
+    {"id": "mordrak_coracao_carmesim", "nome": "Mordrak, o Coração Carmesim",        "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531801803476439060/1785280404640.gif?ex=6a6a8919&is=6a693799&hm=2debab6eaa3de2c58a7145e33628198930e778414a2409bac1eac48a5ca754cb"},
+    {"id": "gravion_mestre_gravidade", "nome": "Gravion, o Mestre da Gravidade",     "raridade": "elemental", "gif": "https://cdn.discordapp.com/attachments/926913851172204577/1531802763376201920/1785280632048.gif?ex=6a6a89fe&is=6a69387e&hm=7e98df335f73559ff1fe2c4775d4ab74ab7360d5912e40f764b3b9a977df0e1c"},
 
     # ── Bestas ──────────────────────────────────────────────────────────
     # Mais fortes que as Lendárias, mas ainda um degrau abaixo das Secretas.
@@ -11242,7 +11277,7 @@ async def _log_rpg(guild: discord.Guild, titulo: str, descricao: str, cor: int =
 
 # ── Hierarquia de força das raridades ──────────────────────────────────────
 # Cada raridade tem uma força relativa (_ORDEM_RARIDADES, do mais forte pro
-# mais fraco: 🐉 Mítico > 🌌 Secreto > 🦴 Fóssil > 🐺 Bestas > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
+# mais fraco: 🐉 Mítico > 🌌 Secreto > 🦴 Fóssil > 🐺 Bestas > 🌀 Elemental > 🟡 Lendário > 🟣 Épico > 🔵 Raro > ⚪ Comum).
 # Quanto maior a distância de raridade entre duas criaturas, mais a balança
 # pende pro lado mais forte — mas o lado mais fraco NUNCA fica com chance zero.
 # Um ⚪ Comum sempre pode dar a zebra contra um 🟣 Épico, só que é raro.
@@ -11256,7 +11291,9 @@ _CHANCE_VITORIA_POR_DEGRAU = {
     4: 0.90,   # 4 degraus de diferença (ex: 🐺 Bestas vs ⚪ Comum)
     5: 0.93,   # 5 degraus de diferença (ex: 🦴 Fóssil vs ⚪ Comum)
     6: 0.96,   # 6 degraus de diferença (ex: 🌌 Secreto vs ⚪ Comum)
-    7: 0.98,   # 7 degraus — a maior distância possível (🐉 Mítico vs ⚪ Comum)
+    7: 0.98,   # 7 degraus de diferença (ex: 🐉 Mítico vs 🔵 Raro)
+    8: 0.99,   # 8 degraus — a maior distância possível, agora que 🌀 Elemental entrou
+               # na hierarquia (🐉 Mítico vs ⚪ Comum)
 }
 
 # Excepção específica: 🟡 Lendário contra 🐉 Mítico OU 🌌 Secreto é MUITO mais
@@ -11565,6 +11602,123 @@ def _forcar_verificacao_besta(user_id: int, criatura: dict):
     besta_nova = random.choice(faltando)
     dados["criaturas"].append(besta_nova["id"])
     return besta_nova
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 🌀 ELEMENTAIS — raridade desbloqueada por CONQUISTA, não por sorteio. Mais
+# fortes que as Lendárias, mas ainda um degrau abaixo das Bestas. A única
+# forma de conseguir um é levando uma criatura 🟣 Épica até o Nível de
+# Capacidade `_ELEMENTAL_NIVEL_DESBLOQUEIO` (6, não precisa ser o teto) —
+# ao bater esse nível, a pessoa recebe automaticamente, de graça, 1
+# Elemental ALEATÓRIO dentre os que ainda não tiver (diferente das Bestas,
+# não existe "tier" — todos os 12 Elementais entram no mesmo sorteio).
+# Nunca aparecem no sorteio normal de recompensa de batalha nem no 🪙 Baú/
+# `.ovo` — só saem por esse caminho.
+#
+# Além do desbloqueio, todo Elemental USADO numa batalha de desafio
+# ("eu te desafio @alguém") — convocado, ganhando ou perdendo, não importa
+# — concede na hora, pra quem o convocou, um Booster de xp em dobro por
+# `_ELEMENTAL_BOOSTER_MINUTOS` minutos (empilha em cima de qualquer
+# booster que a pessoa já tiver ativo — ver _executar_batalha).
+# ══════════════════════════════════════════════════════════════════════
+
+# Só criaturas 🟣 Épicas concedem Elemental, sempre ao bater ESSE Nível de
+# Capacidade específico (não precisa ser o teto — igual os Pets, diferente
+# das Bestas).
+_ELEMENTAL_NIVEL_DESBLOQUEIO = 6
+
+# Quanto tempo de Booster de xp em dobro (mesmo multiplicador de sempre,
+# _BAU_BOOSTER_MULTIPLICADOR) cada USO de um Elemental em batalha concede.
+_ELEMENTAL_BOOSTER_MINUTOS = 2
+
+
+def _checar_desbloqueio_elemental(user_id: int, criatura: dict, nivel_antigo: int, nivel_novo: int):
+    """Se `criatura` é 🟣 Épica e acabou de bater o Nível de Capacidade
+    `_ELEMENTAL_NIVEL_DESBLOQUEIO` (6) AGORA — subiu de nível nessa mesma
+    batalha e o nível novo já bate ou passa esse marco, o antigo ainda não
+    batia — sorteia 1 Elemental ainda não possuído (dentre TODOS os 12,
+    sem distinção de tier) e concede pra `user_id`. Devolve o Elemental
+    concedido (dict) ou None se nada foi desbloqueado."""
+    if criatura["raridade"] != "epico":
+        return None
+    if not (
+        nivel_novo > nivel_antigo
+        and nivel_novo >= _ELEMENTAL_NIVEL_DESBLOQUEIO
+        and nivel_antigo < _ELEMENTAL_NIVEL_DESBLOQUEIO
+    ):
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    faltando = [c for c in _BATALHA_CRIATURAS if c["raridade"] == "elemental" and c["id"] not in dados["criaturas"]]
+    if not faltando:
+        return None
+
+    elemental_novo = random.choice(faltando)
+    dados["criaturas"].append(elemental_novo["id"])
+    return elemental_novo
+
+
+def _forcar_verificacao_elemental(user_id: int, criatura: dict):
+    """Versão 'preguiçosa' de _checar_desbloqueio_elemental: em vez de
+    exigir que o Nível de Capacidade tenha acabado de subir NESSA hora, só
+    olha o estado atual — se `criatura` já está no Nível 6 ou mais pra essa
+    pessoa. Usada pelo comando `.destravarelemental`, que existe pra
+    corrigir manualmente os casos em que o desbloqueio automático (em
+    batalha) falhou ou não foi anunciado."""
+    if criatura["raridade"] != "epico":
+        return None
+    if _nivel_criatura(user_id, criatura["id"]) < _ELEMENTAL_NIVEL_DESBLOQUEIO:
+        return None
+
+    dados = xp_stats[user_id]
+    dados.setdefault("criaturas", [])
+    faltando = [c for c in _BATALHA_CRIATURAS if c["raridade"] == "elemental" and c["id"] not in dados["criaturas"]]
+    if not faltando:
+        return None
+
+    elemental_novo = random.choice(faltando)
+    dados["criaturas"].append(elemental_novo["id"])
+    return elemental_novo
+
+
+async def _anunciar_elemental_desbloqueado(
+    guild: discord.Guild, membro: discord.Member, criatura_origem: dict, elemental: dict
+) -> None:
+    """Manda, no canal fixo _BESTA_ANUNCIO_CANAL_ID (mesmo do chat geral),
+    o anúncio de que `membro` destravou o Elemental `elemental` ao levar
+    `criatura_origem` até o Nível de Capacidade `_ELEMENTAL_NIVEL_DESBLOQUEIO`."""
+    canal = guild.get_channel(_BESTA_ANUNCIO_CANAL_ID)
+    if canal is None:
+        return
+
+    info_raridade_elemental = _RARIDADES["elemental"]
+
+    embed = discord.Embed(
+        title="🌀 Elemental Destravado!",
+        description=(
+            f"⚡ **{membro.display_name}** levou **{criatura_origem['nome']}** até o "
+            f"**Nível de Capacidade `{_ELEMENTAL_NIVEL_DESBLOQUEIO}`** e, como conquista, destravou "
+            f"{info_raridade_elemental['emoji']} **{elemental['nome']}** "
+            f"(*{info_raridade_elemental['label']}*)!!\n\n"
+            f"✨ A partir de agora, toda vez que **{elemental['nome']}** for convocado numa batalha, "
+            f"{membro.display_name} ganha um Booster de xp em dobro por `{_ELEMENTAL_BOOSTER_MINUTOS} min`!\n\n"
+            "🌑 **Aeon:** *observa a energia crua se assentar* ...uma força elemental, desperta. "
+            "As sombras respeitam. 🖤🌀\n"
+            f"🌟 **Celestia:** AAAAA {membro.mention} DESTRAVOU UM ELEMENTAL!! 😭🌀✨ "
+            "OLHA ESSE PODER!! 💫"
+        ),
+        color=info_raridade_elemental["cor"],
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_author(name=membro.display_name, icon_url=membro.display_avatar.url)
+    embed.set_image(url=elemental["gif"])
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+
+    try:
+        await canal.send(content=membro.mention, embed=embed)
+    except discord.HTTPException:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -12563,6 +12717,20 @@ async def _executar_batalha(
     marcador_favorita_desafiante = " 🌟" if eh_favorita_desafiante else ""
     marcador_favorita_desafiado = " 🌟" if eh_favorita_desafiado else ""
 
+    # 🌀 Booster de xp por Elemental — cada Elemental USADO nessa batalha
+    # (convocado, ganhando ou perdendo, não importa) já concede na hora,
+    # pra quem o convocou, um Booster de xp em dobro por
+    # _ELEMENTAL_BOOSTER_MINUTOS minutos — empilha em cima de qualquer
+    # booster que a pessoa já tiver ativo (mesma função do 🪙 Baú/.darbosster).
+    boost_elemental_desafiante = criatura_desafiante["raridade"] == "elemental"
+    boost_elemental_desafiado = criatura_desafiado["raridade"] == "elemental"
+    if boost_elemental_desafiante:
+        _conceder_xp_booster(desafiante.id, _ELEMENTAL_BOOSTER_MINUTOS)
+    if boost_elemental_desafiado:
+        _conceder_xp_booster(desafiado.id, _ELEMENTAL_BOOSTER_MINUTOS)
+    marcador_elemental_desafiante = " 🌀✨" if boost_elemental_desafiante else ""
+    marcador_elemental_desafiado = " 🌀✨" if boost_elemental_desafiado else ""
+
     # ── Abertura ──────────────────────────────────────────────────────────
     embed_abertura = discord.Embed(
         title="⚔️ UMA BATALHA COMEÇA!",
@@ -12584,7 +12752,7 @@ async def _executar_batalha(
         title="🔥 O desafiador entra em campo!",
         description=(
             f"**{desafiante.display_name}** invoca... **{criatura_desafiante['nome']}** "
-            f"`⭐ Nível {nivel_desafiante}`{marcador_favorita_desafiante}!! 💥"
+            f"`⭐ Nível {nivel_desafiante}`{marcador_favorita_desafiante}{marcador_elemental_desafiante}!! 💥"
         ),
         color=0xff4444,
     )
@@ -12598,7 +12766,7 @@ async def _executar_batalha(
         title="💠 O desafiado revida!",
         description=(
             f"**{desafiado.display_name}** responde invocando... **{criatura_desafiado['nome']}** "
-            f"`⭐ Nível {nivel_desafiado}`{marcador_favorita_desafiado}!! ⚡"
+            f"`⭐ Nível {nivel_desafiado}`{marcador_favorita_desafiado}{marcador_elemental_desafiado}!! ⚡"
         ),
         color=0x4488ff,
     )
@@ -12704,7 +12872,7 @@ async def _executar_batalha(
     dados_vencedor.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")
+        if c["id"] not in dados_vencedor["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas", "elemental")
     ]
     criatura_nova = None
     if _nao_possuidas:
@@ -12777,6 +12945,29 @@ async def _executar_batalha(
     if besta_nova_perdedor is not None and canal.guild:
         asyncio.create_task(
             _anunciar_besta_desbloqueada(canal.guild, perdedor, criatura_perdedora, besta_nova_perdedor)
+        )
+
+    # ── 🌀 Desbloqueio de Elemental — vale pros dois lados, já que os dois
+    # "usaram" sua criatura nessa batalha e qualquer uma das duas pode ter
+    # batido o Nível de Capacidade 6 agora. Só concede quando a criatura em
+    # questão é 🟣 Épica e esse Nível 6 acabou de ser alcançado NESSA
+    # batalha — ver _checar_desbloqueio_elemental. ──
+    elemental_novo_vencedor = _checar_desbloqueio_elemental(
+        vencedor.id, criatura_vencedora, nivel_antigo_criatura_vencedora, nivel_novo_criatura_vencedora
+    )
+    elemental_novo_perdedor = _checar_desbloqueio_elemental(
+        perdedor.id, criatura_perdedora, nivel_antigo_criatura_perdedora, nivel_novo_criatura_perdedora
+    )
+
+    # ── Anuncia no canal fixo (_BESTA_ANUNCIO_CANAL_ID) sempre que um
+    # Elemental for destravado agora, dizendo quem foi e qual Elemental. ──
+    if elemental_novo_vencedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_elemental_desbloqueado(canal.guild, vencedor, criatura_vencedora, elemental_novo_vencedor)
+        )
+    if elemental_novo_perdedor is not None and canal.guild:
+        asyncio.create_task(
+            _anunciar_elemental_desbloqueado(canal.guild, perdedor, criatura_perdedora, elemental_novo_perdedor)
         )
 
     # ── Anuncia no canal fixo (_FOSSIL_ANUNCIO_CANAL_ID) sempre que um
@@ -12926,6 +13117,22 @@ async def _executar_batalha(
             f"{info_raridade_besta['emoji']} **{besta_nova_perdedor['nome']}** "
             f"(*{info_raridade_besta['label']}*)!! 🐺⚡"
         )
+    if elemental_novo_vencedor is not None:
+        info_raridade_elemental = _RARIDADES["elemental"]
+        partes_desbloqueio.append(
+            f"🌀⚡ **CONQUISTA!** A **{criatura_vencedora['nome']}** de {vencedor.display_name} chegou ao "
+            f"**Nível de Capacidade `{_ELEMENTAL_NIVEL_DESBLOQUEIO}`** e, como recompensa, "
+            f"{vencedor.display_name} desbloqueou {info_raridade_elemental['emoji']} "
+            f"**{elemental_novo_vencedor['nome']}** (*{info_raridade_elemental['label']}*)!! 🌀⚡"
+        )
+    if elemental_novo_perdedor is not None:
+        info_raridade_elemental = _RARIDADES["elemental"]
+        partes_desbloqueio.append(
+            f"🌀⚡ **CONQUISTA!** A **{criatura_perdedora['nome']}** de {perdedor.display_name} chegou ao "
+            f"**Nível de Capacidade `{_ELEMENTAL_NIVEL_DESBLOQUEIO}`** e, como recompensa, "
+            f"{perdedor.display_name} desbloqueou {info_raridade_elemental['emoji']} "
+            f"**{elemental_novo_perdedor['nome']}** (*{info_raridade_elemental['label']}*)!! 🌀⚡"
+        )
     if not partes_desbloqueio:
         partes_desbloqueio.append(
             f"🏅 **{vencedor.display_name}** já desbloqueou todas as criaturas normais existentes "
@@ -12965,6 +13172,22 @@ async def _executar_batalha(
         )
     texto_favorita_cansada = ("\n\n" + "\n".join(partes_favorita_cansada)) if partes_favorita_cansada else ""
 
+    # 🌀 Aviso de Booster de xp ativado — vale pra quem convocou um Elemental
+    # nessa batalha, não importa se venceu ou perdeu (o booster já foi
+    # concedido lá em cima, assim que os dois lados foram sorteados).
+    partes_boost_elemental = []
+    if boost_elemental_desafiante:
+        partes_boost_elemental.append(
+            f"🌀✨ **{desafiante.display_name}** convocou um Elemental e ativou um Booster de xp "
+            f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) por `{_ELEMENTAL_BOOSTER_MINUTOS} min`!"
+        )
+    if boost_elemental_desafiado:
+        partes_boost_elemental.append(
+            f"🌀✨ **{desafiado.display_name}** convocou um Elemental e ativou um Booster de xp "
+            f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) por `{_ELEMENTAL_BOOSTER_MINUTOS} min`!"
+        )
+    texto_boost_elemental = ("\n\n" + "\n".join(partes_boost_elemental)) if partes_boost_elemental else ""
+
     embed_resultado = discord.Embed(
         title="🏆 FIM DE BATALHA!",
         description=(
@@ -12973,7 +13196,8 @@ async def _executar_batalha(
             f"{texto_roubo}\n\n"
             f"{texto_desbloqueio}"
             f"{texto_nivel_criatura}"
-            f"{texto_favorita_cansada}\n\n"
+            f"{texto_favorita_cansada}"
+            f"{texto_boost_elemental}\n\n"
             f"{texto_placar}\n\n"
             f"🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem o vencedor. 🖤🌑\n"
             f"🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
@@ -13026,6 +13250,26 @@ async def _executar_batalha(
         partes_log.append(
             f"🐺 **{perdedor.display_name}** desbloqueou a Besta **{besta_nova_perdedor['nome']}** "
             "(Nível de Capacidade máximo)."
+        )
+    if elemental_novo_vencedor is not None:
+        partes_log.append(
+            f"🌀 **{vencedor.display_name}** desbloqueou o Elemental **{elemental_novo_vencedor['nome']}** "
+            f"(Nível de Capacidade {_ELEMENTAL_NIVEL_DESBLOQUEIO})."
+        )
+    if elemental_novo_perdedor is not None:
+        partes_log.append(
+            f"🌀 **{perdedor.display_name}** desbloqueou o Elemental **{elemental_novo_perdedor['nome']}** "
+            f"(Nível de Capacidade {_ELEMENTAL_NIVEL_DESBLOQUEIO})."
+        )
+    if boost_elemental_desafiante:
+        partes_log.append(
+            f"🌀✨ **{desafiante.display_name}** usou um Elemental e ganhou Booster de xp "
+            f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`) por {_ELEMENTAL_BOOSTER_MINUTOS} min."
+        )
+    if boost_elemental_desafiado:
+        partes_log.append(
+            f"🌀✨ **{desafiado.display_name}** usou um Elemental e ganhou Booster de xp "
+            f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`) por {_ELEMENTAL_BOOSTER_MINUTOS} min."
         )
     asyncio.create_task(_log_rpg(canal.guild, "⚔️ Batalha entre membros", "\n".join(partes_log)))
 
@@ -14534,9 +14778,9 @@ async def _ovo_chocar(user_id: int) -> None:
     dados.setdefault("criaturas", [])
     _nao_possuidas = [
         c for c in _BATALHA_CRIATURAS
-        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")
+        if c["id"] not in dados["criaturas"] and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas", "elemental")
     ]
-    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas")]
+    pool = _nao_possuidas or [c for c in _BATALHA_CRIATURAS if c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas", "elemental")]
     pesos = [_RARIDADES[c["raridade"]]["peso"] for c in pool]
     criatura_nascida = random.choices(pool, weights=pesos, k=1)[0]
     if criatura_nascida["id"] not in dados["criaturas"]:

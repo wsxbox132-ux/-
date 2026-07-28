@@ -11810,6 +11810,21 @@ _VANTAGEM_ROUBO_TETO = 700        # teto máximo de XP roubado com a Vantagem �
                                     # mesmo sendo um roubo garantido, pra não ficar desigual
                                     # entre rank baixo e alto.
 
+# ── Vantagem (call) — comando .vantagemfossio <ID>, só o Reality. Igual a
+# .vantagem (vitória garantida + saque de _VANTAGEM_ROUBO_MIN a _MAX), mas
+# só "destrava" numa batalha em que desafiante e desafiado estejam os dois
+# na MESMA call no momento do combate. Se a próxima batalha dela acontecer
+# sem os dois em call juntos, a Vantagem NÃO é consumida — fica pendente,
+# esperando uma batalha em que a condição bata. ──
+_vantagem_fossio_ativa: set = set()   # user_ids com Vantagem (call) pendente
+
+
+def _mesma_call(a: discord.Member, b: discord.Member) -> bool:
+    """True se os dois estiverem conectados no mesmo canal de voz agora."""
+    voz_a = a.voice.channel if a.voice else None
+    voz_b = b.voice.channel if b.voice else None
+    return voz_a is not None and voz_a == voz_b
+
 
 async def _apagar_mensagem_depois(mensagem: discord.Message, segundos: int = _BATALHA_TEMPO_SOMEM) -> None:
     """Espera alguns segundos e apaga a mensagem sozinha, ignorando erros
@@ -12054,6 +12069,16 @@ async def _executar_batalha(
     elif desafiado.id in _vantagem_ativa:
         _vantagem_ativa.discard(desafiado.id)
         vantagem_usada_por = desafiado.id
+    elif _mesma_call(desafiante, desafiado):
+        # 🍀📞 Vantagem (call) — só entra em jogo se os dois estiverem
+        # juntos numa call agora. Fora dessa condição fica pendente e cai
+        # no sorteio normal, sem ser consumida.
+        if desafiante.id in _vantagem_fossio_ativa:
+            _vantagem_fossio_ativa.discard(desafiante.id)
+            vantagem_usada_por = desafiante.id
+        elif desafiado.id in _vantagem_fossio_ativa:
+            _vantagem_fossio_ativa.discard(desafiado.id)
+            vantagem_usada_por = desafiado.id
 
     if vantagem_usada_por == desafiante.id:
         vencedor, criatura_vencedora = desafiante, criatura_desafiante
@@ -13129,6 +13154,44 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
         f"🍀✨ Vantagem concedida pra `{alvo_id}` — ela vai vencer garantido a próxima batalha que "
         f"participar, e vai saquear entre `{_VANTAGEM_ROUBO_MIN * 100:.0f}%` e "
         f"`{_VANTAGEM_ROUBO_MAX * 100:.0f}%` de XP garantido da outra pessoa."
+    )
+    await _apagar_mensagem_depois(confirmacao, 15)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# .vantagemfossio — comando interno, só o Reality (CRIADOR_ID) pode usar.
+# Igual ao .vantagem (vitória garantida + saque de _VANTAGEM_ROUBO_MIN a
+# _VANTAGEM_ROUBO_MAX de XP), MAS só destrava numa batalha em que
+# desafiante e desafiado estejam os dois na MESMA call no momento do
+# combate. Se a próxima batalha dela rolar sem os dois em call juntos, a
+# Vantagem fica pendente e não é gasta — espera uma batalha em que a
+# condição bata.
+# Usa exatamente o mesmo texto de resultado/log de sempre — ninguém no
+# chat consegue perceber que a batalha foi arranjada.
+# De propósito NÃO aparece em nenhum lugar do help/ajuda.
+# Uso (PV ou servidor): .vantagemfossio <ID ou @membro>
+# ══════════════════════════════════════════════════════════════════════
+
+@bot.command(name="vantagemfossio")
+async def cmd_vantagemfossio(ctx, alvo_id: int = None):
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if alvo_id is None and ctx.message.mentions:
+        alvo_id = ctx.message.mentions[0].id
+    if alvo_id is None:
+        aviso = await ctx.send("⚠️ Uso: `.vantagemfossio <ID ou @membro>`")
+        await _apagar_mensagem_depois(aviso, 15)
+        return
+
+    _vantagem_fossio_ativa.add(alvo_id)
+
+    confirmacao = await ctx.send(
+        f"🍀📞 Vantagem (call) concedida pra `{alvo_id}` — ela vai vencer garantido a próxima "
+        f"batalha em que ela e a outra pessoa estiverem juntas numa call, e vai saquear entre "
+        f"`{_VANTAGEM_ROUBO_MIN * 100:.0f}%` e `{_VANTAGEM_ROUBO_MAX * 100:.0f}%` de XP garantido "
+        f"da outra pessoa. Se não estiverem em call, essa batalha segue o sorteio normal e a "
+        f"Vantagem continua guardada."
     )
     await _apagar_mensagem_depois(confirmacao, 15)
 

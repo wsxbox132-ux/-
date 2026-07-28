@@ -1768,7 +1768,10 @@ async def on_ready():
         for canal_voz in guild.voice_channels:
             for membro in canal_voz.members:
                 if not membro.bot and cargo_anjo in membro.roles:
-                    _anjo_voice_join.setdefault(membro.id, time.time())
+                    agora_join = time.time()
+                    _anjo_voice_join.setdefault(membro.id, agora_join)
+                    _anjo_voice_join_semanal.setdefault(membro.id, agora_join)
+                    _anjo_voice_join_mensal.setdefault(membro.id, agora_join)
 
     if not loop_ranking_anjo.is_running():
         loop_ranking_anjo.start()
@@ -1960,12 +1963,21 @@ async def on_voice_state_update(
 
         if entrou_em_call:
             _anjo_voice_join[member.id] = agora
+            _anjo_voice_join_semanal[member.id] = agora
+            _anjo_voice_join_mensal[member.id] = agora
             print(f"[ranking-anjo] {member} entrou em call às {agora}")
         elif saiu_da_call:
-            inicio = _anjo_voice_join.pop(member.id, None)
-            if inicio:
-                anjo_stats[member.id]["tempo_call"] += agora - inicio
-                print(f"[ranking-anjo] {member} saiu da call — tempo total agora: {anjo_stats[member.id]['tempo_call']:.0f}s")
+            _anjo_voice_join.pop(member.id, None)
+            inicio_semanal = _anjo_voice_join_semanal.pop(member.id, None)
+            inicio_mensal  = _anjo_voice_join_mensal.pop(member.id, None)
+            if inicio_semanal:
+                anjo_stats_semanal[member.id]["tempo_call"] += agora - inicio_semanal
+            if inicio_mensal:
+                anjo_stats_mensal[member.id]["tempo_call"] += agora - inicio_mensal
+            if inicio_semanal or inicio_mensal:
+                print(f"[ranking-anjo] {member} saiu da call — semanal: "
+                      f"{anjo_stats_semanal[member.id]['tempo_call']:.0f}s · "
+                      f"mensal: {anjo_stats_mensal[member.id]['tempo_call']:.0f}s")
                 asyncio.create_task(_atualizar_ranking_anjo())
         # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
     except Exception as e:
@@ -2239,8 +2251,11 @@ async def on_message(message: discord.Message):
         if message.guild is not None:
             cargo_anjo_rank = message.guild.get_role(CARGO_ANJO_ID)
             if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
-                anjo_stats[message.author.id]["mensagens"] += 1
-                print(f"[ranking-anjo] +1 msg para {message.author} ({message.author.id}) — total agora: {anjo_stats[message.author.id]['mensagens']}")
+                anjo_stats_semanal[message.author.id]["mensagens"] += 1
+                anjo_stats_mensal[message.author.id]["mensagens"] += 1
+                print(f"[ranking-anjo] +1 msg para {message.author} ({message.author.id}) — "
+                      f"semanal: {anjo_stats_semanal[message.author.id]['mensagens']} · "
+                      f"mensal: {anjo_stats_mensal[message.author.id]['mensagens']}")
     except Exception as e:
         print(f"[ranking-anjo] ERRO ao contar mensagem de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
@@ -7686,7 +7701,8 @@ class BotaoFecharTicketAnjo(discord.ui.View):
         # Credita o Anjo que assumiu o ticket (ANJO: no tópico); se ninguém
         # assumiu formalmente, credita quem fechou (desde que tenha o cargo).
         atendente_id = anjo_id if anjo_id else member.id
-        anjo_stats[atendente_id]["tickets"] += 1
+        anjo_stats_semanal[atendente_id]["tickets"] += 1
+        anjo_stats_mensal[atendente_id]["tickets"] += 1
         await _salvar_anjo_stats()
         asyncio.create_task(_atualizar_ranking_anjo())
         # ─────────────────────────────────────────────────────────────────────
@@ -8096,27 +8112,67 @@ _PESO_MENSAGEM    = 1     # pontos por mensagem no chat
 _PESO_MINUTO_CALL = 0.5   # pontos por minuto em call
 _PESO_TICKET      = 20    # pontos por ticket atendido
 
-anjo_stats: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
-_anjo_ranking_message_id = None   # ID da mensagem de ranking já postada (editada, não duplicada)
-_anjo_voice_join: dict = {}       # user_id -> time.time() de quando entrou na call
+# Dois rankings independentes — semanal e mensal — que contam as MESMAS
+# ações (mensagens, tempo em call, tickets), mas cada um só é zerado pelo
+# seu próprio comando: .reiniciaranjo (semanal) e .reiniciaranjo2 (mensal).
+_TITULO_RANKING = {
+    "semanal": "🕊️ Ranking Anjo Semanal",
+    "mensal":  "🕊️ Ranking Anjo Mensal",
+}
+
+anjo_stats_semanal: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+anjo_stats_mensal: dict  = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+
+_anjo_ranking_message_id_semanal = None  # ID da mensagem de ranking semanal já postada (editada, não duplicada)
+_anjo_ranking_message_id_mensal  = None  # ID da mensagem de ranking mensal já postada (editada, não duplicada)
+
+# Referência de "entrou na call" separada por período, pra permitir resetar
+# um ranking (ex: semanal) sem bagunçar a contagem "ao vivo" do outro (mensal).
+_anjo_voice_join_semanal: dict = {}   # user_id -> time.time() (referência do período semanal)
+_anjo_voice_join_mensal: dict  = {}   # user_id -> time.time() (referência do período mensal)
+_anjo_voice_join: dict = {}           # user_id -> time.time() — só pra saber quem tá "🔴 em call agora"
+
 _anjo_stats_lock = None           # criado em on_ready (precisa de event loop rodando)
 
 
 def _carregar_anjo_stats() -> None:
     """Carrega estatísticas salvas em disco, se existirem. Roda antes do bot conectar."""
-    global _anjo_ranking_message_id
+    global _anjo_ranking_message_id_semanal, _anjo_ranking_message_id_mensal
     if not os.path.exists(_ANJO_DATA_FILE):
         return
     try:
         with open(_ANJO_DATA_FILE, "r", encoding="utf-8") as f:
             dados = json.load(f)
-        for uid_str, valores in dados.get("stats", {}).items():
-            anjo_stats[int(uid_str)] = {
-                "mensagens":  valores.get("mensagens", 0),
-                "tempo_call": valores.get("tempo_call", 0.0),
-                "tickets":    valores.get("tickets", 0),
-            }
-        _anjo_ranking_message_id = dados.get("ranking_message_id")
+
+        if "stats_semanal" in dados or "stats_mensal" in dados:
+            # Formato novo — semanal e mensal já separados
+            for uid_str, valores in dados.get("stats_semanal", {}).items():
+                anjo_stats_semanal[int(uid_str)] = {
+                    "mensagens":  valores.get("mensagens", 0),
+                    "tempo_call": valores.get("tempo_call", 0.0),
+                    "tickets":    valores.get("tickets", 0),
+                }
+            for uid_str, valores in dados.get("stats_mensal", {}).items():
+                anjo_stats_mensal[int(uid_str)] = {
+                    "mensagens":  valores.get("mensagens", 0),
+                    "tempo_call": valores.get("tempo_call", 0.0),
+                    "tickets":    valores.get("tickets", 0),
+                }
+            _anjo_ranking_message_id_semanal = dados.get("ranking_message_id_semanal")
+            _anjo_ranking_message_id_mensal  = dados.get("ranking_message_id_mensal")
+        else:
+            # Formato antigo (um único ranking) — migra o histórico existente
+            # pros dois novos rankings, pra ninguém perder pontos na troca.
+            for uid_str, valores in dados.get("stats", {}).items():
+                valor_migrado = {
+                    "mensagens":  valores.get("mensagens", 0),
+                    "tempo_call": valores.get("tempo_call", 0.0),
+                    "tickets":    valores.get("tickets", 0),
+                }
+                anjo_stats_semanal[int(uid_str)] = dict(valor_migrado)
+                anjo_stats_mensal[int(uid_str)]  = dict(valor_migrado)
+            _anjo_ranking_message_id_semanal = dados.get("ranking_message_id")
+            _anjo_ranking_message_id_mensal  = None
     except (json.JSONDecodeError, OSError, ValueError):
         pass
 
@@ -8124,8 +8180,10 @@ def _carregar_anjo_stats() -> None:
 async def _salvar_anjo_stats() -> None:
     """Salva estatísticas em disco de forma atômica (escreve em .tmp e substitui)."""
     dados = {
-        "stats": {str(uid): v for uid, v in anjo_stats.items()},
-        "ranking_message_id": _anjo_ranking_message_id,
+        "stats_semanal": {str(uid): v for uid, v in anjo_stats_semanal.items()},
+        "stats_mensal":  {str(uid): v for uid, v in anjo_stats_mensal.items()},
+        "ranking_message_id_semanal": _anjo_ranking_message_id_semanal,
+        "ranking_message_id_mensal":  _anjo_ranking_message_id_mensal,
     }
     tmp_path = _ANJO_DATA_FILE + ".tmp"
 
@@ -8143,11 +8201,15 @@ async def _salvar_anjo_stats() -> None:
         pass
 
 
-def _tempo_call_atual(membro_id: int) -> float:
-    """Tempo total em call: sessões já fechadas (salvas) + a sessão atual em
-    andamento, se a pessoa estiver em call neste exato momento (contagem 'ao vivo')."""
-    base = anjo_stats.get(membro_id, {}).get("tempo_call", 0.0)
-    inicio_sessao_atual = _anjo_voice_join.get(membro_id)
+def _tempo_call_atual(membro_id: int, periodo: str) -> float:
+    """Tempo total em call (num período — 'semanal' ou 'mensal'): sessões já
+    fechadas (salvas) + a sessão atual em andamento, se a pessoa estiver em
+    call neste exato momento (contagem 'ao vivo'). Cada período tem sua
+    própria referência de início de sessão, pra resetar um sem afetar o outro."""
+    stats_dict = anjo_stats_semanal if periodo == "semanal" else anjo_stats_mensal
+    voice_dict = _anjo_voice_join_semanal if periodo == "semanal" else _anjo_voice_join_mensal
+    base = stats_dict.get(membro_id, {}).get("tempo_call", 0.0)
+    inicio_sessao_atual = voice_dict.get(membro_id)
     if inicio_sessao_atual:
         base += time.time() - inicio_sessao_atual
     return base
@@ -8162,7 +8224,9 @@ def _formatar_tempo_call(segundos: float) -> str:
     return f"{minutos}m"
 
 
-def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
+def _montar_embed_ranking(guild: discord.Guild, periodo: str) -> discord.Embed:
+    """Monta o embed de um dos dois rankings. periodo: 'semanal' ou 'mensal'."""
+    stats_dict = anjo_stats_semanal if periodo == "semanal" else anjo_stats_mensal
     cargo_anjo = guild.get_role(CARGO_ANJO_ID)
     membros_anjo = cargo_anjo.members if cargo_anjo else []
 
@@ -8170,8 +8234,8 @@ def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
     for membro in membros_anjo:
         if membro.bot:
             continue
-        s = anjo_stats.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
-        tempo_call_ao_vivo = _tempo_call_atual(membro.id)
+        s = stats_dict.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+        tempo_call_ao_vivo = _tempo_call_atual(membro.id, periodo)
         pontuacao = (
             s["mensagens"] * _PESO_MENSAGEM
             + (tempo_call_ao_vivo / 60) * _PESO_MINUTO_CALL
@@ -8196,23 +8260,25 @@ def _montar_embed_ranking(guild: discord.Guild) -> discord.Embed:
         descricao_linhas.append("*Nenhum Anjo encontrado no servidor.*")
 
     embed = discord.Embed(
-        title="🕊️ Ranking dos Anjos",
+        title=_TITULO_RANKING[periodo],
         description="\n".join(descricao_linhas),
         color=0xe8d5f5,
         timestamp=discord.utils.utcnow()
     )
-    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — atualizado automaticamente a cada 1 min")
+    rotulo = "semanal" if periodo == "semanal" else "mensal"
+    embed.set_footer(text=f"🌑 Aeon & ☀️ Celestia — ranking {rotulo}, atualizado automaticamente a cada 1 min")
     return embed
 
 
-async def _limpar_duplicadas_e_achar_ranking(canal: discord.TextChannel):
+async def _limpar_duplicadas_e_achar_ranking(canal: discord.TextChannel, titulo: str):
     """Varre o histórico do canal, apaga rankings duplicados antigos (deixando
     só o mais recente) e devolve essa mensagem mais recente pra ser editada.
-    Serve de rede de segurança caso o ID salvo se perca (ex: deploy sem Volume)."""
+    Serve de rede de segurança caso o ID salvo se perca (ex: deploy sem Volume).
+    titulo filtra qual dos dois rankings (semanal/mensal) estamos procurando."""
     mensagens_ranking = []
     try:
         async for msg in canal.history(limit=50):
-            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == "🕊️ Ranking dos Anjos":
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds[0].title == titulo:
                 mensagens_ranking.append(msg)
     except (discord.Forbidden, discord.HTTPException):
         return None
@@ -8230,9 +8296,10 @@ async def _limpar_duplicadas_e_achar_ranking(canal: discord.TextChannel):
     return mais_recente
 
 
-async def _atualizar_ranking_anjo() -> None:
-    """Atualiza (ou cria, se ainda não existir) a mensagem de ranking no canal de logs anjo."""
-    global _anjo_ranking_message_id
+async def _atualizar_ranking_anjo_periodo(periodo: str) -> None:
+    """Atualiza (ou cria, se ainda não existir) a mensagem de UM dos rankings
+    (semanal ou mensal) no canal de logs anjo."""
+    global _anjo_ranking_message_id_semanal, _anjo_ranking_message_id_mensal
 
     guild = bot.guilds[0] if bot.guilds else None
     if guild is None:
@@ -8242,34 +8309,46 @@ async def _atualizar_ranking_anjo() -> None:
     if canal is None:
         return
 
-    embed = _montar_embed_ranking(guild)
+    embed = _montar_embed_ranking(guild, periodo)
+    titulo = _TITULO_RANKING[periodo]
+    msg_id_salvo = _anjo_ranking_message_id_semanal if periodo == "semanal" else _anjo_ranking_message_id_mensal
 
     mensagem = None
-    if _anjo_ranking_message_id:
+    if msg_id_salvo:
         try:
-            mensagem = await canal.fetch_message(_anjo_ranking_message_id)
+            mensagem = await canal.fetch_message(msg_id_salvo)
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             mensagem = None
 
     # Não achou pelo ID salvo (ex: perdeu o JSON num redeploy sem Volume) —
     # procura no histórico do canal e limpa qualquer duplicada antes de criar uma nova
     if mensagem is None:
-        mensagem = await _limpar_duplicadas_e_achar_ranking(canal)
+        mensagem = await _limpar_duplicadas_e_achar_ranking(canal, titulo)
 
     if mensagem:
         try:
             await mensagem.edit(embed=embed)
-            _anjo_ranking_message_id = mensagem.id
         except discord.HTTPException:
             mensagem = None
 
     if mensagem is None:
         try:
-            nova = await canal.send(embed=embed)
-            _anjo_ranking_message_id = nova.id
+            mensagem = await canal.send(embed=embed)
         except discord.HTTPException:
             return
 
+    if periodo == "semanal":
+        _anjo_ranking_message_id_semanal = mensagem.id
+    else:
+        _anjo_ranking_message_id_mensal = mensagem.id
+
+
+async def _atualizar_ranking_anjo() -> None:
+    """Atualiza os DOIS rankings (semanal primeiro, mensal logo abaixo dele)
+    e salva tudo em disco. Semanal é enviado primeiro na primeira vez que os
+    rankings são criados, então ele fica sempre por cima do mensal no canal."""
+    await _atualizar_ranking_anjo_periodo("semanal")
+    await _atualizar_ranking_anjo_periodo("mensal")
     await _salvar_anjo_stats()
 
 
@@ -8287,7 +8366,7 @@ async def cmd_ranking_anjo(ctx, *, alvo: str = None):
         await ctx.send("⚠️ Uso: `.ranking anjo`")
         return
     await _atualizar_ranking_anjo()
-    await ctx.send("🕊️ Ranking dos Anjos atualizado! Confira no canal de logs. ✨")
+    await ctx.send("🕊️ Ranking Anjo Semanal e Ranking Anjo Mensal atualizados! Confira no canal de logs. ✨")
 
 
 @bot.command(name="rankingdebug")
@@ -8308,15 +8387,27 @@ async def cmd_ranking_debug(ctx):
         f"**Cargo Anjo encontrado:** {'✅ sim' if cargo_anjo else '❌ NÃO — verifique o ID do cargo'}",
         f"**Membros com o cargo:** {len(cargo_anjo.members) if cargo_anjo else 0}",
         f"**Canal de ranking encontrado:** {'✅ sim' if canal_ranking else '❌ NÃO — verifique o ID do canal'}",
-        f"**ID da mensagem de ranking salva:** `{_anjo_ranking_message_id}`",
-        f"**Entradas em anjo_stats (memória):** {len(anjo_stats)}",
+        f"**ID da mensagem — semanal:** `{_anjo_ranking_message_id_semanal}`",
+        f"**ID da mensagem — mensal:** `{_anjo_ranking_message_id_mensal}`",
+        f"**Entradas em anjo_stats_semanal (memória):** {len(anjo_stats_semanal)}",
+        f"**Entradas em anjo_stats_mensal (memória):** {len(anjo_stats_mensal)}",
         f"**Pasta de dados usada:** `{_ANJO_DATA_DIR}`",
         f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_ANJO_DATA_FILE) else '❌ não'}",
         "",
-        "**Conteúdo bruto de anjo_stats:**",
+        "**Conteúdo bruto — SEMANAL:**",
     ]
-    if anjo_stats:
-        for uid, s in anjo_stats.items():
+    if anjo_stats_semanal:
+        for uid, s in anjo_stats_semanal.items():
+            membro = guild.get_member(uid)
+            nome = membro.display_name if membro else f"<@{uid}>"
+            linhas.append(f"`{uid}` ({nome}) — {s}")
+    else:
+        linhas.append("*vazio — nenhuma mensagem/call/ticket foi registrada ainda em memória*")
+
+    linhas.append("")
+    linhas.append("**Conteúdo bruto — MENSAL:**")
+    if anjo_stats_mensal:
+        for uid, s in anjo_stats_mensal.items():
             membro = guild.get_member(uid)
             nome = membro.display_name if membro else f"<@{uid}>"
             linhas.append(f"`{uid}` ({nome}) — {s}")
@@ -8330,10 +8421,12 @@ async def cmd_ranking_debug(ctx):
 
 
 class ConfirmarResetAnjoView(discord.ui.View):
-    """Confirmação do reset do ranking dos Anjos — só o criador do bot pode confirmar."""
+    """Confirmação do reset de UM dos rankings dos Anjos (semanal ou mensal)
+    — só o criador do bot pode confirmar. O outro ranking nunca é tocado."""
 
-    def __init__(self):
+    def __init__(self, periodo: str):
         super().__init__(timeout=30)
+        self.periodo = periodo  # "semanal" ou "mensal"
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user.id != CRIADOR_ID:
@@ -8360,27 +8453,33 @@ class ConfirmarResetAnjoView(discord.ui.View):
         custom_id="reiniciaranjo_confirmar"
     )
     async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        global _anjo_ranking_message_id
-
         for item in self.children:
             item.disabled = True
 
-        # Zera todas as estatísticas guardadas
-        anjo_stats.clear()
+        stats_dict = anjo_stats_semanal if self.periodo == "semanal" else anjo_stats_mensal
+        voice_dict = _anjo_voice_join_semanal if self.periodo == "semanal" else _anjo_voice_join_mensal
 
-        # Sessões de call em andamento continuam sendo contadas, mas a partir de agora
+        # Zera só as estatísticas guardadas DESTE período — o outro ranking fica intacto
+        stats_dict.clear()
+
+        # Sessões de call em andamento continuam sendo contadas neste período,
+        # mas a partir de agora (a referência do OUTRO período não é mexida,
+        # então ele continua contando certinho desde quando a pessoa entrou)
         agora = time.time()
-        for uid in list(_anjo_voice_join.keys()):
-            _anjo_voice_join[uid] = agora
+        for uid in list(voice_dict.keys()):
+            voice_dict[uid] = agora
 
         await _salvar_anjo_stats()
         await _atualizar_ranking_anjo()
 
+        nome_periodo = "Semanal" if self.periodo == "semanal" else "Mensal"
+        outro_periodo = "mensal" if self.periodo == "semanal" else "semanal"
         embed_final = discord.Embed(
-            title="🕊️ Ranking dos Anjos Reiniciado",
+            title=f"🕊️ Ranking Anjo {nome_periodo} Reiniciado",
             description=(
-                "🌑 **Aeon:** ...zerado. As sombras apagaram todo o histórico. 🖤🌑\n"
-                "🌟 **Celestia:** TUDO ZERADO!! 😤🌸 Todo mundo começa do zero agora!! ✨"
+                f"🌑 **Aeon:** ...zerado. As sombras apagaram o histórico {self.periodo}. 🖤🌑\n"
+                f"🌟 **Celestia:** RANKING {nome_periodo.upper()} ZERADO!! 😤🌸 "
+                f"O ranking {outro_periodo} continua contando normalmente! ✨"
             ),
             color=0xe8d5f5
         )
@@ -8403,7 +8502,7 @@ class ConfirmarResetAnjoView(discord.ui.View):
 
 @bot.command(name="reiniciaranjo")
 async def cmd_reiniciar_anjo(ctx):
-    """Reinicia (zera) o ranking dos Anjos. Uso: .reiniciaranjo — só o DEV pode usar."""
+    """Reinicia (zera) só o Ranking Anjo SEMANAL. Uso: .reiniciaranjo — só o DEV pode usar."""
     if ctx.author.id != CRIADOR_ID:
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
@@ -8412,16 +8511,41 @@ async def cmd_reiniciar_anjo(ctx):
         return
 
     embed = discord.Embed(
-        title="⚠️ Reiniciar Ranking dos Anjos",
+        title="⚠️ Reiniciar Ranking Anjo Semanal",
         description=(
             "Isso vai **zerar TODAS as estatísticas** (mensagens, tempo em call e "
-            "tickets) de todos os Anjos e apagar o histórico salvo.\n\n"
+            "tickets) do **Ranking Anjo Semanal** e apagar o histórico salvo dele.\n\n"
+            "O **Ranking Anjo Mensal** não é afetado — continua contando normalmente.\n\n"
             "**Essa ação não pode ser desfeita.** Tem certeza?"
         ),
         color=0xff4444
     )
     embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
-    await ctx.send(embed=embed, view=ConfirmarResetAnjoView())
+    await ctx.send(embed=embed, view=ConfirmarResetAnjoView(periodo="semanal"))
+
+
+@bot.command(name="reiniciaranjo2")
+async def cmd_reiniciar_anjo_mensal(ctx):
+    """Reinicia (zera) só o Ranking Anjo MENSAL. Uso: .reiniciaranjo2 — só o DEV pode usar."""
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    embed = discord.Embed(
+        title="⚠️ Reiniciar Ranking Anjo Mensal",
+        description=(
+            "Isso vai **zerar TODAS as estatísticas** (mensagens, tempo em call e "
+            "tickets) do **Ranking Anjo Mensal** e apagar o histórico salvo dele.\n\n"
+            "O **Ranking Anjo Semanal** não é afetado — continua contando normalmente.\n\n"
+            "**Essa ação não pode ser desfeita.** Tem certeza?"
+        ),
+        color=0xff4444
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
+    await ctx.send(embed=embed, view=ConfirmarResetAnjoView(periodo="mensal"))
 
 
 # Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord

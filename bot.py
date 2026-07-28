@@ -11810,13 +11810,23 @@ _VANTAGEM_ROUBO_TETO = 700        # teto máximo de XP roubado com a Vantagem �
                                     # mesmo sendo um roubo garantido, pra não ficar desigual
                                     # entre rank baixo e alto.
 
-# ── Vantagem (call) — comando .vantagemfossio <ID>, só o Reality. Igual a
-# .vantagem (vitória garantida + saque de _VANTAGEM_ROUBO_MIN a _MAX), mas
-# só "destrava" numa batalha em que desafiante e desafiado estejam os dois
-# na MESMA call no momento do combate. Se a próxima batalha dela acontecer
-# sem os dois em call juntos, a Vantagem NÃO é consumida — fica pendente,
-# esperando uma batalha em que a condição bata. ──
+# ── Vantagem (call) — comando .vantagemfossio <ID>, só o Reality. Parecida
+# com .vantagem (vitória garantida), mas com 3 diferenças:
+#   1. Só "destrava" numa batalha em que desafiante e desafiado estejam os
+#      dois na MESMA call no momento do combate. Se a próxima batalha dela
+#      acontecer sem os dois em call juntos, a Vantagem NÃO é consumida —
+#      fica pendente, esperando uma batalha em que a condição bata.
+#   2. O roubo de XP usa uma faixa própria, mais baixa que a do .vantagem
+#      normal: _VANTAGEM_FOSSIO_ROUBO_MIN a _MAX (10% a 20%, também sem
+#      chance de sair 0%).
+#   3. Como a condição já garante os dois em call, o desenterro de 🦴 Fóssil
+#      (normalmente só _FOSSIL_CHANCE_DESBLOQUEIO = 2% de chance) sai
+#      GARANTIDO nessa vitória também, se ainda sobrar algum Fóssil pra
+#      quem venceu destravar. ──
 _vantagem_fossio_ativa: set = set()   # user_ids com Vantagem (call) pendente
+_VANTAGEM_FOSSIO_ROUBO_MIN = 0.10     # 10% — mínimo de xp roubado garantido com a Vantagem (call)
+_VANTAGEM_FOSSIO_ROUBO_MAX = 0.20     # 20% — máximo de xp roubado garantido com a Vantagem (call)
+_VANTAGEM_FOSSIO_ROUBO_TETO = 700     # teto máximo de XP roubado com a Vantagem (call) — mesmo teto do .vantagem normal
 
 
 def _mesma_call(a: discord.Member, b: discord.Member) -> bool:
@@ -12063,6 +12073,7 @@ async def _executar_batalha(
     # vence garantido essa batalha (a próxima que ela participar depois de
     # receber a Vantagem).
     vantagem_usada_por = None
+    via_vantagem_fossio = False   # True quando quem venceu foi por causa do .vantagemfossio (não do .vantagem normal)
     if desafiante.id in _vantagem_ativa:
         _vantagem_ativa.discard(desafiante.id)
         vantagem_usada_por = desafiante.id
@@ -12076,9 +12087,11 @@ async def _executar_batalha(
         if desafiante.id in _vantagem_fossio_ativa:
             _vantagem_fossio_ativa.discard(desafiante.id)
             vantagem_usada_por = desafiante.id
+            via_vantagem_fossio = True
         elif desafiado.id in _vantagem_fossio_ativa:
             _vantagem_fossio_ativa.discard(desafiado.id)
             vantagem_usada_por = desafiado.id
+            via_vantagem_fossio = True
 
     if vantagem_usada_por == desafiante.id:
         vencedor, criatura_vencedora = desafiante, criatura_desafiante
@@ -12176,7 +12189,10 @@ async def _executar_batalha(
         desafiante.voice is not None and desafiante.voice.channel is not None
         and desafiado.voice is not None and desafiado.voice.channel is not None
     )
-    if _ambos_em_call and random.random() < _FOSSIL_CHANCE_DESBLOQUEIO:
+    if _ambos_em_call and (via_vantagem_fossio or random.random() < _FOSSIL_CHANCE_DESBLOQUEIO):
+        # 📞 Se veio do .vantagemfossio, pula o sorteio de _FOSSIL_CHANCE_DESBLOQUEIO
+        # (2%) e já cai direto aqui garantido — só depende de sobrar algum
+        # Fóssil que quem venceu ainda não tenha.
         _fosseis_faltando = [
             c for c in _BATALHA_CRIATURAS
             if c["raridade"] == "fosseis" and c["id"] not in dados_vencedor["criaturas"]
@@ -12246,12 +12262,20 @@ async def _executar_batalha(
     xp_roubado = 0
     percentual = 0.0
     if vantagem_usada_por is not None:
-        # 🍀 Vantagem usada — rouba entre 20% e 30% garantido (sem chance de
-        # 0%), sem passar pelo sorteio normal de "pode não roubar nada".
-        percentual = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
+        if via_vantagem_fossio:
+            # 📞 Vantagem (call) usada — rouba entre 10% e 20% garantido
+            # (sem chance de 0%), faixa própria e mais baixa que a do
+            # .vantagem normal.
+            percentual = random.uniform(_VANTAGEM_FOSSIO_ROUBO_MIN, _VANTAGEM_FOSSIO_ROUBO_MAX)
+            teto_roubo = _VANTAGEM_FOSSIO_ROUBO_TETO
+        else:
+            # 🍀 Vantagem usada — rouba entre 20% e 30% garantido (sem chance de
+            # 0%), sem passar pelo sorteio normal de "pode não roubar nada".
+            percentual = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
+            teto_roubo = _VANTAGEM_ROUBO_TETO
         if xp_perdedor_antes > 0:
             xp_roubado = max(1, round(xp_perdedor_antes * percentual))
-            xp_roubado = min(xp_roubado, xp_perdedor_antes, _VANTAGEM_ROUBO_TETO)  # nunca deixa o xp negativo, e trava no teto
+            xp_roubado = min(xp_roubado, xp_perdedor_antes, teto_roubo)  # nunca deixa o xp negativo, e trava no teto
     elif golpe_especial is not None and xp_perdedor_antes > 0:
         # ⚡ Golpe Especial ativo — ignora a chance de "não roubar nada" e usa
         # a faixa turbinada (_GOLPE_ESPECIAL_ROUBO_MIN / _MAX) em vez da normal.
@@ -13160,12 +13184,16 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
 
 # ══════════════════════════════════════════════════════════════════════
 # .vantagemfossio — comando interno, só o Reality (CRIADOR_ID) pode usar.
-# Igual ao .vantagem (vitória garantida + saque de _VANTAGEM_ROUBO_MIN a
-# _VANTAGEM_ROUBO_MAX de XP), MAS só destrava numa batalha em que
-# desafiante e desafiado estejam os dois na MESMA call no momento do
-# combate. Se a próxima batalha dela rolar sem os dois em call juntos, a
-# Vantagem fica pendente e não é gasta — espera uma batalha em que a
-# condição bata.
+# Parecida com .vantagem (vitória garantida), com 3 diferenças:
+#   1. Só destrava numa batalha em que desafiante e desafiado estejam os
+#      dois na MESMA call no momento do combate. Se a próxima batalha dela
+#      rolar sem os dois em call juntos, a Vantagem fica pendente e não é
+#      gasta — espera uma batalha em que a condição bata.
+#   2. Rouba entre _VANTAGEM_FOSSIO_ROUBO_MIN e _MAX de XP (10% a 20%,
+#      faixa própria, mais baixa que a do .vantagem normal).
+#   3. Garante o desenterro de um 🦴 Fóssil nessa vitória também (pulando
+#      o sorteio de _FOSSIL_CHANCE_DESBLOQUEIO), se ainda sobrar algum
+#      Fóssil pra quem venceu destravar.
 # Usa exatamente o mesmo texto de resultado/log de sempre — ninguém no
 # chat consegue perceber que a batalha foi arranjada.
 # De propósito NÃO aparece em nenhum lugar do help/ajuda.
@@ -13188,10 +13216,11 @@ async def cmd_vantagemfossio(ctx, alvo_id: int = None):
 
     confirmacao = await ctx.send(
         f"🍀📞 Vantagem (call) concedida pra `{alvo_id}` — ela vai vencer garantido a próxima "
-        f"batalha em que ela e a outra pessoa estiverem juntas numa call, e vai saquear entre "
-        f"`{_VANTAGEM_ROUBO_MIN * 100:.0f}%` e `{_VANTAGEM_ROUBO_MAX * 100:.0f}%` de XP garantido "
-        f"da outra pessoa. Se não estiverem em call, essa batalha segue o sorteio normal e a "
-        f"Vantagem continua guardada."
+        f"batalha em que ela e a outra pessoa estiverem juntas numa call, vai saquear entre "
+        f"`{_VANTAGEM_FOSSIO_ROUBO_MIN * 100:.0f}%` e `{_VANTAGEM_FOSSIO_ROUBO_MAX * 100:.0f}%` de "
+        f"XP garantido da outra pessoa, e ainda desenterra um 🦴 Fóssil garantido (se sobrar algum "
+        f"pra ela). Se não estiverem em call, essa batalha segue o sorteio normal e a Vantagem "
+        f"continua guardada."
     )
     await _apagar_mensagem_depois(confirmacao, 15)
 

@@ -9,7 +9,7 @@ import time
 import asyncio
 import unicodedata
 from collections import defaultdict
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time as dtime
 try:
     import yt_dlp
 except ImportError:
@@ -26,6 +26,7 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.guilds = True
+intents.presences = True  # necessário para o resumo diário dos Anjos (online/offline)
 
 bot = commands.Bot(command_prefix=".", intents=intents, help_command=None)
 
@@ -1772,9 +1773,14 @@ async def on_ready():
                     _anjo_voice_join.setdefault(membro.id, agora_join)
                     _anjo_voice_join_semanal.setdefault(membro.id, agora_join)
                     _anjo_voice_join_mensal.setdefault(membro.id, agora_join)
+                    _anjo_voice_join_diario.setdefault(membro.id, agora_join)
 
     if not loop_ranking_anjo.is_running():
         loop_ranking_anjo.start()
+
+    # Inicia o loop do resumo diário dos Anjos (todo dia às 23h, canal "logs anjo 2")
+    if not loop_resumo_diario_anjo.is_running():
+        loop_resumo_diario_anjo.start()
     # ─────────────────────────────────────────────────────────────────────
 
     # ── Ranking de Nível (XP): setup ─────────────────────────────────────
@@ -1965,23 +1971,65 @@ async def on_voice_state_update(
             _anjo_voice_join[member.id] = agora
             _anjo_voice_join_semanal[member.id] = agora
             _anjo_voice_join_mensal[member.id] = agora
+            _anjo_voice_join_diario[member.id] = agora
+            _registrar_evento_anjo_diario(
+                member.id, "entrou_call", after.channel.name if after.channel else ""
+            )
             print(f"[ranking-anjo] {member} entrou em call às {agora}")
         elif saiu_da_call:
             _anjo_voice_join.pop(member.id, None)
             inicio_semanal = _anjo_voice_join_semanal.pop(member.id, None)
             inicio_mensal  = _anjo_voice_join_mensal.pop(member.id, None)
+            inicio_diario  = _anjo_voice_join_diario.pop(member.id, None)
             if inicio_semanal:
                 anjo_stats_semanal[member.id]["tempo_call"] += agora - inicio_semanal
             if inicio_mensal:
                 anjo_stats_mensal[member.id]["tempo_call"] += agora - inicio_mensal
-            if inicio_semanal or inicio_mensal:
+            if inicio_diario:
+                anjo_stats_diario[member.id]["tempo_call"] += agora - inicio_diario
+            if inicio_semanal or inicio_mensal or inicio_diario:
+                _registrar_evento_anjo_diario(member.id, "saiu_call")
                 print(f"[ranking-anjo] {member} saiu da call — semanal: "
                       f"{anjo_stats_semanal[member.id]['tempo_call']:.0f}s · "
-                      f"mensal: {anjo_stats_mensal[member.id]['tempo_call']:.0f}s")
+                      f"mensal: {anjo_stats_mensal[member.id]['tempo_call']:.0f}s · "
+                      f"hoje: {anjo_stats_diario[member.id]['tempo_call']:.0f}s")
                 asyncio.create_task(_atualizar_ranking_anjo())
         # Trocar de canal de voz mantém a contagem rodando (não é entrada nem saída)
     except Exception as e:
         print(f"[ranking-anjo] ERRO on_voice_state_update para {member}: {e!r}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# RESUMO DIÁRIO DE ANJOS — rastreio de status online/offline
+# Requer o Presence Intent ativado tanto no código (intents.presences)
+# quanto no Portal de Desenvolvedores do Discord (Bot > Privileged Gateway
+# Intents > Presence Intent), senão esse evento nunca dispara.
+# ══════════════════════════════════════════════════════════════════════
+@bot.event
+async def on_presence_update(before: discord.Member, after: discord.Member):
+    """Detecta quando um Anjo fica online, fica offline ou volta a ficar
+    online depois de ter saído — alimenta a narrativa do resumo diário."""
+    try:
+        if after.bot:
+            return
+        guild = after.guild
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID) if guild else None
+        if not cargo_anjo or cargo_anjo not in after.roles:
+            return
+
+        estava_offline = before.status == discord.Status.offline
+        esta_offline = after.status == discord.Status.offline
+
+        if estava_offline and not esta_offline:
+            if _anjo_esteve_offline_hoje.get(after.id):
+                _registrar_evento_anjo_diario(after.id, "voltou_online")
+            else:
+                _registrar_evento_anjo_diario(after.id, "ficou_online")
+        elif not estava_offline and esta_offline:
+            _anjo_esteve_offline_hoje[after.id] = True
+            _registrar_evento_anjo_diario(after.id, "ficou_offline")
+    except Exception as e:
+        print(f"[resumo-anjo] ERRO on_presence_update para {after}: {e!r}")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2253,9 +2301,25 @@ async def on_message(message: discord.Message):
             if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
                 anjo_stats_semanal[message.author.id]["mensagens"] += 1
                 anjo_stats_mensal[message.author.id]["mensagens"] += 1
+                anjo_stats_diario[message.author.id]["mensagens"] += 1
                 print(f"[ranking-anjo] +1 msg para {message.author} ({message.author.id}) — "
                       f"semanal: {anjo_stats_semanal[message.author.id]['mensagens']} · "
-                      f"mensal: {anjo_stats_mensal[message.author.id]['mensagens']}")
+                      f"mensal: {anjo_stats_mensal[message.author.id]['mensagens']} · "
+                      f"hoje: {anjo_stats_diario[message.author.id]['mensagens']}")
+
+                # ── Resumo diário: registra com quem o anjo interagiu hoje ──────
+                # (menções diretas e respostas a mensagens de outras pessoas)
+                for alvo in message.mentions:
+                    if alvo.id != message.author.id and not alvo.bot:
+                        _anjo_interagiu_hoje[message.author.id].add(alvo.id)
+                if (
+                    message.reference is not None
+                    and message.reference.resolved is not None
+                    and isinstance(message.reference.resolved, discord.Message)
+                ):
+                    autor_respondido = message.reference.resolved.author
+                    if autor_respondido.id != message.author.id and not autor_respondido.bot:
+                        _anjo_interagiu_hoje[message.author.id].add(autor_respondido.id)
     except Exception as e:
         print(f"[ranking-anjo] ERRO ao contar mensagem de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
@@ -7703,6 +7767,7 @@ class BotaoFecharTicketAnjo(discord.ui.View):
         atendente_id = anjo_id if anjo_id else member.id
         anjo_stats_semanal[atendente_id]["tickets"] += 1
         anjo_stats_mensal[atendente_id]["tickets"] += 1
+        anjo_stats_diario[atendente_id]["tickets"] += 1
         await _salvar_anjo_stats()
         asyncio.create_task(_atualizar_ranking_anjo())
         # ─────────────────────────────────────────────────────────────────────
@@ -8345,11 +8410,13 @@ async def _atualizar_ranking_anjo_periodo(periodo: str) -> None:
 
 async def _atualizar_ranking_anjo() -> None:
     """Atualiza os DOIS rankings (semanal primeiro, mensal logo abaixo dele)
-    e salva tudo em disco. Semanal é enviado primeiro na primeira vez que os
-    rankings são criados, então ele fica sempre por cima do mensal no canal."""
+    e salva tudo em disco — inclusive o resumo diário, pra sobreviver a
+    reinícios. Semanal é enviado primeiro na primeira vez que os rankings
+    são criados, então ele fica sempre por cima do mensal no canal."""
     await _atualizar_ranking_anjo_periodo("semanal")
     await _atualizar_ranking_anjo_periodo("mensal")
     await _salvar_anjo_stats()
+    await _salvar_anjo_stats_diario()
 
 
 @tasks.loop(minutes=1)
@@ -8550,6 +8617,368 @@ async def cmd_reiniciar_anjo_mensal(ctx):
 
 # Carrega o histórico salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_anjo_stats()
+
+# ══════════════════════════════════════════════════════════════════════
+
+
+# ══════════════════════════════════════════════════════════════════════
+# RESUMO DIÁRIO DE ANJOS — logs fofos do dia de cada Anjo
+# Todo dia às 23:00 (horário de Brasília), Aeon & Celestia mandam no canal
+# "logs anjo 2" um resumo fofo do dia de cada Anjo: tempo em call, mensagens
+# mandadas, com quem interagiu, se ficou online/offline/voltou durante o dia,
+# e os motivos fofos de ter ganhado pontos. O comando manual
+# .puxarhistoricoanjo manda esse resumo na hora (contando só até aquele
+# momento), mas NÃO cancela nem substitui o envio automático das 23h — ele
+# sempre acontece, mesmo que o resumo já tenha sido puxado manualmente antes.
+#
+# Observação: rastrear online/offline depende do Presence Intent, que
+# precisa estar ativado tanto no código (intents.presences, já habilitado
+# lá em cima) quanto no Portal de Desenvolvedores do Discord, em
+# Bot > Privileged Gateway Intents > Presence Intent. Sem isso, o Discord
+# simplesmente nunca vai mandar essa informação pro bot.
+#
+# Assim como o restante do ranking de Anjos, esses dados diários ficam só
+# em memória (não são salvos em disco) — se o bot reiniciar no meio do dia,
+# a contagem daquele dia específico reinicia do zero.
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_LOGS_ANJO2_ID = 1531786991333544148  # canal "logs anjo 2" — resumo diário
+
+# Fuso horário de Brasília (fixo em UTC-3, sem horário de verão atualmente)
+_FUSO_BRASILIA = timezone(timedelta(hours=-3))
+
+# Estatísticas do dia — mesmo formato do semanal/mensal, mas zeradas todo
+# dia logo depois do envio automático das 23h.
+anjo_stats_diario: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+
+# Referência de "entrou em call" do dia — independente do semanal/mensal,
+# pra poder resetar o dia sem bagunçar a contagem "ao vivo" dos outros.
+_anjo_voice_join_diario: dict = {}   # user_id -> time.time()
+
+# Linha do tempo de eventos do dia de cada Anjo (pra montar a narrativa).
+# user_id -> list[{"tipo": str, "hora": float, "detalhe": str}]
+# tipos usados: entrou_call, saiu_call, ficou_online, ficou_offline, voltou_online
+_anjo_eventos_diario: dict = defaultdict(list)
+_ANJO_MAX_EVENTOS = 40  # limite de eventos guardados por pessoa/dia
+
+# Com quem cada Anjo interagiu hoje (mencionou ou respondeu) — user_id -> set(user_id)
+_anjo_interagiu_hoje: dict = defaultdict(set)
+
+# Se, em algum momento do dia, o Anjo ficou offline — usado pra saber se dá
+# pra contar "saiu, mas voltou" quando ele reaparece online depois
+_anjo_esteve_offline_hoje: dict = defaultdict(bool)
+
+# ── Persistência em disco do resumo diário ──────────────────────────────────
+# Usa a MESMA pasta do ranking semanal/mensal (_ANJO_DATA_DIR): se existir um
+# Volume anexado no Railway, cai automaticamente em RAILWAY_VOLUME_MOUNT_PATH
+# (ex.: /data), sobrevivendo a redeploys. Guardado num arquivo separado pra
+# não mexer no formato já existente do anjo_ranking_data.json.
+_ANJO_DIARIO_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "anjo_resumo_diario_data.json")
+
+
+def _data_brasilia_hoje() -> str:
+    """Data de hoje no horário de Brasília, no formato 'AAAA-MM-DD' — usada
+    como referência pra saber se os dados diários salvos ainda são de hoje."""
+    return datetime.now(_FUSO_BRASILIA).strftime("%Y-%m-%d")
+
+
+# Dia (horário de Brasília) a que os dados diários atuais pertencem
+_anjo_data_referencia_diaria: str = _data_brasilia_hoje()
+
+
+def _carregar_anjo_stats_diario() -> None:
+    """Carrega o resumo diário salvo em disco, se ainda for referente a HOJE
+    (horário de Brasília). Se o arquivo salvo for de um dia anterior — por
+    exemplo, o bot ficou desligado e passou da meia-noite — os dados são
+    descartados: aquele dia já devia ter recebido o resumo das 23h e não
+    faz sentido misturá-lo com o dia novo. Roda antes do bot conectar."""
+    global _anjo_data_referencia_diaria
+    if not os.path.exists(_ANJO_DIARIO_DATA_FILE):
+        return
+    try:
+        with open(_ANJO_DIARIO_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+
+        data_salva = dados.get("data_referencia")
+        if data_salva != _data_brasilia_hoje():
+            # Dado de um dia que já passou (bot ficou fora do ar na virada) —
+            # não carrega, o dia de hoje começa do zero normalmente.
+            return
+
+        for uid_str, valores in dados.get("stats_diario", {}).items():
+            anjo_stats_diario[int(uid_str)] = {
+                "mensagens":  valores.get("mensagens", 0),
+                "tempo_call": valores.get("tempo_call", 0.0),
+                "tickets":    valores.get("tickets", 0),
+            }
+        for uid_str, eventos in dados.get("eventos_diario", {}).items():
+            _anjo_eventos_diario[int(uid_str)] = eventos
+        for uid_str, ids in dados.get("interagiu_hoje", {}).items():
+            _anjo_interagiu_hoje[int(uid_str)] = set(ids)
+        for uid_str, valor in dados.get("esteve_offline_hoje", {}).items():
+            _anjo_esteve_offline_hoje[int(uid_str)] = bool(valor)
+
+        _anjo_data_referencia_diaria = data_salva
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_anjo_stats_diario() -> None:
+    """Salva o resumo diário em disco de forma atômica (escreve em .tmp e
+    substitui) — mesmo esquema de escrita usado pelo ranking semanal/mensal."""
+    dados = {
+        "data_referencia": _anjo_data_referencia_diaria,
+        "stats_diario": {str(uid): v for uid, v in anjo_stats_diario.items()},
+        "eventos_diario": {str(uid): v for uid, v in _anjo_eventos_diario.items()},
+        "interagiu_hoje": {str(uid): list(ids) for uid, ids in _anjo_interagiu_hoje.items()},
+        "esteve_offline_hoje": {str(uid): v for uid, v in _anjo_esteve_offline_hoje.items()},
+    }
+    tmp_path = _ANJO_DIARIO_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_ANJO_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _ANJO_DIARIO_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_anjo_stats_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
+# ─────────────────────────────────────────────────────────────────────────
+
+# Carrega o resumo diário salvo (se ainda for de hoje) assim que o módulo
+# sobe — igual ao _carregar_anjo_stats() do ranking semanal/mensal.
+_carregar_anjo_stats_diario()
+
+
+def _registrar_evento_anjo_diario(user_id: int, tipo: str, detalhe: str = "") -> None:
+    """Adiciona um evento na linha do tempo do dia de um Anjo, mantendo só os mais recentes."""
+    eventos = _anjo_eventos_diario[user_id]
+    eventos.append({"tipo": tipo, "hora": time.time(), "detalhe": detalhe})
+    if len(eventos) > _ANJO_MAX_EVENTOS:
+        del eventos[: len(eventos) - _ANJO_MAX_EVENTOS]
+
+
+def _tempo_call_diario_atual(membro_id: int) -> float:
+    """Tempo em call HOJE: sessões já fechadas + a sessão em andamento, se a
+    pessoa estiver em call neste exato momento (contagem 'ao vivo')."""
+    base = anjo_stats_diario.get(membro_id, {}).get("tempo_call", 0.0)
+    inicio_sessao_atual = _anjo_voice_join_diario.get(membro_id)
+    if inicio_sessao_atual:
+        base += time.time() - inicio_sessao_atual
+    return base
+
+
+# ── Frases fofas usadas para montar a narrativa do resumo (Aeon & Celestia) ──
+_RESUMO_ABRE_CALL = [
+    "ficou {tempo} grudadinho(a) na call hoje 🎙️",
+    "passou {tempo} de call hoje, sem preguiça nenhuma 🎙️✨",
+    "rendeu {tempo} de presença na call hoje 🎙️🌙",
+]
+_RESUMO_ABRE_MSG = [
+    "mandou {qtd} mensagens hoje 💬",
+    "apareceu com {qtd} mensagens no chat hoje 💬✨",
+    "não ficou quieto(a) não: {qtd} mensagens hoje 💬🌸",
+]
+_RESUMO_INTERAGIU = [
+    "ficou on e trocou ideia com {pessoas} 🤍",
+    "interagiu bastante com {pessoas} hoje 🌟",
+    "passou um tempo junto de {pessoas} hoje 🕊️",
+]
+_RESUMO_ONLINE_AGORA = [
+    "e tá online AGORA mesmo 🟢",
+    "e continua online agora, de olho no servidor 🟢✨",
+]
+_RESUMO_SAIU_VOLTOU = [
+    "saiu em algum momento do dia, mas voltou de novo 🔁🤍",
+    "sumiu um pouquinho e reapareceu depois 🔁🌸",
+]
+_RESUMO_PONTOS_MSG    = "💬 conversou bastante no chat"
+_RESUMO_PONTOS_CALL   = "🎙️ ficou de call junto da galera"
+_RESUMO_PONTOS_TICKET = "🕊️ atendeu ticket(s) com muito carinho"
+
+
+def _formatar_lista_pessoas(guild: discord.Guild, ids: set) -> str:
+    """Transforma um conjunto de IDs em algo tipo 'Fulano, Beltrano e mais 2'."""
+    nomes = []
+    for uid in list(ids)[:5]:
+        membro = guild.get_member(uid)
+        nomes.append(membro.display_name if membro else "alguém do servidor")
+    extra = len(ids) - len(nomes)
+    texto = ", ".join(nomes)
+    if extra > 0:
+        texto += f" e mais {extra}"
+    return texto or "ninguém em especial"
+
+
+def _montar_linha_resumo_anjo(guild: discord.Guild, membro: discord.Member):
+    """Monta o parágrafo fofo do dia de UM Anjo. Devolve None se a pessoa não
+    teve nenhuma atividade hoje (pra não poluir o resumo com gente parada)."""
+    s = anjo_stats_diario.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+    tempo_call_hoje = _tempo_call_diario_atual(membro.id)
+    mensagens_hoje  = s["mensagens"]
+    tickets_hoje    = s["tickets"]
+    interagiu_com   = _anjo_interagiu_hoje.get(membro.id, set())
+    eventos         = _anjo_eventos_diario.get(membro.id, [])
+
+    teve_atividade = (
+        tempo_call_hoje > 0 or mensagens_hoje > 0 or tickets_hoje > 0
+        or interagiu_com or eventos
+    )
+    if not teve_atividade:
+        return None
+
+    partes = []
+    if tempo_call_hoje > 0:
+        partes.append(random.choice(_RESUMO_ABRE_CALL).format(tempo=_formatar_tempo_call(tempo_call_hoje)))
+    if mensagens_hoje > 0:
+        partes.append(random.choice(_RESUMO_ABRE_MSG).format(qtd=mensagens_hoje))
+    if interagiu_com:
+        pessoas = _formatar_lista_pessoas(guild, interagiu_com)
+        partes.append(random.choice(_RESUMO_INTERAGIU).format(pessoas=pessoas))
+
+    esta_online_agora = membro.id in _anjo_voice_join or (
+        getattr(membro, "status", discord.Status.offline) != discord.Status.offline
+    )
+    if esta_online_agora:
+        partes.append(random.choice(_RESUMO_ONLINE_AGORA))
+    elif _anjo_esteve_offline_hoje.get(membro.id):
+        partes.append(random.choice(_RESUMO_SAIU_VOLTOU))
+
+    # Motivos fofos de ter ganhado pontos hoje
+    pontuacao_hoje = (
+        mensagens_hoje * _PESO_MENSAGEM
+        + (tempo_call_hoje / 60) * _PESO_MINUTO_CALL
+        + tickets_hoje * _PESO_TICKET
+    )
+    motivos = []
+    if mensagens_hoje > 0:
+        motivos.append(_RESUMO_PONTOS_MSG)
+    if tempo_call_hoje > 0:
+        motivos.append(_RESUMO_PONTOS_CALL)
+    if tickets_hoje > 0:
+        motivos.append(_RESUMO_PONTOS_TICKET)
+
+    if not partes:
+        partes.append("teve uma movimentação hoje 🌙")
+
+    linha = f"**{membro.display_name}** — {' · '.join(partes)}"
+    if motivos:
+        linha += f"\n> 🌟 ganhou **{pontuacao_hoje:.0f} pts** hoje: {', '.join(motivos)}"
+    return linha
+
+
+async def _montar_embed_resumo_diario_anjo(guild: discord.Guild, ate_agora: bool) -> discord.Embed:
+    """Monta o embed com o resumo do dia de todos os Anjos que tiveram atividade."""
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+    membros_anjo = cargo_anjo.members if cargo_anjo else []
+
+    linhas = []
+    for membro in membros_anjo:
+        if membro.bot:
+            continue
+        linha = _montar_linha_resumo_anjo(guild, membro)
+        if linha:
+            linhas.append(linha)
+
+    if not linhas:
+        descricao = "*Nenhum Anjo teve atividade registrada hoje até agora.* 🌙"
+    else:
+        descricao = "\n\n".join(linhas)
+        if len(descricao) > 3900:
+            descricao = descricao[:3900] + "\n... *(cortado — muita coisa aconteceu hoje!)*"
+
+    agora_brasilia = datetime.now(_FUSO_BRASILIA)
+    if ate_agora:
+        subtitulo = f"resumo puxado na hora — até às {agora_brasilia.strftime('%Hh%M')} de hoje"
+    else:
+        subtitulo = f"resumo automático das 23h — {agora_brasilia.strftime('%d/%m')}"
+
+    embed = discord.Embed(
+        title="🕊️ Resumo do Dia dos Anjos",
+        description=descricao,
+        color=0xe8d5f5,
+        timestamp=discord.utils.utcnow(),
+    )
+    embed.set_footer(text=f"🌑 Aeon & ☀️ Celestia — {subtitulo}")
+    return embed
+
+
+async def _enviar_resumo_diario_anjo(ate_agora: bool = False) -> bool:
+    """Manda o resumo do dia dos Anjos no canal 'logs anjo 2'. Devolve True se enviou."""
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return False
+
+    canal = guild.get_channel(CANAL_LOGS_ANJO2_ID)
+    if canal is None:
+        print(f"[resumo-anjo] Canal 'logs anjo 2' ({CANAL_LOGS_ANJO2_ID}) não encontrado.")
+        return False
+
+    embed = await _montar_embed_resumo_diario_anjo(guild, ate_agora=ate_agora)
+    abertura = (
+        "🌑 **Aeon:** ...mais um dia registrado nas sombras. Aqui está o que os Anjos fizeram. 🖤🌙\n"
+        "🌟 **Celestia:** OLHA SÓ QUANTO CARINHO OS ANJOS DERAM HOJE!! 😭🌸✨ "
+        "Muito orgulho de cada um deles!! 🤍"
+    )
+    try:
+        await canal.send(abertura, embed=embed)
+        return True
+    except discord.HTTPException as e:
+        print(f"[resumo-anjo] ERRO ao enviar resumo diário: {e!r}")
+        return False
+
+
+def _resetar_dia_anjo() -> None:
+    """Zera as estatísticas e eventos do dia — chamado logo depois do envio
+    automático das 23h, pra começar o próximo dia do zero. Sessões de call em
+    andamento continuam sendo contadas: só a referência de início é recolocada
+    em 'agora' (igual ao reset semanal/mensal), sem perder a sessão atual."""
+    global _anjo_data_referencia_diaria
+    anjo_stats_diario.clear()
+    _anjo_eventos_diario.clear()
+    _anjo_interagiu_hoje.clear()
+    _anjo_esteve_offline_hoje.clear()
+
+    agora = time.time()
+    for uid in list(_anjo_voice_join_diario.keys()):
+        _anjo_voice_join_diario[uid] = agora
+
+    _anjo_data_referencia_diaria = _data_brasilia_hoje()
+    asyncio.create_task(_salvar_anjo_stats_diario())
+
+
+@tasks.loop(time=dtime(hour=23, minute=0, tzinfo=_FUSO_BRASILIA))
+async def loop_resumo_diario_anjo():
+    """Todo dia às 23:00 (horário de Brasília) manda o resumo fofo do dia de
+    cada Anjo no canal 'logs anjo 2' e reinicia a contagem pro próximo dia.
+    Roda sempre nesse horário, mesmo que .puxarhistoricoanjo já tenha sido
+    usado mais cedo no mesmo dia."""
+    try:
+        await _enviar_resumo_diario_anjo(ate_agora=False)
+    finally:
+        _resetar_dia_anjo()
+
+
+@bot.command(name="puxarhistoricoanjo")
+async def cmd_puxar_historico_anjo(ctx):
+    """Manda na hora o resumo do dia de cada Anjo (contando só até este
+    momento) no canal 'logs anjo 2'. Uso: .puxarhistoricoanjo — isso NÃO
+    substitui nem cancela o envio automático das 23h, que acontece de
+    qualquer jeito, mesmo que esse comando já tenha sido usado antes."""
+    if ctx.guild is None:
+        return
+    enviado = await _enviar_resumo_diario_anjo(ate_agora=True)
+    if enviado:
+        await ctx.send("🕊️ Resumo do dia puxado! Confira no canal **logs anjo 2**. ✨")
+    else:
+        await ctx.send(
+            "⚠️ Não consegui enviar o resumo — verifique se o canal `logs anjo 2` "
+            f"(`{CANAL_LOGS_ANJO2_ID}`) existe e se eu tenho permissão de enviar mensagens nele."
+        )
 
 # ══════════════════════════════════════════════════════════════════════
 

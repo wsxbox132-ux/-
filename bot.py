@@ -1720,6 +1720,197 @@ async def _log_mensagem_apagada(
 
 
 
+
+# ══════════════════════════════════════════════════════════════════════
+# SISTEMA DE CONVITES — Aeon & Celestia
+# Registra quem convidou quem: sempre que alguém entra no servidor usando
+# um convite, descobre qual convite foi usado e quem o criou, soma +1 no
+# total de convites dessa pessoa e posta um log detalhado no canal abaixo.
+# Os totais são salvos em disco (pasta /data no Railway, se houver Volume
+# anexado — sobrevive a redeploys; sem Volume, cai na pasta do script).
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_LOG_CONVITES_ID = 1284275043907534968  # canal onde o log de convites é postado
+
+# Se existir um Volume anexado no Railway, a variável RAILWAY_VOLUME_MOUNT_PATH
+# aponta pra pasta persistente (ex.: /data). Sem Volume (rodando local, VPS,
+# etc.) cai na pasta onde o próprio script está.
+_CONVITE_DATA_DIR = os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.path.dirname(os.path.abspath(__file__))
+_CONVITE_DATA_FILE = os.path.join(_CONVITE_DATA_DIR, "convites_data.json")
+
+# Total de convites por quem convidou: { inviter_id: total_de_entradas }
+convite_totais: dict = defaultdict(int)
+
+# Cache de convites por servidor, pra detectar qual convite foi usado
+# comparando o "uses" de antes com o de depois de alguém entrar:
+# { guild_id: { code: discord.Invite } }
+_convite_cache: dict = {}
+
+_convite_lock = None  # criado em on_ready (precisa de event loop rodando)
+
+
+def _carregar_convite_stats() -> None:
+    """Carrega os totais de convites salvos em disco, se existirem. Roda antes do bot conectar."""
+    if not os.path.exists(_CONVITE_DATA_FILE):
+        return
+    try:
+        with open(_CONVITE_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for uid_str, total in dados.get("totais", {}).items():
+            convite_totais[int(uid_str)] = total
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_convite_stats() -> None:
+    """Salva os totais de convites em disco de forma atômica (escreve em .tmp e substitui)."""
+    dados = {"totais": {str(uid): total for uid, total in convite_totais.items()}}
+    tmp_path = _CONVITE_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_CONVITE_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _CONVITE_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_convite_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
+
+
+_carregar_convite_stats()
+
+
+async def _atualizar_cache_convites(guild: discord.Guild) -> None:
+    """(Re)carrega o cache de convites (code -> discord.Invite) de um servidor.
+    Chamado no on_ready pra ter um ponto de partida antes de qualquer entrada."""
+    try:
+        invites = await guild.invites()
+    except (discord.Forbidden, discord.HTTPException):
+        print(f"[convites] Sem permissão pra ver convites em '{guild.name}' "
+              f"— preciso da permissão 'Gerenciar Servidor'.")
+        return
+    _convite_cache[guild.id] = {inv.code: inv for inv in invites}
+
+
+async def _detectar_convite_usado(guild: discord.Guild):
+    """Compara o cache salvo com o estado atual dos convites do servidor pra
+    descobrir qual foi usado (o que teve 'uses' incrementado). Sempre atualiza
+    o cache no final, pro próximo join comparar certo. Retorna o discord.Invite
+    usado, ou None se não conseguir descobrir (ex.: permissão faltando)."""
+    cache_antigo = _convite_cache.get(guild.id, {})
+    try:
+        invites_atuais = await guild.invites()
+    except (discord.Forbidden, discord.HTTPException):
+        return None
+
+    convite_usado = None
+    for inv in invites_atuais:
+        antigo = cache_antigo.get(inv.code)
+        if antigo is None:
+            # Convite que não estava no cache mas já tem uso — provavelmente
+            # foi criado e usado entre uma checagem e outra.
+            if inv.uses and inv.uses >= 1:
+                convite_usado = inv
+                break
+        elif inv.uses > antigo.uses:
+            convite_usado = inv
+            break
+
+    _convite_cache[guild.id] = {inv.code: inv for inv in invites_atuais}
+
+    if convite_usado is None:
+        # Pode ter entrado pelo link personalizado (vanity URL) do servidor,
+        # que nunca aparece em guild.invites().
+        try:
+            vanity = await guild.vanity_invite()
+            if vanity is not None:
+                convite_usado = vanity
+        except (discord.Forbidden, discord.HTTPException, AttributeError):
+            pass
+
+    return convite_usado
+
+
+async def _registrar_entrada_por_convite(member: discord.Member) -> None:
+    """Descobre qual convite trouxe o membro, soma +1 no total de quem convidou
+    e posta o log detalhado no canal de convites."""
+    guild = member.guild
+    canal_log = guild.get_channel(CANAL_LOG_CONVITES_ID)
+
+    convite = await _detectar_convite_usado(guild)
+
+    if convite is None:
+        if canal_log is not None:
+            try:
+                await canal_log.send(
+                    f"⚠️ **{member}** (`{member.id}`) entrou no servidor, mas não "
+                    "consegui descobrir qual convite foi usado. Confere se o bot "
+                    "tem a permissão **Gerenciar Servidor**."
+                )
+            except discord.HTTPException:
+                pass
+        return
+
+    inviter = getattr(convite, "inviter", None)
+    codigo  = convite.code
+
+    if inviter is not None and not inviter.bot:
+        convite_totais[inviter.id] += 1
+        total = convite_totais[inviter.id]
+        asyncio.create_task(_salvar_convite_stats())
+        quem_convidou_txt = f"{inviter.display_name}\n(`{inviter.id}`)"
+        convidou_mention   = inviter.mention
+    else:
+        total = None
+        quem_convidou_txt = "Link personalizado do servidor (vanity)"
+        convidou_mention   = "o **link personalizado** do servidor"
+
+    if canal_log is None:
+        return
+
+    embed = discord.Embed(
+        title="💌 Novo Convite Usado!!",
+        description=f"{member.mention} entrou no servidor usando o convite de {convidou_mention}!!",
+        color=0x5865F2,
+    )
+    embed.add_field(name="🔗 Código do convite", value=f"`{codigo}`", inline=False)
+    embed.add_field(name="👤 Quem entrou", value=f"{member.display_name}\n(`{member.id}`)", inline=True)
+    embed.add_field(name="💌 Quem convidou", value=quem_convidou_txt, inline=True)
+    embed.add_field(name="🔗 Código", value=f"`{codigo}`", inline=True)
+
+    if total is not None:
+        embed.add_field(
+            name="🎉 Total de convites",
+            value=f"{convidou_mention} já tem **{total}** convite{'s' if total != 1 else ''}!!",
+            inline=False,
+        )
+
+    embed.set_thumbnail(url=member.display_avatar.url)
+    embed.timestamp = discord.utils.utcnow()
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia • log de convites")
+
+    try:
+        await canal_log.send(embed=embed)
+    except discord.HTTPException as e:
+        print(f"[convites] Erro ao enviar log de convite: {e!r}")
+
+
+@bot.command(name="convites")
+async def cmd_convites(ctx, membro: discord.Member = None):
+    """Mostra quantas pessoas um membro já trouxe pro servidor via convite.
+    Uso: .convites  (mostra o seu total) ou .convites @alguém"""
+    alvo = membro or ctx.author
+    total = convite_totais.get(alvo.id, 0)
+    await ctx.send(
+        f"🔗 {alvo.mention} já convidou **{total}** pessoa{'s' if total != 1 else ''} "
+        "pro servidor até agora!! 🎉"
+    )
+
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -1739,6 +1930,18 @@ async def on_ready():
     bot.add_view(BotaoAbrirTicketAnjo())
     bot.add_view(BotaoFecharTicketAnjo())
     bot.add_view(BotaoReivindicarTicket(canal_ticket_id=0, dono_id=0))
+
+    # ── Sistema de Convites: cria o lock e guarda o estado inicial dos
+    # convites de cada servidor, pra detectar corretamente qual convite
+    # foi usado na próxima vez que alguém entrar ────────────────────────
+    global _convite_lock
+    if _convite_lock is None:
+        _convite_lock = asyncio.Lock()
+    for guild in bot.guilds:
+        try:
+            await _atualizar_cache_convites(guild)
+        except Exception as e:
+            print(f"[on_ready] ERRO ao carregar cache de convites em '{guild.name}': {e!r}")
 
     # Envia o painel de anjos automaticamente em todos os servidores
     for guild in bot.guilds:
@@ -1853,6 +2056,12 @@ async def on_member_join(member: discord.Member):
     a maior parte da equipe trabalha/estuda fora do Discord)."""
     if member.bot:
         return
+
+    # ── Sistema de Convites: descobre quem convidou e loga no canal ─────
+    try:
+        await _registrar_entrada_por_convite(member)
+    except Exception as e:
+        print(f"[convites] ERRO ao registrar entrada de {member} ({member.id}): {e!r}")
 
     embed = discord.Embed(
         title="🌑☀️ Ei, seja muito bem-vindo(a)!",

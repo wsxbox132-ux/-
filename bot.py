@@ -1911,6 +1911,288 @@ async def cmd_convites(ctx, membro: discord.Member = None):
     )
 
 
+
+# ══════════════════════════════════════════════════════════════════════
+# SISTEMA DE ANIVERSÁRIOS — Aeon & Celestia
+# A pessoa manda a data no formato DD/MM no canal de registro abaixo, o
+# bot detecta automaticamente, valida e salva. No dia certo, o bot
+# aparece no canal de anúncio marcando a pessoa com uma mensagem de
+# parabéns. Os dados ficam salvos em disco (pasta /data no Railway, se
+# houver Volume anexado — sobrevive a redeploys).
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_REGISTRO_ANIVERSARIO_ID = 1460077537546997802  # onde a pessoa manda "DD/MM" pra registrar
+CANAL_ANUNCIO_ANIVERSARIO_ID  = 1284257046740602901  # onde o bot marca a pessoa no dia do aniversário
+
+_ANIV_DATA_DIR = os.getenv("RAILWAY_VOLUME_MOUNT_PATH") or os.path.dirname(os.path.abspath(__file__))
+_ANIV_DATA_FILE = os.path.join(_ANIV_DATA_DIR, "aniversarios_data.json")
+
+# Aniversários salvos: { user_id: "DD/MM" }
+aniversarios: dict = {}
+
+# Guarda o "YYYY-MM-DD" do último dia em que já rodou o anúncio, pra não
+# repetir o parabéns se a task disparar mais de uma vez no mesmo dia
+# (ex.: bot reiniciar bem na hora do anúncio).
+_aniversario_anunciado_hoje: str = ""
+
+_aniv_lock = None  # criado em on_ready (precisa de event loop rodando)
+
+# Aceita "5/4", "05/04", com espaços nas bordas — só isso na mensagem, nada mais
+_ANIVERSARIO_REGEX = re.compile(r"^\s*(\d{1,2})\s*/\s*(\d{1,2})\s*$")
+
+_MENSAGENS_ANIVERSARIO = [
+    "🎂🎉 Olha quem tá completando mais um ano de vida hoje!! {mention} PARABÉNS!! 🥳🎊 "
+    "Que seu dia seja tão especial quanto você é pra esse servidor!! 🖤🌟",
+    "🎉🎂 HOJE É O DIA!! {mention}, feliz aniversário!! 🎈✨ Que esse novo ano venha "
+    "cheio de coisas boas, muita risada e sorte de sobra!! 🌑☀️",
+    "🌟🎂 {mention}, PARABÉÉÉNS!! 🥳🎉 Mais um ano de vida, mais uma volta ao sol — "
+    "que venha tudo de bom pra você!! 🖤🤍",
+    "🎈🎂 Alguém traz o bolo, porque hoje é o dia de {mention}!! 🥳🎉 Parabéns, "
+    "que esse ano novo de vida seja leve e cheio de motivos pra sorrir!! ☀️🌑",
+]
+
+
+def _carregar_aniversarios() -> None:
+    """Carrega os aniversários salvos em disco, se existirem. Roda antes do bot conectar."""
+    global _aniversario_anunciado_hoje
+    if not os.path.exists(_ANIV_DATA_FILE):
+        return
+    try:
+        with open(_ANIV_DATA_FILE, "r", encoding="utf-8") as f:
+            dados = json.load(f)
+        for uid_str, data_str in dados.get("aniversarios", {}).items():
+            aniversarios[int(uid_str)] = data_str
+        _aniversario_anunciado_hoje = dados.get("ultimo_anuncio", "")
+    except (json.JSONDecodeError, OSError, ValueError):
+        pass
+
+
+async def _salvar_aniversarios() -> None:
+    """Salva os aniversários em disco de forma atômica (escreve em .tmp e substitui)."""
+    dados = {
+        "aniversarios": {str(uid): data_str for uid, data_str in aniversarios.items()},
+        "ultimo_anuncio": _aniversario_anunciado_hoje,
+    }
+    tmp_path = _ANIV_DATA_FILE + ".tmp"
+
+    def _escrever():
+        os.makedirs(_ANIV_DATA_DIR, exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, _ANIV_DATA_FILE)
+
+    try:
+        loop = asyncio.get_event_loop()
+        async with (_aniv_lock or asyncio.Lock()):
+            await loop.run_in_executor(None, _escrever)
+    except OSError:
+        pass
+
+
+_carregar_aniversarios()
+
+
+def _montar_embed_aniversario_salvo(user: discord.abc.User, data_str: str, atualizado: bool) -> discord.Embed:
+    """Monta o embed de confirmação (usado tanto no primeiro registro quanto
+    depois de confirmar uma troca de data)."""
+    embed = discord.Embed(
+        title="🎂 Aniversário Atualizado!!" if atualizado else "🎂 Aniversário Registrado!!",
+        description=(
+            f"prontinho, {user.mention} 🐱🖤!! Troquei sua data."
+            if atualizado
+            else f"anotei aqui, {user.mention} 🐱🖤!!"
+        ),
+        color=0xFFC94D,
+    )
+    embed.add_field(
+        name="📅 Novo aniversário" if atualizado else "📅 Seu aniversário",
+        value=f"**{data_str}**\nno dia certo eu venho aqui dar parabéns pra você!! 🥳🎉🎊",
+        inline=False,
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.timestamp = discord.utils.utcnow()
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia • aniversários")
+    return embed
+
+
+class ConfirmarTrocaAniversarioView(discord.ui.View):
+    """Botões de Sim/Não mostrados quando a pessoa já tem uma data diferente
+    registrada e manda outra — só o próprio autor pode responder."""
+
+    def __init__(self, autor_id: int, data_nova: str, data_antiga: str):
+        super().__init__(timeout=120)
+        self.autor_id = autor_id
+        self.data_nova = data_nova
+        self.data_antiga = data_antiga
+        self.message: discord.Message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.autor_id:
+            await interaction.response.send_message(
+                "❌ Só quem mandou a data pode responder essa confirmação.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(
+                    content=f"⌛ Tempo esgotado — mantive sua data como **{self.data_antiga}**.",
+                    view=self,
+                )
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="✅ Sim, atualizar", style=discord.ButtonStyle.success)
+    async def confirmar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        aniversarios[self.autor_id] = self.data_nova
+        asyncio.create_task(_salvar_aniversarios())
+        for item in self.children:
+            item.disabled = True
+        embed = _montar_embed_aniversario_salvo(interaction.user, self.data_nova, atualizado=True)
+        await interaction.response.edit_message(content=None, embed=embed, view=self)
+        self.stop()
+
+    @discord.ui.button(label="❌ Não, manter", style=discord.ButtonStyle.secondary)
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=f"👍 Combinado! Mantive sua data de aniversário como **{self.data_antiga}**.",
+            embed=None,
+            view=self,
+        )
+        self.stop()
+
+
+async def _processar_registro_aniversario(message: discord.Message) -> None:
+    """Detecta uma mensagem no formato DD/MM no canal de registro de
+    aniversários, valida a data e salva. Se a pessoa já tinha uma data
+    diferente registrada, pergunta antes de sobrescrever."""
+    match = _ANIVERSARIO_REGEX.match(message.content or "")
+    if not match:
+        return
+
+    dia, mes = int(match.group(1)), int(match.group(2))
+
+    # Valida a data usando um ano bissexto (2000) pra aceitar 29/02 também
+    try:
+        datetime(2000, mes, dia)
+    except ValueError:
+        try:
+            await message.reply(
+                "⚠️ Essa data não existe! Manda no formato `DD/MM`, tipo `05/04`. 🎂",
+                mention_author=False,
+            )
+        except discord.HTTPException:
+            pass
+        return
+
+    data_str = f"{dia:02d}/{mes:02d}"
+    data_antiga = aniversarios.get(message.author.id)
+
+    # Já tem uma data diferente salva -> pergunta antes de trocar
+    if data_antiga is not None and data_antiga != data_str:
+        view = ConfirmarTrocaAniversarioView(message.author.id, data_str, data_antiga)
+        try:
+            msg_confirmacao = await message.reply(
+                f"🎂 {message.author.mention}, você já tem **{data_antiga}** registrado. "
+                f"Quer trocar pra **{data_str}**?",
+                mention_author=False,
+                view=view,
+            )
+            view.message = msg_confirmacao
+        except discord.HTTPException as e:
+            print(f"[aniversarios] Erro ao pedir confirmação de troca para {message.author}: {e!r}")
+        return
+
+    # Primeiro registro, ou a pessoa mandou a mesma data de novo — salva direto
+    aniversarios[message.author.id] = data_str
+    asyncio.create_task(_salvar_aniversarios())
+
+    embed = _montar_embed_aniversario_salvo(message.author, data_str, atualizado=False)
+    try:
+        await message.channel.send(embed=embed)
+    except discord.HTTPException as e:
+        print(f"[aniversarios] Erro ao enviar confirmação para {message.author}: {e!r}")
+
+
+@tasks.loop(time=dtime(hour=0, minute=0, tzinfo=FUSO_BR))
+async def loop_checar_aniversarios():
+    """Roda todo dia à meia-noite (horário de Brasília) e anuncia, no canal
+    de aniversários, quem está fazendo aniversário hoje."""
+    global _aniversario_anunciado_hoje
+
+    agora = datetime.now(FUSO_BR)
+    hoje_str = agora.strftime("%Y-%m-%d")
+    if _aniversario_anunciado_hoje == hoje_str:
+        return
+
+    data_hoje = agora.strftime("%d/%m")
+    aniversariantes_hoje = [uid for uid, data in aniversarios.items() if data == data_hoje]
+
+    _aniversario_anunciado_hoje = hoje_str
+    asyncio.create_task(_salvar_aniversarios())
+
+    if not aniversariantes_hoje:
+        return
+
+    canal = None
+    for guild in bot.guilds:
+        canal = guild.get_channel(CANAL_ANUNCIO_ANIVERSARIO_ID)
+        if canal:
+            break
+    if canal is None:
+        print("[aniversarios] Canal de anúncio de aniversário não encontrado.")
+        return
+
+    for uid in aniversariantes_hoje:
+        membro = canal.guild.get_member(uid)
+        if membro is None:
+            try:
+                membro = await canal.guild.fetch_member(uid)
+            except discord.NotFound:
+                continue
+        if membro.bot:
+            continue
+
+        frase = random.choice(_MENSAGENS_ANIVERSARIO).format(mention=membro.mention)
+        embed = discord.Embed(
+            title="🎂🎉 Feliz Aniversário!!",
+            description=frase,
+            color=0xFFC94D,
+        )
+        embed.set_thumbnail(url=membro.display_avatar.url)
+        embed.timestamp = agora
+        embed.set_footer(text="🌑 Aeon & ☀️ Celestia • aniversários")
+
+        try:
+            await canal.send(content=membro.mention, embed=embed)
+        except discord.HTTPException as e:
+            print(f"[aniversarios] Erro ao anunciar aniversário de {membro}: {e!r}")
+
+
+@bot.command(name="aniversario")
+async def cmd_aniversario(ctx, membro: discord.Member = None):
+    """Mostra a data de aniversário registrada de alguém.
+    Uso: .aniversario  (mostra a sua) ou .aniversario @alguém"""
+    alvo = membro or ctx.author
+    data_str = aniversarios.get(alvo.id)
+    if data_str is None:
+        if alvo.id == ctx.author.id:
+            await ctx.send(
+                f"🎂 Você ainda não registrou seu aniversário! Manda a data no formato "
+                f"`DD/MM` no canal certo pra eu anotar. 🐱🖤"
+            )
+        else:
+            await ctx.send(f"🎂 {alvo.mention} ainda não registrou o aniversário.")
+        return
+    await ctx.send(f"🎂 O aniversário de {alvo.mention} é **{data_str}**!! 🎉")
+
+
 # ══════════════════════════════════════════════
 # EVENTOS
 # ══════════════════════════════════════════════
@@ -2048,6 +2330,13 @@ async def on_ready():
     # Registra o menu da Enciclopédia de Criaturas como view persistente (sobrevive a reinícios)
     bot.add_view(EnciclopediaView())
     # ─────────────────────────────────────────────────────────────────────
+
+    # ── Sistema de Aniversários: cria o lock e inicia a checagem diária ─
+    global _aniv_lock
+    if _aniv_lock is None:
+        _aniv_lock = asyncio.Lock()
+    if not loop_checar_aniversarios.is_running():
+        loop_checar_aniversarios.start()
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -2481,6 +2770,14 @@ async def on_message(message: discord.Message):
 
     if message.author.bot:
         return
+
+    # ── Sistema de Aniversários: registra a data postada no canal certo ─
+    try:
+        if message.guild is not None and message.channel.id == CANAL_REGISTRO_ANIVERSARIO_ID:
+            await _processar_registro_aniversario(message)
+    except Exception as e:
+        print(f"[aniversarios] ERRO ao processar registro de {message.author}: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ── Cobrança de tickets: cliente mandou mensagem / responsável respondeu ──
     if message.guild is not None and message.channel.id in _tickets_cobranca:

@@ -2338,6 +2338,10 @@ async def on_ready():
     if not loop_checar_aniversarios.is_running():
         loop_checar_aniversarios.start()
 
+    # Inicia a checagem periódica das puniçõescall (libera quem já cumpriu a pena)
+    if not loop_checar_punicoes_call.is_running():
+        loop_checar_punicoes_call.start()
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Ao entrar no servidor, explica pra pessoa como abrir um ticket
@@ -17997,6 +18001,131 @@ async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
     embed_preview.set_footer(text="🌑 Aeon & ☀️ Celestia — Sistema de Moderação")
 
     await ctx.send(embed=embed_preview, view=CastigoView(alvo_id, razao, alvo_nome))
+
+
+# ══════════════════════════════════════════════════════════════════
+# COMANDO .puniçãocall — Prende um membro numa call específica por X horas
+# Uso: .puniçãocall <ID do membro> <horas>
+# Toda vez que o membro tentar entrar em QUALQUER call do servidor, ele é
+# puxado de volta pra call de punição. A punição expira sozinha depois de
+# X horas. Só o CRIADOR_ID pode usar.
+# ══════════════════════════════════════════════════════════════════
+
+CANAL_PUNICAO_CALL_ID = 1531446371159113798
+
+# { user_id: datetime (UTC) de quando a punição expira }
+_punicoes_call: dict = {}
+
+
+@tasks.loop(seconds=30)
+async def loop_checar_punicoes_call():
+    """A cada 30s, libera quem já cumpriu o tempo de punição."""
+    agora = datetime.now(timezone.utc)
+    expirados = [uid for uid, expira in _punicoes_call.items() if agora >= expira]
+
+    for uid in expirados:
+        _punicoes_call.pop(uid, None)
+        for guild in bot.guilds:
+            membro = guild.get_member(uid)
+            if membro:
+                print(f"[puniçãocall] Punição de {membro} ({uid}) expirou. Liberado(a).")
+                break
+
+
+@bot.listen("on_voice_state_update")
+async def _forcar_punicao_call(
+    member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+):
+    """Enquanto o membro estiver de puniçãocall, ele é puxado de volta pra
+    call de punição toda vez que entrar em qualquer outra call."""
+    if member.id not in _punicoes_call:
+        return
+
+    # Punição já venceu — libera e não faz nada
+    if datetime.now(timezone.utc) >= _punicoes_call[member.id]:
+        _punicoes_call.pop(member.id, None)
+        return
+
+    # Não entrou em call nenhuma agora (ex: só saiu) — nada a fazer
+    if after.channel is None:
+        return
+
+    # Já está na call de punição — tudo certo
+    if after.channel.id == CANAL_PUNICAO_CALL_ID:
+        return
+
+    canal_punicao = member.guild.get_channel(CANAL_PUNICAO_CALL_ID)
+    if canal_punicao is None:
+        return
+
+    try:
+        await member.move_to(
+            canal_punicao,
+            reason="Puniçãocall ativa — redirecionado automaticamente."
+        )
+    except (discord.Forbidden, discord.HTTPException) as e:
+        print(f"[puniçãocall] ERRO ao mover {member} ({member.id}) de volta: {e!r}")
+
+
+@bot.command(name="puniçãocall", aliases=["punicaocall"])
+async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
+    """Prende um membro numa call específica por um número de horas.
+    Uso: .puniçãocall <ID do membro> <horas>"""
+
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    if alvo_id is None or horas is None:
+        await ctx.send(
+            "⚠️ **Uso correto:** `.puniçãocall <ID do membro> <horas>`\n"
+            "Exemplo: `.puniçãocall 123456789012345678 2` (2 horas)"
+        )
+        return
+
+    if horas <= 0:
+        await ctx.send("⚠️ O número de horas precisa ser maior que zero.")
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        await ctx.send("⚠️ Não encontrei nenhum servidor.")
+        return
+
+    alvo = guild.get_member(alvo_id)
+    if alvo is None:
+        try:
+            alvo = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            await ctx.send(f"❌ Membro com ID `{alvo_id}` não encontrado no servidor.")
+            return
+
+    canal_punicao = guild.get_channel(CANAL_PUNICAO_CALL_ID)
+    if canal_punicao is None:
+        await ctx.send(f"❌ Não encontrei o canal de punição `{CANAL_PUNICAO_CALL_ID}`.")
+        return
+
+    expira_em = datetime.now(timezone.utc) + timedelta(hours=horas)
+    _punicoes_call[alvo_id] = expira_em
+
+    # Se já estiver numa call agora, já manda pra call de punição na hora
+    if alvo.voice is not None and alvo.voice.channel is not None:
+        try:
+            await alvo.move_to(canal_punicao, reason="Puniçãocall aplicada.")
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+    ts_expira = int(expira_em.timestamp())
+    await ctx.send(
+        f"🌑 **Aeon:** ...{alvo.mention} agora pertence às sombras dessa call. 🖤🌑\n"
+        f"🌟 **Celestia:** Toda vez que tentar fugir pra outra call, a Celestia traz de volta!! 🌸✨\n\n"
+        f"👤 **Membro:** {alvo.mention} — `{alvo.display_name}`\n"
+        f"🔊 **Call de punição:** <#{CANAL_PUNICAO_CALL_ID}>\n"
+        f"⏱️ **Duração:** {horas}h — libera <t:{ts_expira}:R> (<t:{ts_expira}:f>)"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════

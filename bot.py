@@ -8724,8 +8724,8 @@ _TITULO_RANKING = {
     "mensal":  "🕊️ Ranking Anjo Mensal",
 }
 
-anjo_stats_semanal: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
-anjo_stats_mensal: dict  = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+anjo_stats_semanal: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0, "penalidade": 0.0})
+anjo_stats_mensal: dict  = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0, "penalidade": 0.0})
 
 _anjo_ranking_message_id_semanal = None  # ID da mensagem de ranking semanal já postada (editada, não duplicada)
 _anjo_ranking_message_id_mensal  = None  # ID da mensagem de ranking mensal já postada (editada, não duplicada)
@@ -8755,12 +8755,14 @@ def _carregar_anjo_stats() -> None:
                     "mensagens":  valores.get("mensagens", 0),
                     "tempo_call": valores.get("tempo_call", 0.0),
                     "tickets":    valores.get("tickets", 0),
+                    "penalidade": valores.get("penalidade", 0.0),
                 }
             for uid_str, valores in dados.get("stats_mensal", {}).items():
                 anjo_stats_mensal[int(uid_str)] = {
                     "mensagens":  valores.get("mensagens", 0),
                     "tempo_call": valores.get("tempo_call", 0.0),
                     "tickets":    valores.get("tickets", 0),
+                    "penalidade": valores.get("penalidade", 0.0),
                 }
             _anjo_ranking_message_id_semanal = dados.get("ranking_message_id_semanal")
             _anjo_ranking_message_id_mensal  = dados.get("ranking_message_id_mensal")
@@ -8772,6 +8774,7 @@ def _carregar_anjo_stats() -> None:
                     "mensagens":  valores.get("mensagens", 0),
                     "tempo_call": valores.get("tempo_call", 0.0),
                     "tickets":    valores.get("tickets", 0),
+                    "penalidade": valores.get("penalidade", 0.0),
                 }
                 anjo_stats_semanal[int(uid_str)] = dict(valor_migrado)
                 anjo_stats_mensal[int(uid_str)]  = dict(valor_migrado)
@@ -8838,12 +8841,13 @@ def _montar_embed_ranking(guild: discord.Guild, periodo: str) -> discord.Embed:
     for membro in membros_anjo:
         if membro.bot:
             continue
-        s = stats_dict.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+        s = stats_dict.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0, "penalidade": 0.0})
         tempo_call_ao_vivo = _tempo_call_atual(membro.id, periodo)
         pontuacao = (
             s["mensagens"] * _PESO_MENSAGEM
             + (tempo_call_ao_vivo / 60) * _PESO_MINUTO_CALL
             + s["tickets"] * _PESO_TICKET
+            - s.get("penalidade", 0.0)
         )
         linhas.append((membro, s, tempo_call_ao_vivo, pontuacao))
 
@@ -8855,10 +8859,13 @@ def _montar_embed_ranking(guild: discord.Guild, periodo: str) -> discord.Embed:
         for i, (membro, s, tempo_call_ao_vivo, pontuacao) in enumerate(linhas):
             prefixo = medalhas[i] if i < 3 else f"`#{i + 1:>2}`"
             em_call_agora = " 🔴" if membro.id in _anjo_voice_join else ""
+            penalidade_texto = (
+                f" · ⛔ `-{s.get('penalidade', 0.0):.0f}` punição" if s.get("penalidade", 0.0) > 0 else ""
+            )
             descricao_linhas.append(
                 f"{prefixo} **{membro.display_name}** — 💬 `{s['mensagens']}` msgs · "
                 f"🎙️ `{_formatar_tempo_call(tempo_call_ao_vivo)}`{em_call_agora} em call · "
-                f"🕊️ `{s['tickets']}` tickets — **{pontuacao:.0f} pts**"
+                f"🕊️ `{s['tickets']}` tickets{penalidade_texto} — **{pontuacao:.0f} pts**"
             )
     else:
         descricao_linhas.append("*Nenhum Anjo encontrado no servidor.*")
@@ -9188,7 +9195,7 @@ _FUSO_BRASILIA = timezone(timedelta(hours=-3))
 
 # Estatísticas do dia — mesmo formato do semanal/mensal, mas zeradas todo
 # dia logo depois do envio automático das 23h.
-anjo_stats_diario: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+anjo_stats_diario: dict = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.0, "tickets": 0, "penalidade": 0.0})
 
 # Referência de "entrou em call" do dia — independente do semanal/mensal,
 # pra poder resetar o dia sem bagunçar a contagem "ao vivo" dos outros.
@@ -9356,10 +9363,11 @@ def _formatar_lista_pessoas(guild: discord.Guild, ids: set) -> str:
 def _montar_linha_resumo_anjo(guild: discord.Guild, membro: discord.Member):
     """Monta o parágrafo fofo do dia de UM Anjo. Devolve None se a pessoa não
     teve nenhuma atividade hoje (pra não poluir o resumo com gente parada)."""
-    s = anjo_stats_diario.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0})
+    s = anjo_stats_diario.get(membro.id, {"mensagens": 0, "tempo_call": 0.0, "tickets": 0, "penalidade": 0.0})
     tempo_call_hoje = _tempo_call_diario_atual(membro.id)
     mensagens_hoje  = s["mensagens"]
     tickets_hoje    = s["tickets"]
+    penalidade_hoje = s.get("penalidade", 0.0)
     interagiu_com   = _anjo_interagiu_hoje.get(membro.id, set())
     eventos         = _anjo_eventos_diario.get(membro.id, [])
 
@@ -9392,6 +9400,7 @@ def _montar_linha_resumo_anjo(guild: discord.Guild, membro: discord.Member):
         mensagens_hoje * _PESO_MENSAGEM
         + (tempo_call_hoje / 60) * _PESO_MINUTO_CALL
         + tickets_hoje * _PESO_TICKET
+        - penalidade_hoje
     )
     motivos = []
     if mensagens_hoje > 0:
@@ -9400,6 +9409,8 @@ def _montar_linha_resumo_anjo(guild: discord.Guild, membro: discord.Member):
         motivos.append(_RESUMO_PONTOS_CALL)
     if tickets_hoje > 0:
         motivos.append(_RESUMO_PONTOS_TICKET)
+    if penalidade_hoje > 0:
+        motivos.append("⛔ recebeu punição de call")
 
     if not partes:
         partes.append("teve uma movimentação hoje 🌙")
@@ -18033,17 +18044,58 @@ async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
 
 
 # ══════════════════════════════════════════════════════════════════
-# COMANDO .puniçãocall — Prende um membro numa call específica por X horas
-# Uso: .puniçãocall <ID do membro> <horas>
+# COMANDO .puniçãocall — Prende um membro numa call específica por um tempo
+# Uso: .puniçãocall <ID do membro> <duração>
+# A duração é em MINUTOS — número puro (ex: 45) ou no formato MM:SS
+# (ex: 1:00 = 1 minuto, 30:00 = 30 minutos) ou HH:MM:SS (ex: 1:30:00 = 1h30).
 # Toda vez que o membro tentar entrar em QUALQUER call do servidor, ele é
-# puxado de volta pra call de punição. A punição expira sozinha depois de
-# X horas. Só o CRIADOR_ID pode usar.
+# puxado de volta pra call de punição. A punição expira sozinha depois do
+# tempo definido. Além disso, no momento em que a punição é aplicada, a
+# pessoa PERDE pontos — a mesma quantidade que ganharia normalmente ficando
+# aquele tempo numa call — tanto do Ranking Anjo (semanal/mensal/diário)
+# quanto do Ranking/XP geral. Só o CRIADOR_ID e a DEATH_ID podem usar.
 # ══════════════════════════════════════════════════════════════════
 
 CANAL_PUNICAO_CALL_ID = 1531446371159113798
 
 # { user_id: datetime (UTC) de quando a punição expira }
 _punicoes_call: dict = {}
+
+
+def _parse_duracao_punicao(texto: str):
+    """Converte a duração digitada num comando de punição pra timedelta.
+    Aceita:
+      • Número puro = MINUTOS (ex: "45" -> 45 minutos)
+      • "MM:SS" = minutos e segundos (ex: "1:00" -> 1 minuto, "30:00" -> 30 minutos)
+      • "HH:MM:SS" = horas, minutos e segundos (ex: "1:30:00" -> 1h30min)
+    Devolve None se o texto não puder ser interpretado ou o resultado for <= 0."""
+    if not texto:
+        return None
+    texto = texto.strip()
+    try:
+        if ":" in texto:
+            partes = texto.split(":")
+            if len(partes) == 2:
+                horas_extra = 0
+                minutos_str, segundos_str = partes
+            elif len(partes) == 3:
+                horas_str, minutos_str, segundos_str = partes
+                horas_extra = int(horas_str)
+            else:
+                return None
+            minutos = int(minutos_str)
+            segundos = int(segundos_str)
+            if horas_extra < 0 or minutos < 0 or segundos < 0 or segundos >= 60:
+                return None
+            total_segundos = horas_extra * 3600 + minutos * 60 + segundos
+        else:
+            total_segundos = float(texto) * 60  # número puro = minutos
+    except ValueError:
+        return None
+
+    if total_segundos <= 0:
+        return None
+    return timedelta(seconds=total_segundos)
 
 
 @tasks.loop(seconds=30)
@@ -18097,9 +18149,13 @@ async def _forcar_punicao_call(
 
 
 @bot.command(name="puniçãocall", aliases=["punicaocall"])
-async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
-    """Prende um membro numa call específica por um número de horas.
-    Uso: .puniçãocall <ID do membro> <horas>"""
+async def cmd_punicao_call(ctx, alvo_id: int = None, duracao: str = None):
+    """Prende um membro numa call específica por um tempo determinado, e
+    remove dela a mesma quantidade de pontos que ganharia normalmente
+    ficando aquele tempo numa call (Ranking Anjo + XP geral).
+    Uso: .puniçãocall <ID do membro> <duração>
+    A duração é em MINUTOS — número puro (ex: 45) ou formato MM:SS
+    (ex: 1:00 = 1 minuto, 30:00 = 30 minutos) ou HH:MM:SS (ex: 1:30:00 = 1h30)."""
 
     if ctx.author.id not in (CRIADOR_ID, DEATH_ID):
         await ctx.send(
@@ -18108,15 +18164,21 @@ async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
         )
         return
 
-    if alvo_id is None or horas is None:
+    if alvo_id is None or duracao is None:
         await ctx.send(
-            "⚠️ **Uso correto:** `.puniçãocall <ID do membro> <horas>`\n"
-            "Exemplo: `.puniçãocall 123456789012345678 2` (2 horas)"
+            "⚠️ **Uso correto:** `.puniçãocall <ID do membro> <duração>`\n"
+            "A duração é em **minutos**: número puro (ex: `45`) ou formato `MM:SS` "
+            "(ex: `1:00` = 1 minuto, `30:00` = 30 minutos) ou `HH:MM:SS` (ex: `1:30:00` = 1h30).\n"
+            "Exemplo: `.puniçãocall 123456789012345678 30:00` (30 minutos)"
         )
         return
 
-    if horas <= 0:
-        await ctx.send("⚠️ O número de horas precisa ser maior que zero.")
+    delta = _parse_duracao_punicao(duracao)
+    if delta is None:
+        await ctx.send(
+            "⚠️ Duração inválida. Use minutos (ex: `45`) ou o formato `MM:SS` / `HH:MM:SS` "
+            "(ex: `1:00`, `30:00`, `1:30:00`), sempre maior que zero."
+        )
         return
 
     guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
@@ -18137,7 +18199,7 @@ async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
         await ctx.send(f"❌ Não encontrei o canal de punição `{CANAL_PUNICAO_CALL_ID}`.")
         return
 
-    expira_em = datetime.now(timezone.utc) + timedelta(hours=horas)
+    expira_em = datetime.now(timezone.utc) + delta
     _punicoes_call[alvo_id] = expira_em
 
     # Se já estiver numa call agora, já manda pra call de punição na hora
@@ -18147,13 +18209,35 @@ async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
         except (discord.Forbidden, discord.HTTPException):
             pass
 
+    # ── Remove pontos: a mesma quantidade que a pessoa ganharia normalmente
+    # ficando esse tempo numa call — tanto do Ranking Anjo quanto do XP geral.
+    minutos_totais = delta.total_seconds() / 60
+
+    pontos_anjo_perdidos = minutos_totais * _PESO_MINUTO_CALL
+    anjo_stats_semanal[alvo_id]["penalidade"] += pontos_anjo_perdidos
+    anjo_stats_mensal[alvo_id]["penalidade"]  += pontos_anjo_perdidos
+    anjo_stats_diario[alvo_id]["penalidade"]  += pontos_anjo_perdidos
+    await _salvar_anjo_stats()
+    asyncio.create_task(_atualizar_ranking_anjo())
+
+    xp_perdido = round(minutos_totais * _XP_POR_TICK_CALL)
+    dados_xp = xp_stats[alvo_id]
+    xp_novo = max(0, dados_xp["xp"] - xp_perdido)
+    dados_xp["xp"] = xp_novo
+    dados_xp["nivel"] = _calcular_nivel(xp_novo)[0]
+    await _salvar_xp_stats()
+    asyncio.create_task(_atualizar_ranking_xp())
+
     ts_expira = int(expira_em.timestamp())
+    duracao_texto = _formatar_tempo_call(delta.total_seconds())
     await ctx.send(
         f"🌑 **Aeon:** ...{alvo.mention} agora pertence às sombras dessa call. 🖤🌑\n"
         f"🌟 **Celestia:** Toda vez que tentar fugir pra outra call, a Celestia traz de volta!! 🌸✨\n\n"
         f"👤 **Membro:** {alvo.mention} — `{alvo.display_name}`\n"
         f"🔊 **Call de punição:** <#{CANAL_PUNICAO_CALL_ID}>\n"
-        f"⏱️ **Duração:** {horas}h — libera <t:{ts_expira}:R> (<t:{ts_expira}:f>)"
+        f"⏱️ **Duração:** {duracao_texto} — libera <t:{ts_expira}:R> (<t:{ts_expira}:f>)\n"
+        f"📉 **Pontos removidos:** `-{pontos_anjo_perdidos:.0f}` pts do Ranking Anjo "
+        f"(semanal + mensal + diário) e `-{xp_perdido}` XP do ranking geral."
     )
 
 

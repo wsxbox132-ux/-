@@ -18128,6 +18128,41 @@ async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
     )
 
 
+@bot.command(name="cancelarpuniçãocall", aliases=["cancelarpunicaocall"])
+async def cmd_cancelar_punicao_call(ctx, alvo_id: int = None):
+    """Cancela a puniçãocall de um membro antes do tempo acabar.
+    Uso: .cancelarpuniçãocall <ID do membro>"""
+
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    if alvo_id is None:
+        await ctx.send(
+            "⚠️ **Uso correto:** `.cancelarpuniçãocall <ID do membro>`\n"
+            "Exemplo: `.cancelarpuniçãocall 123456789012345678`"
+        )
+        return
+
+    if alvo_id not in _punicoes_call:
+        await ctx.send(f"❌ `{alvo_id}` não está com nenhuma puniçãocall ativa no momento.")
+        return
+
+    _punicoes_call.pop(alvo_id, None)
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    alvo = guild.get_member(alvo_id) if guild else None
+    alvo_texto = alvo.mention if alvo else f"`{alvo_id}`"
+
+    await ctx.send(
+        f"🌑 **Aeon:** ...as sombras soltam {alvo_texto}. 🖤🌑 Puniçãocall encerrada.\n"
+        f"🌟 **Celestia:** Livre, livre!! 🌸✨ Pode ir pra qualquer call de novo!!"
+    )
+
+
 # ══════════════════════════════════════════════════════════════════
 # COMANDO .play — Entra na call, toca áudio do YouTube por 5s e sai
 # Uso: .play (em qualquer canal de texto, estando em uma call)

@@ -68,6 +68,16 @@ DEV01_ID      = 769951556388257812   # Dev / Pai dos bots — criador (mesmo ID)
 # Limite de repetições antes de agir
 SPAM_LIMITE = 5
 
+# ══════════════════════════════════════════════════════════════════════
+# CONTAGEM — brincadeira de contar em sequência num canal específico
+# Só funciona no canal configurado abaixo. Quando alguém manda o número
+# certo (o próximo da sequência), o bot já manda a continuação embaixo,
+# guardando sempre qual foi o último número mandado (por gente ou por ele).
+# ══════════════════════════════════════════════════════════════════════
+CANAL_CONTAGEM_ID = 1310172274124525599
+
+_contagem_estado: dict = {"ultimo": None}
+
 # Histórico por usuário: { user_id: { channel_id: {"texto": str, "ids": [msg_id, ...]} } }
 _spam_tracker: dict = defaultdict(lambda: defaultdict(lambda: {"texto": None, "ids": []}))
 
@@ -2770,6 +2780,29 @@ async def on_message(message: discord.Message):
 
     if message.author.bot:
         return
+
+    # ── Contagem: brincadeira de contar em sequência num canal específico ────
+    if message.channel.id == CANAL_CONTAGEM_ID:
+        try:
+            texto_num = message.content.strip()
+            if texto_num.isdigit():
+                numero = int(texto_num)
+                ultimo = _contagem_estado["ultimo"]
+
+                if ultimo is None:
+                    # Bot acabou de subir e ainda não sabe o histórico do canal:
+                    # usa esse número como ponto de partida da contagem.
+                    _contagem_estado["ultimo"] = numero
+                elif numero == ultimo + 1:
+                    # Número certo! Manda a continuação embaixo e guarda ela
+                    # como o novo último número da sequência.
+                    proximo = numero + 1
+                    await message.channel.send(str(proximo))
+                    _contagem_estado["ultimo"] = proximo
+                # se o número vier fora de sequência, o bot apenas ignora
+        except Exception as e:
+            print(f"[contagem] ERRO ao processar contagem: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
 
     # ── Sistema de Aniversários: registra a data postada no canal certo ─
     try:

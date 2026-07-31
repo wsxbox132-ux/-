@@ -11193,6 +11193,67 @@ async def cmd_dar_level(ctx, membro: discord.Member = None, nivel: int = None):
     )
 
 
+@bot.command(name="baumimic")
+async def cmd_baumimic(ctx, modo: str = None, user_id: int = None, valor: int = None):
+    """Remove uma quantidade de XP BRUTO (pontos, não 'níveis' da curva) de um
+    membro, identificado pelo ID — funciona mesmo se a pessoa não estiver
+    mencionável/no cache. É uma subtração direta e literal: se a pessoa tem
+    10.000 e você tira 2.000, ela fica com 8.000 — sem nenhum arredondamento
+    pro início de nível. O nível exibido é só recalculado depois, a partir do
+    XP que sobrou (nunca fica negativo — mínimo é 0). Só o Reality pode usar.
+    Uso: .baumimic id <ID> <valor>
+    Exemplo: .baumimic id 769951556388257812 2000   → remove 2000 pontos de XP dessa pessoa"""
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    if modo != "id" or user_id is None or valor is None:
+        await ctx.send(
+            "⚠️ Uso correto: `.baumimic id <ID> <valor>`\n"
+            "Exemplo: `.baumimic id 769951556388257812 2000` — remove 2000 pontos de XP dessa pessoa."
+        )
+        return
+
+    if valor <= 0:
+        await ctx.send("⚠️ O valor de pontos (XP) a remover deve ser maior que zero.")
+        return
+
+    dados = xp_stats[user_id]
+    xp_antigo = dados["xp"]
+    nivel_antigo = dados["nivel"]
+
+    xp_novo = max(0, xp_antigo - valor)  # subtração bruta e literal, só travando em 0
+    nivel_novo, _, _ = _calcular_nivel(xp_novo)
+
+    dados["xp"] = xp_novo
+    dados["nivel"] = nivel_novo
+
+    await _salvar_xp_stats()
+    await _atualizar_ranking_xp()
+
+    # Tenta identificar a pessoa pra exibir nome/menção; se não conseguir
+    # (saiu do servidor, ID errado, etc.), mostra só o ID mesmo.
+    membro = None
+    if ctx.guild is not None:
+        membro = ctx.guild.get_member(user_id)
+        if membro is None:
+            try:
+                membro = await ctx.guild.fetch_member(user_id)
+            except discord.NotFound:
+                membro = None
+
+    nome_exibicao = membro.mention if membro else f"`{user_id}`"
+
+    aviso_nivel = (
+        f" (nível caiu de `{nivel_antigo}` para `{nivel_novo}`)"
+        if nivel_novo != nivel_antigo else ""
+    )
+
+    await ctx.send(
+        f"📉 {nome_exibicao} perdeu **{valor}** pontos de XP — "
+        f"de `{xp_antigo}` para `{xp_novo}`{aviso_nivel} — ranking já atualizado."
+    )
+
+
 @bot.command(name="xpdebug")
 async def cmd_xp_debug(ctx):
     """Mostra dados brutos do ranking de XP pra diagnosticar problemas. Só o dono do bot pode usar."""

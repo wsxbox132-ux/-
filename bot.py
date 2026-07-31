@@ -11193,23 +11193,27 @@ async def cmd_dar_level(ctx, membro: discord.Member = None, nivel: int = None):
     )
 
 
-@bot.command(name="baumimic")
-async def cmd_baumimic(ctx, modo: str = None, user_id: int = None, valor: int = None):
+@bot.command(name="removerxp")
+async def cmd_removerxp(ctx, modo: str = None, user_id: int = None, valor: int = None):
     """Remove uma quantidade de XP BRUTO (pontos, não 'níveis' da curva) de um
     membro, identificado pelo ID — funciona mesmo se a pessoa não estiver
     mencionável/no cache. É uma subtração direta e literal: se a pessoa tem
     10.000 e você tira 2.000, ela fica com 8.000 — sem nenhum arredondamento
     pro início de nível. O nível exibido é só recalculado depois, a partir do
     XP que sobrou (nunca fica negativo — mínimo é 0). Só o Reality pode usar.
-    Uso: .baumimic id <ID> <valor>
-    Exemplo: .baumimic id 769951556388257812 2000   → remove 2000 pontos de XP dessa pessoa"""
+    Uso: .removerxp id <ID> <valor>
+    Exemplo: .removerxp id 769951556388257812 2000   → remove 2000 pontos de XP dessa pessoa
+
+    ⚠️ NOTA: não pode se chamar ".baumimic" — esse nome já é usado pelo baú
+    disfarçado de Mimic (.baumimic) que já existe no bot, então ficaria
+    duplicado e o bot recusa iniciar (CommandRegistrationError)."""
     if ctx.author.id != CRIADOR_ID:
         return
 
     if modo != "id" or user_id is None or valor is None:
         await ctx.send(
-            "⚠️ Uso correto: `.baumimic id <ID> <valor>`\n"
-            "Exemplo: `.baumimic id 769951556388257812 2000` — remove 2000 pontos de XP dessa pessoa."
+            "⚠️ Uso correto: `.removerxp id <ID> <valor>`\n"
+            "Exemplo: `.removerxp id 769951556388257812 2000` — remove 2000 pontos de XP dessa pessoa."
         )
         return
 

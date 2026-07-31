@@ -2886,13 +2886,6 @@ async def on_message(message: discord.Message):
         print(f"[cidade-dorme] ERRO ao processar gatilho de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
-    # ── Jogo "Cidade Dorme!" — coleta de sugestões durante o debate ────────────
-    try:
-        await _processar_sugestao_cidade_dorme(message)
-    except Exception as e:
-        print(f"[cidade-dorme] ERRO ao coletar sugestão de {message.author}: {e!r}")
-    # ─────────────────────────────────────────────────────────────────────────
-
     await bot.process_commands(message)
 
     content    = message.content.lower().strip()
@@ -18217,6 +18210,7 @@ _CD_FRASES_GATILHO = {"jogar cidade dorme!", "jogar cidade dorme"}
 _CD_MIN_JOGADORES = 5
 _CD_MAX_JOGADORES = 20   # limite de segurança — menu de seleção do Discord aceita até 25 opções
 _CD_DURACAO_NOITE = 30   # segundos que a call fica muda por noite
+_CD_DURACAO_SUSPEITA = 10   # segundos da janela de "Quem vocês acham?" (botão/select)
 
 _jogos_cidade_dorme: dict = {}   # { canal_texto_id: JogoCidadeDorme }
 
@@ -18240,7 +18234,6 @@ class JogoCidadeDorme:
         self.alvo_anjo_anterior = None  # id protegido na noite passada (não pode repetir)
         self.acusacao_detetive = None   # id acusado na noite atual (ou None)
         self.sugestoes: list = []       # [(user_id, texto), ...] coletadas na fase de debate
-        self.coletando_sugestoes = False  # True só durante a janela de 10s de debate
 
     def id_por_papel(self, papel: str):
         for uid, p in self.papeis.items():
@@ -18563,6 +18556,105 @@ class CDDetetiveView(discord.ui.View):
                 pass
 
 
+# ── Select ephemeral pra apontar um suspeito durante o debate ───────────────
+# Igual ao select de acusação do Detetive (mesmo estilo visual), só que
+# qualquer jogador vivo pode usar. O palpite vai só pro resumo que o
+# Detetive confere depois — não tem efeito direto no jogo.
+class CDSuspeitoView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, autor_id: int, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_SUSPEITA)
+        self.jogo = jogo
+        self.autor_id = autor_id
+        self.respondido = False
+        self.message = None
+        select = discord.ui.Select(
+            placeholder="Aponte quem vocês suspeitam (ou pule)...",
+            options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:24]
+            + [discord.SelectOption(label="⏭️ Não apontar ninguém", value="skip")],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        valor = interaction.data["values"][0]
+        self.respondido = True
+        for item in self.children:
+            item.disabled = True
+        if valor == "skip":
+            self.jogo.sugestoes.append((self.autor_id, "não apontou ninguém"))
+            await interaction.response.edit_message(
+                content="⏭️ Você decidiu não apontar ninguém dessa vez.", view=self
+            )
+        else:
+            uid = int(valor)
+            self.jogo.sugestoes.append((self.autor_id, f"suspeita de **{self.jogo.nome(uid)}**"))
+            await interaction.response.edit_message(
+                content=f"🤔 Você apontou **{self.jogo.nome(uid)}** como suspeito!", view=self
+            )
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.respondido and self.message:
+            try:
+                await self.message.edit(content="⏱️ Tempo esgotado — você não deu seu palpite dessa vez.", view=None)
+            except Exception:
+                pass
+
+
+# ── Botão único e igual pra todo mundo vivo — clicando, cada um recebe (só ──
+# pra si, ephemeral) o select acima pra apontar um suspeito em segredo.
+# Ninguém descobre quem votou em quem só de olhar o canal.
+class CDAbrirSuspeitaView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=_CD_DURACAO_SUSPEITA)
+        self.jogo = jogo
+        self.usados: set = set()
+        self.aviso_msg = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in self.jogo.vivos:
+            await interaction.response.send_message(
+                "💀 Você não está mais vivo pra participar do debate.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="🤔 Apontar suspeito", style=discord.ButtonStyle.primary)
+    async def apontar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        uid = interaction.user.id
+
+        if uid in self.usados:
+            await interaction.response.send_message(
+                "✅ Você já deu seu palpite — agora é só esperar o resto da galera.", ephemeral=True
+            )
+            return
+
+        guild = interaction.guild
+        alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
+        select_view = CDSuspeitoView(jogo, uid, [m for m in alvos if m])
+
+        self.usados.add(uid)
+        await interaction.response.send_message(
+            "🤔 Quem vocês acham que é o assassino?",
+            view=select_view,
+            ephemeral=True,
+        )
+        try:
+            select_view.message = await interaction.original_response()
+        except Exception:
+            pass
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.aviso_msg:
+            try:
+                await self.aviso_msg.edit(view=self)
+            except Exception:
+                pass
+
+
 # ── Painel noturno único: o MESMO botão aparece pra todo mundo vivo, todo ──
 # jogador vê exatamente a mesma mensagem no canal. Quem tem papel recebe a
 # ação de verdade (ephemeral, só ele vê); quem não tem recebe um aviso
@@ -18709,22 +18801,6 @@ _CD_INTRO_HISTORIAS = [
     "🌫️ Uma névoa estranha cobriu a cidade essa semana. Dizem que trouxe consigo alguém... ou algo... "
     "que não hesita em matar. E está bem aqui, entre vocês.",
 ]
-
-
-async def _processar_sugestao_cidade_dorme(message: discord.Message):
-    """Durante a janela de 10s do 'Quem vocês acham?', guarda as mensagens
-    dos jogadores vivos pra montar o resumo que só o Detetive vê depois."""
-    if message.guild is None:
-        return
-    jogo = _jogos_cidade_dorme.get(message.channel.id)
-    if jogo is None or not jogo.ativo or not jogo.coletando_sugestoes:
-        return
-    if message.author.id not in jogo.vivos:
-        return
-    texto = message.content.strip()
-    if not texto:
-        return
-    jogo.sugestoes.append((message.author.id, texto[:200]))
 
 
 async def _processar_gatilho_cidade_dorme(message: discord.Message):
@@ -18885,7 +18961,8 @@ async def _rodar_cidade_dorme_bot(jogo: JogoCidadeDorme):
 async def _fase_debate_cidade_dorme(jogo: JogoCidadeDorme):
     """Fase de debate antes da noite virar de verdade:
     • 30s com os mics abertos pra galera discutir de viva voz;
-    • 10s de 'Quem vocês acham?' coletando palpites escritos no chat;
+    • 10s de 'Quem vocês acham?' — cada um clica no botão e aponta um
+      suspeito num select ephemeral, sem precisar escrever nada no chat;
     • mics fecham e mais 10s em que só o Detetive consegue ver o resumo
       (mesmo botão pra todo mundo, resposta ephemeral — ninguém descobre
       quem é o Detetive só de ver quem teve acesso ao conteúdo real)."""
@@ -18905,10 +18982,14 @@ async def _fase_debate_cidade_dorme(jogo: JogoCidadeDorme):
     await asyncio.sleep(30)
 
     jogo.sugestoes = []
-    jogo.coletando_sugestoes = True
-    await canal.send("🤔 **Quem vocês acham?** Escrevam aqui no chat quem vocês suspeitam — 10 segundos!")
-    await asyncio.sleep(10)
-    jogo.coletando_sugestoes = False
+    suspeita_view = CDAbrirSuspeitaView(jogo)
+    suspeita_msg = await canal.send(
+        "🤔 **Quem vocês acham?** Cliquem no botão abaixo pra apontar um suspeito em segredo "
+        f"— {_CD_DURACAO_SUSPEITA} segundos!",
+        view=suspeita_view,
+    )
+    suspeita_view.aviso_msg = suspeita_msg
+    await asyncio.sleep(_CD_DURACAO_SUSPEITA)
 
     for membro in jogo.canal_voz.members:
         if membro.id in jogo.vivos:

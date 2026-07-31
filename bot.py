@@ -2348,6 +2348,20 @@ async def on_ready():
     if not loop_checar_aniversarios.is_running():
         loop_checar_aniversarios.start()
 
+    # ── Contagem: descobre o último número já mandado no canal ao iniciar ─
+    try:
+        canal_contagem = bot.get_channel(CANAL_CONTAGEM_ID)
+        if canal_contagem is not None:
+            async for msg_antiga in canal_contagem.history(limit=50):
+                texto_antigo = msg_antiga.content.strip()
+                if texto_antigo.isdigit():
+                    _contagem_estado["ultimo"] = int(texto_antigo)
+                    break
+            print(f"[contagem] Último número carregado ao iniciar: {_contagem_estado['ultimo']}")
+    except Exception as e:
+        print(f"[contagem] ERRO ao carregar último número ao iniciar: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Ao entrar no servidor, explica pra pessoa como abrir um ticket
@@ -2789,13 +2803,11 @@ async def on_message(message: discord.Message):
                 numero = int(texto_num)
                 ultimo = _contagem_estado["ultimo"]
 
-                if ultimo is None:
-                    # Bot acabou de subir e ainda não sabe o histórico do canal:
-                    # usa esse número como ponto de partida da contagem.
-                    _contagem_estado["ultimo"] = numero
-                elif numero == ultimo + 1:
-                    # Número certo! Manda a continuação embaixo e guarda ela
-                    # como o novo último número da sequência.
+                # Se o bot ainda não sabe qual foi o último número (acabou de
+                # subir e não achou histórico), confia nesse número e já
+                # continua a partir dele. Senão, só continua se for o próximo
+                # certo da sequência.
+                if ultimo is None or numero == ultimo + 1:
                     proximo = numero + 1
                     await message.channel.send(str(proximo))
                     _contagem_estado["ultimo"] = proximo

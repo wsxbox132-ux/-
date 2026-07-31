@@ -18553,6 +18553,59 @@ class CDDetetiveView(discord.ui.View):
                 pass
 
 
+# ── Fallback quando a DM está fechada: botão público no canal, mas só quem ──
+# foi chamado consegue clicar (interaction_check) e a ação real é entregue
+# como mensagem ephemeral — ou seja, aparece no próprio chat só pra ele ver.
+# O texto do botão é sempre genérico pra não vazar o papel de ninguém.
+class CDAvisoAcaoView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, uid: int, view_cls, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_NOITE)
+        self.jogo = jogo
+        self.uid = uid
+        self.view_cls = view_cls
+        self.alvos = alvos
+        self.usado = False
+        self.aviso_msg = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.uid:
+            await interaction.response.send_message(
+                "🔒 Esse botão não é seu — cada um recebe o seu próprio.", ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="🔔 Agir em segredo", style=discord.ButtonStyle.primary)
+    async def agir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.usado = True
+        action_view = self.view_cls(self.jogo, self.alvos)
+        await interaction.response.send_message(
+            "🌙 A cidade dorme... é a sua vez de agir em segredo:",
+            view=action_view,
+            ephemeral=True,
+        )
+        try:
+            action_view.message = await interaction.original_response()
+        except Exception:
+            pass
+        button.disabled = True
+        button.label = "🔔 Ação aberta"
+        try:
+            await interaction.message.edit(view=self)
+        except Exception:
+            pass
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.usado and self.aviso_msg:
+            for item in self.children:
+                item.disabled = True
+            try:
+                await self.aviso_msg.edit(view=self)
+            except Exception:
+                pass
+
+
 _CD_INTRO_HISTORIAS = [
     "🌘 Era uma vez uma cidadezinha pacata... até a noite passada. Um assassino se escondeu entre vocês, "
     "disfarçado de gente comum. Ninguém sabe quem é — nem mesmo entre si vocês confiam mais.",
@@ -18758,7 +18811,19 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
             msg = await membro.send("🌙 A cidade dorme... é a sua vez de agir em segredo:", view=view)
             view.message = msg
         except discord.Forbidden:
-            pass
+            # DM fechada — cai pro fallback: botão público no canal, mas só
+            # essa pessoa consegue usar, e a ação chega como mensagem
+            # ephemeral (silenciosa, só ela vê, ali mesmo no chat).
+            aviso_view = CDAvisoAcaoView(jogo, uid, view_cls, alvos)
+            try:
+                aviso_msg = await canal.send(
+                    f"🔔 {membro.mention}, sua DM está fechada — clique no botão pra agir em segredo "
+                    f"(só você vai ver o conteúdo):",
+                    view=aviso_view,
+                )
+                aviso_view.aviso_msg = aviso_msg
+            except discord.HTTPException:
+                pass
 
     if assassino_id:
         alvos = [guild.get_member(uid) for uid in jogo.vivos if uid != assassino_id]

@@ -18938,6 +18938,106 @@ _CD_INTRO_HISTORIAS = [
 ]
 
 
+# ══════════════════════════════════════════════════════════════════════
+# BOATOS NOTURNOS — Cidade Dorme!
+# Trechinhos curtos, ambíguos e aleatórios soltos durante a noite, só pra
+# mexer com o psicológico da galera. NUNCA apontam ninguém de verdade —
+# são só ruído dramático, sorteados entre jogadores vivos ao acaso. Às
+# vezes (por pura coincidência do sorteio) o nome real do Assassino entra
+# na jogada, mas isso não significa nada: o boato nunca confirma quem é
+# quem, e o mesmo "estilo" de frase pode sair pra qualquer pessoa viva.
+# ══════════════════════════════════════════════════════════════════════
+
+_CD_BOATOS_DUPLA = [
+    "🌑 Alguém jura ter visto **{a}** cochichando bem pertinho de **{b}**... será que não foi nada?",
+    "🖤 Dizem que **{a}** fez 'alguma coisa' pelas costas de **{b}** essa noite... mas ninguém garante o quê.",
+    "📜 Um bilhete rasgado apareceu perto de **{a}**. O nome de **{b}** estava escrito nele.",
+    "👣 Uma sombra passou correndo perto de **{b}**. **{a}** jura de pés juntos que não foi ele(a).",
+    "🌘 Um cochicho foi ouvido entre **{a}** e **{b}**. Ninguém sabe dizer sobre o quê era.",
+    "🕯️ A vela de **{b}** apagou sozinha bem na hora em que **{a}** passou por perto.",
+    "📦 Alguém remexeu nas coisas de **{b}**. **{a}** foi visto(a) rondando por ali na hora certa.",
+    "🗝️ **{a}** foi flagrado(a) segurando algo que brilhava no escuro, bem perto do quarto de **{b}**.",
+    "🚪 A porta do quarto de **{b}** rangeu no meio da madrugada. **{a}** ainda estava acordado(a).",
+    "🖋️ Um pedaço de papel com letra parecida com a de **{a}** foi encontrado bem debaixo do travesseiro de **{b}**.",
+    "🔦 Uma lanterna acesa foi vista se afastando de onde **{b}** dormia. Alguém acha que era **{a}**.",
+    "🧤 Uma luva foi encontrada caída no caminho entre o quarto de **{a}** e o de **{b}**.",
+]
+
+_CD_BOATOS_SOLO = [
+    "🔍 Passos apressados foram ouvidos saindo de onde **{a}** estava. Ninguém sabe pra onde foi.",
+    "🩸 Tem uma mancha estranha no chão perto de onde **{a}** estava sentado(a). Coincidência?",
+    "🔑 Uma porta que devia estar trancada foi encontrada aberta perto de **{a}**...",
+    "🐾 Marcas de passos molhados levam até onde **{a}** dormia essa noite. Estranho, não?",
+    "🕰️ **{a}** sumiu por alguns minutinhos durante a noite. Ninguém sabe dizer onde foi parar.",
+    "🌫️ Um vulto foi visto se afastando na direção do quarto de **{a}**, mas sumiu na neblina.",
+    "🧵 Um pedaço de tecido rasgado foi achado perto de onde **{a}** costuma ficar.",
+    "🕳️ Tem uma marca esquisita na parede perto de **{a}**. Ninguém sabe explicar como foi parar ali.",
+]
+
+
+def _cd_gerar_boato(jogo: JogoCidadeDorme) -> str | None:
+    """Sorteia um boato ambíguo entre jogadores vivos. Nunca revela nem
+    confirma nada de verdade — é só clima e paranoia."""
+    guild = jogo.canal_texto.guild
+    vivos_membros = [m for m in (guild.get_member(uid) for uid in jogo.vivos) if m]
+    if len(vivos_membros) < 2:
+        return None
+
+    # Às vezes "carrega o dado" pra incluir o Assassino de verdade no boato,
+    # sem nunca dizer que é ele — pura implicância que às vezes acerta, às
+    # vezes não, e ninguém tem como saber qual dos dois é o caso.
+    assassino_id = jogo.id_por_papel("assassino")
+    assassino_membro = guild.get_member(assassino_id) if assassino_id else None
+
+    usar_dupla = len(vivos_membros) >= 2 and random.random() < 0.7
+    if usar_dupla:
+        if assassino_membro and assassino_membro in vivos_membros and random.random() < 0.35:
+            outro = random.choice([m for m in vivos_membros if m.id != assassino_membro.id])
+            a, b = random.sample([assassino_membro, outro], 2)
+        else:
+            a, b = random.sample(vivos_membros, 2)
+        return random.choice(_CD_BOATOS_DUPLA).format(a=a.display_name, b=b.display_name)
+
+    if assassino_membro and assassino_membro in vivos_membros and random.random() < 0.35:
+        alvo = assassino_membro
+    else:
+        alvo = random.choice(vivos_membros)
+    return random.choice(_CD_BOATOS_SOLO).format(a=alvo.display_name)
+
+
+async def _cd_tarefa_boatos_noturnos(jogo: JogoCidadeDorme, duracao: int):
+    """Solta de 1 a 3 boatos aleatórios espalhados durante a janela da
+    noite, só pra manchetear o clima. Roda solta em segundo plano, em
+    paralelo com a ação noturna, e nunca interfere no resultado real do
+    jogo — qualquer erro aqui é só ignorado (e logado) pra não travar a
+    partida."""
+    try:
+        canal = jogo.canal_texto
+        if duracao < 8:
+            return
+
+        qtd = random.randint(1, 3)
+        janela = list(range(4, duracao - 2))
+        if not janela:
+            return
+        momentos = sorted(random.sample(janela, min(qtd, len(janela))))
+
+        decorrido = 0
+        for momento in momentos:
+            await asyncio.sleep(momento - decorrido)
+            decorrido = momento
+            if not jogo.ativo:
+                return
+            boato = _cd_gerar_boato(jogo)
+            if boato:
+                try:
+                    await canal.send(f"💭 *{boato}*")
+                except discord.HTTPException:
+                    pass
+    except Exception as e:
+        print(f"[cidade-dorme] ERRO nos boatos noturnos: {e!r}")
+
+
 async def _processar_gatilho_cidade_dorme(message: discord.Message):
     """Detecta a frase 'Jogar cidade dorme!' e inicia o fluxo do jogo."""
     if message.guild is None:
@@ -19177,6 +19277,7 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
     )
     acao_view.aviso_msg = aviso_msg
 
+    asyncio.create_task(_cd_tarefa_boatos_noturnos(jogo, _CD_DURACAO_NOITE))
     await asyncio.sleep(_CD_DURACAO_NOITE)
 
     for membro in jogo.canal_voz.members:

@@ -18553,32 +18553,59 @@ class CDDetetiveView(discord.ui.View):
                 pass
 
 
-# ── Fallback quando a DM está fechada: botão público no canal, mas só quem ──
-# foi chamado consegue clicar (interaction_check) e a ação real é entregue
-# como mensagem ephemeral — ou seja, aparece no próprio chat só pra ele ver.
-# O texto do botão é sempre genérico pra não vazar o papel de ninguém.
-class CDAvisoAcaoView(discord.ui.View):
-    def __init__(self, jogo: JogoCidadeDorme, uid: int, view_cls, alvos: list):
+# ── Painel noturno único: o MESMO botão aparece pra todo mundo vivo, todo ──
+# jogador vê exatamente a mesma mensagem no canal. Quem tem papel recebe a
+# ação de verdade (ephemeral, só ele vê); quem não tem recebe um aviso
+# genérico também ephemeral. Como a mensagem pública é idêntica pra todos,
+# não dá pra ninguém suspeitar quem é assassino/anjo/detetive só de ver
+# quem "recebeu notificação" — e não depende de DM aberta.
+class CDAcaoNoturnaView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
         super().__init__(timeout=_CD_DURACAO_NOITE)
         self.jogo = jogo
-        self.uid = uid
-        self.view_cls = view_cls
-        self.alvos = alvos
-        self.usado = False
+        self.usados: set = set()
         self.aviso_msg = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.uid:
+        if interaction.user.id not in self.jogo.vivos:
             await interaction.response.send_message(
-                "🔒 Esse botão não é seu — cada um recebe o seu próprio.", ephemeral=True
+                "💀 Você não está mais vivo pra agir essa noite.", ephemeral=True
             )
             return False
         return True
 
     @discord.ui.button(label="🔔 Agir em segredo", style=discord.ButtonStyle.primary)
     async def agir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.usado = True
-        action_view = self.view_cls(self.jogo, self.alvos)
+        jogo = self.jogo
+        uid = interaction.user.id
+
+        if uid in self.usados:
+            await interaction.response.send_message(
+                "✅ Você já agiu essa noite — agora é só esperar a cidade acordar.", ephemeral=True
+            )
+            return
+
+        guild = interaction.guild
+        papel = jogo.papeis.get(uid)
+
+        if papel == "assassino":
+            alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
+            action_view = CDAssassinoView(jogo, [m for m in alvos if m])
+        elif papel == "anjo":
+            alvos = [guild.get_member(x) for x in jogo.vivos]
+            action_view = CDAnjoView(jogo, [m for m in alvos if m])
+        elif papel == "detetive":
+            alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
+            action_view = CDDetetiveView(jogo, [m for m in alvos if m])
+        else:
+            self.usados.add(uid)
+            await interaction.response.send_message(
+                "😴 Você não tem nenhuma ação essa noite — só durma tranquilo(a) até amanhecer.",
+                ephemeral=True,
+            )
+            return
+
+        self.usados.add(uid)
         await interaction.response.send_message(
             "🌙 A cidade dorme... é a sua vez de agir em segredo:",
             view=action_view,
@@ -18588,18 +18615,11 @@ class CDAvisoAcaoView(discord.ui.View):
             action_view.message = await interaction.original_response()
         except Exception:
             pass
-        button.disabled = True
-        button.label = "🔔 Ação aberta"
-        try:
-            await interaction.message.edit(view=self)
-        except Exception:
-            pass
-        self.stop()
 
     async def on_timeout(self):
-        if not self.usado and self.aviso_msg:
-            for item in self.children:
-                item.disabled = True
+        for item in self.children:
+            item.disabled = True
+        if self.aviso_msg:
             try:
                 await self.aviso_msg.edit(view=self)
             except Exception:
@@ -18797,43 +18817,17 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
                 pass
 
     assassino_id = jogo.id_por_papel("assassino")
-    anjo_id = jogo.id_por_papel("anjo")
-    detetive_id = jogo.id_por_papel("detetive")
 
-    async def _mandar_view(uid, view_cls, alvos):
-        if uid is None:
-            return
-        membro = guild.get_member(uid)
-        if membro is None:
-            return
-        view = view_cls(jogo, alvos)
-        try:
-            msg = await membro.send("🌙 A cidade dorme... é a sua vez de agir em segredo:", view=view)
-            view.message = msg
-        except discord.Forbidden:
-            # DM fechada — cai pro fallback: botão público no canal, mas só
-            # essa pessoa consegue usar, e a ação chega como mensagem
-            # ephemeral (silenciosa, só ela vê, ali mesmo no chat).
-            aviso_view = CDAvisoAcaoView(jogo, uid, view_cls, alvos)
-            try:
-                aviso_msg = await canal.send(
-                    f"🔔 {membro.mention}, sua DM está fechada — clique no botão pra agir em segredo "
-                    f"(só você vai ver o conteúdo):",
-                    view=aviso_view,
-                )
-                aviso_view.aviso_msg = aviso_msg
-            except discord.HTTPException:
-                pass
-
-    if assassino_id:
-        alvos = [guild.get_member(uid) for uid in jogo.vivos if uid != assassino_id]
-        await _mandar_view(assassino_id, CDAssassinoView, [m for m in alvos if m])
-    if anjo_id:
-        alvos = [guild.get_member(uid) for uid in jogo.vivos]
-        await _mandar_view(anjo_id, CDAnjoView, [m for m in alvos if m])
-    if detetive_id:
-        alvos = [guild.get_member(uid) for uid in jogo.vivos if uid != detetive_id]
-        await _mandar_view(detetive_id, CDDetetiveView, [m for m in alvos if m])
+    # Um botão só, igual pra todo mundo vivo — ninguém descobre quem tem
+    # papel especial só de ver quem recebeu aviso. A ação real (ou o "você
+    # não tem ação") chega ephemeral, só pra quem clicou.
+    acao_view = CDAcaoNoturnaView(jogo)
+    aviso_msg = await canal.send(
+        "🔔 Cliquem no botão abaixo pra agir em segredo essa noite "
+        "(só quem clicar vê o que aparece):",
+        view=acao_view,
+    )
+    acao_view.aviso_msg = aviso_msg
 
     await asyncio.sleep(_CD_DURACAO_NOITE)
 
@@ -18869,14 +18863,16 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
         vitima = guild.get_member(vitima_id)
         await canal.send(f"🌅 A cidade acorda... e encontra o corpo de **{jogo.nome(vitima_id)}**. 💀")
         if vitima:
+            # Não desconecta da call — só fica mutada até o jogo acabar.
             try:
-                await vitima.move_to(None, reason="Cidade Dorme! — eliminado")
+                await vitima.edit(mute=True, reason="Cidade Dorme! — eliminado, mutado até o fim da partida")
             except (discord.Forbidden, discord.HTTPException):
                 pass
             try:
                 await vitima.send(
                     "💀 Você foi assassinado essa noite. Você não participa mais das ações, "
-                    "mas pode continuar acompanhando pelo chat."
+                    "vai ficar mutado na call até o fim da partida, mas pode continuar "
+                    "acompanhando pelo chat."
                 )
             except discord.Forbidden:
                 pass

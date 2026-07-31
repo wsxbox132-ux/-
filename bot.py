@@ -18101,10 +18101,10 @@ async def cmd_punicao_call(ctx, alvo_id: int = None, horas: float = None):
     """Prende um membro numa call específica por um número de horas.
     Uso: .puniçãocall <ID do membro> <horas>"""
 
-    if ctx.author.id != CRIADOR_ID:
+    if ctx.author.id not in (CRIADOR_ID, DEATH_ID):
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
-            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+            "🌟 **Celestia:** Só o DEV ou a Death podem usar esse comando!! 🌸🤍✨"
         )
         return
 
@@ -18162,10 +18162,10 @@ async def cmd_cancelar_punicao_call(ctx, alvo_id: int = None):
     """Cancela a puniçãocall de um membro antes do tempo acabar.
     Uso: .cancelarpuniçãocall <ID do membro>"""
 
-    if ctx.author.id != CRIADOR_ID:
+    if ctx.author.id not in (CRIADOR_ID, DEATH_ID):
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
-            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+            "🌟 **Celestia:** Só o DEV ou a Death podem usar esse comando!! 🌸🤍✨"
         )
         return
 

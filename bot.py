@@ -2886,6 +2886,13 @@ async def on_message(message: discord.Message):
         print(f"[cidade-dorme] ERRO ao processar gatilho de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
+    # ── Jogo "Cidade Dorme!" — coleta de sugestões durante o debate ────────────
+    try:
+        await _processar_sugestao_cidade_dorme(message)
+    except Exception as e:
+        print(f"[cidade-dorme] ERRO ao coletar sugestão de {message.author}: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
+
     await bot.process_commands(message)
 
     content    = message.content.lower().strip()
@@ -18230,7 +18237,10 @@ class JogoCidadeDorme:
         self.ativo = True
         self.alvo_assassino = None      # id escolhido na noite atual
         self.alvo_anjo = None           # id escolhido na noite atual
+        self.alvo_anjo_anterior = None  # id protegido na noite passada (não pode repetir)
         self.acusacao_detetive = None   # id acusado na noite atual (ou None)
+        self.sugestoes: list = []       # [(user_id, texto), ...] coletadas na fase de debate
+        self.coletando_sugestoes = False  # True só durante a janela de 10s de debate
 
     def id_por_papel(self, papel: str):
         for uid, p in self.papeis.items():
@@ -18490,7 +18500,7 @@ class CDAnjoView(discord.ui.View):
         self.respondido = False
         self.message = None
         select = discord.ui.Select(
-            placeholder="Escolha quem proteger essa noite...",
+            placeholder="Escolha quem proteger essa noite (não pode repetir a de ontem)...",
             options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:25],
         )
         select.callback = self._callback
@@ -18592,7 +18602,7 @@ class CDAcaoNoturnaView(discord.ui.View):
             alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
             action_view = CDAssassinoView(jogo, [m for m in alvos if m])
         elif papel == "anjo":
-            alvos = [guild.get_member(x) for x in jogo.vivos]
+            alvos = [guild.get_member(x) for x in jogo.vivos if x != jogo.alvo_anjo_anterior]
             action_view = CDAnjoView(jogo, [m for m in alvos if m])
         elif papel == "detetive":
             alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
@@ -18626,6 +18636,71 @@ class CDAcaoNoturnaView(discord.ui.View):
                 pass
 
 
+# ── Botão fixo pra conferir o próprio papel em segredo ──────────────────────
+# Fica disponível o jogo inteiro. Não depende de DM aberta e, principalmente,
+# nunca aparece publicamente quem teve DM fechada — todo mundo usa o mesmo
+# botão, então ninguém descobre nada sobre ninguém só de olhar o canal.
+class CDVerPapelView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, descricoes_papel: dict):
+        super().__init__(timeout=None)
+        self.jogo = jogo
+        self.descricoes_papel = descricoes_papel
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in self.jogo.papeis:
+            await interaction.response.send_message("Você não está nessa partida.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="📜 Ver meu papel", style=discord.ButtonStyle.secondary)
+    async def ver_papel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        papel = self.jogo.papeis.get(interaction.user.id, "normal")
+        await interaction.response.send_message(self.descricoes_papel[papel], ephemeral=True)
+
+
+# ── Resumo do debate: só o Detetive vê de verdade ────────────────────────────
+# Mesmo botão pra todo mundo vivo (ninguém descobre quem é o Detetive só de
+# ver quem teve acesso ao resumo de verdade). Quem não é Detetive recebe uma
+# mensagem neutra também ephemeral.
+class CDResumoDebateView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=10)
+        self.jogo = jogo
+        self.aviso_msg = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in self.jogo.vivos:
+            await interaction.response.send_message("💀 Você não está mais vivo pra ver isso.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🕵️ Ver resumo do debate", style=discord.ButtonStyle.secondary)
+    async def ver_resumo(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        if jogo.papeis.get(interaction.user.id) != "detetive":
+            await interaction.response.send_message("🤐 Esse resumo é só pro Detetive ver.", ephemeral=True)
+            return
+
+        if not jogo.sugestoes:
+            texto = "_ninguém disse nada durante o debate..._"
+        else:
+            linhas = [f"• **{jogo.nome(uid)}:** {conteudo}" for uid, conteudo in jogo.sugestoes[:25]]
+            texto = "\n".join(linhas)
+            if len(texto) > 1800:
+                texto = texto[:1800] + "\n_(...resumo cortado, muita gente falou!)_"
+
+        await interaction.response.send_message(f"🕵️ **Resumo do debate:**\n{texto}", ephemeral=True)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.aviso_msg:
+            try:
+                await self.aviso_msg.edit(view=self)
+            except Exception:
+                pass
+
+
 _CD_INTRO_HISTORIAS = [
     "🌘 Era uma vez uma cidadezinha pacata... até a noite passada. Um assassino se escondeu entre vocês, "
     "disfarçado de gente comum. Ninguém sabe quem é — nem mesmo entre si vocês confiam mais.",
@@ -18634,6 +18709,22 @@ _CD_INTRO_HISTORIAS = [
     "🌫️ Uma névoa estranha cobriu a cidade essa semana. Dizem que trouxe consigo alguém... ou algo... "
     "que não hesita em matar. E está bem aqui, entre vocês.",
 ]
+
+
+async def _processar_sugestao_cidade_dorme(message: discord.Message):
+    """Durante a janela de 10s do 'Quem vocês acham?', guarda as mensagens
+    dos jogadores vivos pra montar o resumo que só o Detetive vê depois."""
+    if message.guild is None:
+        return
+    jogo = _jogos_cidade_dorme.get(message.channel.id)
+    if jogo is None or not jogo.ativo or not jogo.coletando_sugestoes:
+        return
+    if message.author.id not in jogo.vivos:
+        return
+    texto = message.content.strip()
+    if not texto:
+        return
+    jogo.sugestoes.append((message.author.id, texto[:200]))
 
 
 async def _processar_gatilho_cidade_dorme(message: discord.Message):
@@ -18764,25 +18855,19 @@ async def _rodar_cidade_dorme_bot(jogo: JogoCidadeDorme):
         "e sobreviver até o fim.",
     }
 
-    falha_dm = []
     for membro in jogo.jogadores:
         papel = jogo.papeis[membro.id]
         try:
             await membro.send(f"🌆 **Cidade Dorme!** começou em **{canal.guild.name}**.\n\n{descricoes_papel[papel]}")
         except discord.Forbidden:
-            falha_dm.append(membro)
-
-    if falha_dm:
-        nomes = ", ".join(m.mention for m in falha_dm)
-        await canal.send(
-            f"⚠️ Não consegui mandar DM pra: {nomes}. Abram as DMs do servidor — vocês vão "
-            f"precisar receber instruções em segredo durante o jogo."
-        )
+            pass
 
     await canal.send(
         f"🎭 {random.choice(_CD_INTRO_HISTORIAS)}\n\n"
         f"👥 **Jogadores ({len(jogo.jogadores)}):** " + ", ".join(m.mention for m in jogo.jogadores) + "\n\n"
-        f"Os papéis já foram enviados no privado de cada um. Boa sorte... vocês vão precisar. 🖤"
+        f"Os papéis foram enviados no privado de cada um. Se não chegou (ou quiser conferir de novo), "
+        f"usem o botão abaixo — só quem clicar vê o próprio papel. Boa sorte... vocês vão precisar. 🖤",
+        view=CDVerPapelView(jogo, descricoes_papel),
     )
 
     while jogo.ativo:
@@ -18797,15 +18882,62 @@ async def _rodar_cidade_dorme_bot(jogo: JogoCidadeDorme):
             await canal.send("☀️ A noite se aproxima de novo... quem será a próxima vítima? 🌙")
 
 
+async def _fase_debate_cidade_dorme(jogo: JogoCidadeDorme):
+    """Fase de debate antes da noite virar de verdade:
+    • 30s com os mics abertos pra galera discutir de viva voz;
+    • 10s de 'Quem vocês acham?' coletando palpites escritos no chat;
+    • mics fecham e mais 10s em que só o Detetive consegue ver o resumo
+      (mesmo botão pra todo mundo, resposta ephemeral — ninguém descobre
+      quem é o Detetive só de ver quem teve acesso ao conteúdo real)."""
+    canal = jogo.canal_texto
+
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=False, reason="Cidade Dorme! — debate antes da noite")
+            except discord.HTTPException:
+                pass
+
+    await canal.send(
+        "🗣️ A madrugada se aproxima... vocês têm **30 segundos** com os mics abertos "
+        "pra debater e ajudar o Detetive a desconfiar de alguém!"
+    )
+    await asyncio.sleep(30)
+
+    jogo.sugestoes = []
+    jogo.coletando_sugestoes = True
+    await canal.send("🤔 **Quem vocês acham?** Escrevam aqui no chat quem vocês suspeitam — 10 segundos!")
+    await asyncio.sleep(10)
+    jogo.coletando_sugestoes = False
+
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=True, reason="Cidade Dorme! — fim do debate")
+            except discord.HTTPException:
+                pass
+
+    resumo_view = CDResumoDebateView(jogo)
+    resumo_msg = await canal.send(
+        "🕵️ O resumo do debate está pronto — quem quiser conferir tem **10 segundos**:",
+        view=resumo_view,
+    )
+    resumo_view.aviso_msg = resumo_msg
+    await asyncio.sleep(10)
+
+
 async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
-    """Roda uma noite completa: muta a call, coleta as ações em segredo por
-    DM, desmuta e revela o resultado. Retorna 'cidade'/'assassino' se o
-    jogo acabou nessa noite, ou None se continua."""
+    """Roda uma madrugada completa: fase de debate com mic aberto, resumo
+    reservado pro Detetive, depois a noite em si (muta a call, coleta as
+    ações em segredo, desmuta e revela o resultado). Retorna 'cidade'/
+    'assassino' se o jogo acabou nessa noite, ou None se continua."""
     canal = jogo.canal_texto
     guild = canal.guild
     jogo.alvo_assassino = None
     jogo.alvo_anjo = None
     jogo.acusacao_detetive = None
+
+    await _fase_debate_cidade_dorme(jogo)
 
     await canal.send(f"🌙 **Noite {jogo.rodada}** — a cidade vai dormir por {_CD_DURACAO_NOITE}s... 💤")
 
@@ -18849,6 +18981,7 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
     # ── Resultado do ataque do assassino ────────────────────────────────
     protegido_nome = jogo.nome(jogo.alvo_anjo) if jogo.alvo_anjo else "ninguém"
     await canal.send(f"🕊️ O Anjo protegeu: **{protegido_nome}**")
+    jogo.alvo_anjo_anterior = jogo.alvo_anjo  # não pode proteger a mesma pessoa na próxima noite
 
     if jogo.alvo_assassino is None:
         await canal.send("🌅 A cidade acorda... e, por sorte, ninguém morreu essa noite!")

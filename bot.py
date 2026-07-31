@@ -2342,6 +2342,28 @@ async def on_ready():
     if not loop_checar_punicoes_call.is_running():
         loop_checar_punicoes_call.start()
 
+
+@bot.event
+async def on_command_error(ctx, error):
+    """Handler global de erros de comando.
+    Evita que o bot 'suma' em silêncio quando um comando falha: comando
+    não encontrado é ignorado (senão qualquer mensagem começando com '.'
+    geraria spam de erro), mas argumento faltando/errado avisa quem
+    digitou, e qualquer outro erro imprevisto vai pro console pra
+    facilitar o diagnóstico depois."""
+    if isinstance(error, commands.CommandNotFound):
+        return  # mensagem começando com "." que não é comando — ignora
+    if isinstance(error, commands.CheckFailure):
+        return  # falha de permissão já tratada dentro de cada comando
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"⚠️ Faltou um argumento no comando: `{error.param.name}`.")
+        return
+    if isinstance(error, commands.BadArgument):
+        await ctx.send("⚠️ Um dos argumentos está no formato errado. Confira o uso do comando.")
+        return
+    print(f"[on_command_error] Erro no comando '{ctx.command}' (autor: {ctx.author}): {error!r}")
+
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Ao entrar no servidor, explica pra pessoa como abrir um ticket
@@ -2855,6 +2877,13 @@ async def on_message(message: discord.Message):
     # ── Defesa da Death ──────────────────────────────────────────────────────
     if await checar_defesa_death(message):
         return
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Jogo "Cidade Dorme!" (gatilho de frase, qualquer um pode usar) ─────────
+    try:
+        await _processar_gatilho_cidade_dorme(message)
+    except Exception as e:
+        print(f"[cidade-dorme] ERRO ao processar gatilho de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
     await bot.process_commands(message)
@@ -18161,6 +18190,658 @@ async def cmd_cancelar_punicao_call(ctx, alvo_id: int = None):
         f"🌑 **Aeon:** ...as sombras soltam {alvo_texto}. 🖤🌑 Puniçãocall encerrada.\n"
         f"🌟 **Celestia:** Livre, livre!! 🌸✨ Pode ir pra qualquer call de novo!!"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# JOGO "CIDADE DORME!" — mafia/lobisomem narrado por humano ou pelo bot
+#
+# Gatilho: qualquer pessoa manda a frase "Jogar cidade dorme!" num canal de
+# texto estando numa call. Não é comando de prefixo, é frase solta — por
+# isso qualquer um pode usar, sem precisar ser o CRIADOR_ID.
+#
+# Papéis: 1 Assassino, 1 Anjo, 1 Detetive, o resto é Morador Comum.
+# Regra de vitória (sem votação de dia — só a acusação do detetive decide):
+#   • Cidade vence quando o Detetive acerta a acusação do Assassino.
+#   • Assassino vence se o Detetive morrer antes disso acontecer (não há
+#     mais ninguém que possa provar quem é o culpado).
+# ══════════════════════════════════════════════════════════════════════
+
+_CD_FRASES_GATILHO = {"jogar cidade dorme!", "jogar cidade dorme"}
+_CD_MIN_JOGADORES = 5
+_CD_MAX_JOGADORES = 20   # limite de segurança — menu de seleção do Discord aceita até 25 opções
+_CD_DURACAO_NOITE = 30   # segundos que a call fica muda por noite
+
+_jogos_cidade_dorme: dict = {}   # { canal_texto_id: JogoCidadeDorme }
+
+
+class JogoCidadeDorme:
+    """Guarda todo o estado de uma partida de Cidade Dorme em andamento."""
+
+    def __init__(self, canal_texto, canal_voz, host, numero_alvo: int):
+        self.canal_texto = canal_texto
+        self.canal_voz = canal_voz
+        self.host = host
+        self.numero_alvo = numero_alvo
+        self.jogadores: list = []       # discord.Member, em ordem de entrada
+        self.vivos: set = set()         # ids vivos
+        self.papeis: dict = {}          # {user_id: "assassino"|"anjo"|"detetive"|"normal"}
+        self.narrador_humano = None     # discord.Member ou None (bot narra)
+        self.rodada = 0
+        self.ativo = True
+        self.alvo_assassino = None      # id escolhido na noite atual
+        self.alvo_anjo = None           # id escolhido na noite atual
+        self.acusacao_detetive = None   # id acusado na noite atual (ou None)
+
+    def id_por_papel(self, papel: str):
+        for uid, p in self.papeis.items():
+            if p == papel and uid in self.vivos:
+                return uid
+        return None
+
+    def nome(self, uid: int) -> str:
+        membro = self.canal_texto.guild.get_member(uid)
+        return membro.display_name if membro else f"<@{uid}>"
+
+
+# ── Lobby: entrar/sair/iniciar/cancelar ─────────────────────────────────────
+class CDLobbyView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=300)
+        self.jogo = jogo
+        self.pronto = asyncio.Event()
+        self.cancelado = False
+
+    def _montar_embed(self):
+        jogo = self.jogo
+        lista = "\n".join(f"• {m.mention}" for m in jogo.jogadores) or "_ninguém ainda..._"
+        embed = discord.Embed(
+            title="🌆 Lobby — Cidade Dorme!",
+            description=(
+                f"Partida aberta por {jogo.host.mention}!\n\n"
+                f"👥 **Jogadores:** {len(jogo.jogadores)}/{jogo.numero_alvo}\n{lista}\n\n"
+                f"Clique em **Entrar** pra participar. Mínimo de {_CD_MIN_JOGADORES} pra começar."
+            ),
+            color=0x2f3136,
+        )
+        embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Cidade Dorme!")
+        return embed
+
+    @discord.ui.button(label="✅ Entrar", style=discord.ButtonStyle.success)
+    async def entrar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        if interaction.user in jogo.jogadores:
+            await interaction.response.send_message("Você já está na lista!", ephemeral=True)
+            return
+        if len(jogo.jogadores) >= jogo.numero_alvo:
+            await interaction.response.send_message("O lobby já está cheio!", ephemeral=True)
+            return
+        jogo.jogadores.append(interaction.user)
+        await interaction.response.edit_message(embed=self._montar_embed(), view=self)
+        if len(jogo.jogadores) >= jogo.numero_alvo:
+            self.pronto.set()
+
+    @discord.ui.button(label="🚪 Sair", style=discord.ButtonStyle.secondary)
+    async def sair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        if interaction.user not in jogo.jogadores:
+            await interaction.response.send_message("Você nem entrou ainda!", ephemeral=True)
+            return
+        if interaction.user.id == jogo.host.id:
+            await interaction.response.send_message("Você é quem abriu o jogo — cancele em vez de sair.", ephemeral=True)
+            return
+        jogo.jogadores.remove(interaction.user)
+        await interaction.response.edit_message(embed=self._montar_embed(), view=self)
+
+    @discord.ui.button(label="▶️ Iniciar agora", style=discord.ButtonStyle.primary)
+    async def iniciar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        if interaction.user.id != jogo.host.id:
+            await interaction.response.send_message("Só quem abriu o jogo pode iniciar.", ephemeral=True)
+            return
+        if len(jogo.jogadores) < _CD_MIN_JOGADORES:
+            await interaction.response.send_message(f"Precisa de pelo menos {_CD_MIN_JOGADORES} jogadores.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        self.pronto.set()
+
+    @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.danger)
+    async def cancelar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        if interaction.user.id != jogo.host.id:
+            await interaction.response.send_message("Só quem abriu o jogo pode cancelar.", ephemeral=True)
+            return
+        self.cancelado = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="❌ Lobby cancelado.", embed=None, view=self)
+        self.pronto.set()
+        self.stop()
+
+
+# ── Escolha: narrador humano ou bot? ────────────────────────────────────────
+class CDEscolhaNarradorView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=120)
+        self.jogo = jogo
+        self.escolha = None
+        self.pronto = asyncio.Event()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.jogo.host.id:
+            await interaction.response.send_message("Só quem abriu o jogo escolhe isso.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🤖 Bot narra", style=discord.ButtonStyle.primary)
+    async def bot_narra(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.escolha = "bot"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="🤖 A Aeon e a Celestia vão narrar essa partida!", view=self)
+        self.pronto.set()
+        self.stop()
+
+    @discord.ui.button(label="🧑 Narrador humano", style=discord.ButtonStyle.secondary)
+    async def humano_narra(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.escolha = "humano"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="🧑 Um jogador vai narrar essa partida!", view=self)
+        self.pronto.set()
+        self.stop()
+
+
+# ── Se for narrador humano: escolhe quem entre os jogadores vai narrar ─────
+class CDSelecionarNarradorView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=120)
+        self.jogo = jogo
+        self.escolhido = None
+        self.pronto = asyncio.Event()
+
+        select = discord.ui.Select(
+            placeholder="Escolha quem vai narrar...",
+            options=[
+                discord.SelectOption(label=m.display_name, value=str(m.id))
+                for m in jogo.jogadores
+            ][:25],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.jogo.host.id:
+            await interaction.response.send_message("Só quem abriu o jogo escolhe isso.", ephemeral=True)
+            return False
+        return True
+
+    async def _callback(self, interaction: discord.Interaction):
+        uid = int(interaction.data["values"][0])
+        membro = self.jogo.canal_texto.guild.get_member(uid)
+        self.escolhido = membro
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=f"🧑 **{membro.display_name if membro else uid}** vai narrar essa partida!", view=self
+        )
+        self.pronto.set()
+        self.stop()
+
+
+# ── Painel do narrador humano: controla a call durante o jogo ──────────────
+class CDPainelNarradorView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme):
+        super().__init__(timeout=None)
+        self.jogo = jogo
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.jogo.narrador_humano.id:
+            await interaction.response.send_message("Só o narrador pode usar esse painel.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🔇 Mutar todas as calls", style=discord.ButtonStyle.danger, row=0)
+    async def mutar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        erros = 0
+        for membro in self.jogo.canal_voz.members:
+            if membro.id in self.jogo.vivos:
+                try:
+                    await membro.edit(mute=True, reason="Cidade Dorme! — narrador mutou a call")
+                except discord.HTTPException:
+                    erros += 1
+        await interaction.followup.send(
+            "🔇 Call mutada." if not erros else f"🔇 Call mutada (falhou em {erros}).", ephemeral=True
+        )
+
+    @discord.ui.button(label="🔊 Desmutar todas as calls", style=discord.ButtonStyle.success, row=0)
+    async def desmutar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        erros = 0
+        for membro in self.jogo.canal_voz.members:
+            if membro.id in self.jogo.vivos:
+                try:
+                    await membro.edit(mute=False, reason="Cidade Dorme! — narrador desmutou a call")
+                except discord.HTTPException:
+                    erros += 1
+        await interaction.followup.send(
+            "🔊 Call desmutada." if not erros else f"🔊 Call desmutada (falhou em {erros}).", ephemeral=True
+        )
+
+    @discord.ui.button(label="📋 Ver jogadores vivos", style=discord.ButtonStyle.secondary, row=1)
+    async def ver_vivos(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vivos_txt = "\n".join(f"• {self.jogo.nome(uid)}" for uid in self.jogo.vivos) or "_ninguém vivo!_"
+        await interaction.response.send_message(f"**Vivos ({len(self.jogo.vivos)}):**\n{vivos_txt}", ephemeral=True)
+
+    @discord.ui.button(label="🏁 Encerrar jogo", style=discord.ButtonStyle.danger, row=1)
+    async def encerrar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for membro in self.jogo.canal_voz.members:
+            try:
+                await membro.edit(mute=False)
+            except discord.HTTPException:
+                pass
+        _jogos_cidade_dorme.pop(self.jogo.canal_texto.id, None)
+        self.jogo.ativo = False
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="🏁 Jogo encerrado pelo narrador.", view=self)
+        await self.jogo.canal_texto.send("🏁 O narrador encerrou a partida de **Cidade Dorme!**")
+        self.stop()
+
+
+# ── Ações noturnas (modo bot): mensagens privadas por DM ───────────────────
+class CDAssassinoView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_NOITE)
+        self.jogo = jogo
+        self.respondido = False
+        self.message = None
+        select = discord.ui.Select(
+            placeholder="Escolha quem matar essa noite...",
+            options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:25],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        uid = int(interaction.data["values"][0])
+        self.jogo.alvo_assassino = uid
+        self.respondido = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=f"🔪 Você escolheu matar **{self.jogo.nome(uid)}** essa noite. Ninguém mais viu essa mensagem.",
+            view=self,
+        )
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.respondido and self.message:
+            try:
+                await self.message.edit(content="⏱️ Tempo esgotado — você não matou ninguém essa noite.", view=None)
+            except Exception:
+                pass
+
+
+class CDAnjoView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_NOITE)
+        self.jogo = jogo
+        self.respondido = False
+        self.message = None
+        select = discord.ui.Select(
+            placeholder="Escolha quem proteger essa noite...",
+            options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:25],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        uid = int(interaction.data["values"][0])
+        self.jogo.alvo_anjo = uid
+        self.respondido = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(
+            content=f"🕊️ Você vai proteger **{self.jogo.nome(uid)}** essa noite.", view=self
+        )
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.respondido and self.message:
+            try:
+                await self.message.edit(content="⏱️ Tempo esgotado — você não protegeu ninguém essa noite.", view=None)
+            except Exception:
+                pass
+
+
+class CDDetetiveView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_NOITE)
+        self.jogo = jogo
+        self.respondido = False
+        self.message = None
+        select = discord.ui.Select(
+            placeholder="Acuse alguém de ser o assassino (ou pule)...",
+            options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:24]
+            + [discord.SelectOption(label="⏭️ Pular essa noite", value="skip")],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        valor = interaction.data["values"][0]
+        self.respondido = True
+        for item in self.children:
+            item.disabled = True
+        if valor == "skip":
+            self.jogo.acusacao_detetive = None
+            await interaction.response.edit_message(content="⏭️ Você decidiu não acusar ninguém essa noite.", view=self)
+        else:
+            uid = int(valor)
+            self.jogo.acusacao_detetive = uid
+            await interaction.response.edit_message(
+                content=f"🕵️ Você acusou **{self.jogo.nome(uid)}** de ser o assassino!", view=self
+            )
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.respondido and self.message:
+            try:
+                await self.message.edit(content="⏱️ Tempo esgotado — você não acusou ninguém essa noite.", view=None)
+            except Exception:
+                pass
+
+
+_CD_INTRO_HISTORIAS = [
+    "🌘 Era uma vez uma cidadezinha pacata... até a noite passada. Um assassino se escondeu entre vocês, "
+    "disfarçado de gente comum. Ninguém sabe quem é — nem mesmo entre si vocês confiam mais.",
+    "🏚️ A vila dormia em paz, sem saber que um dos seus próprios moradores tinha sangue frio nas veias. "
+    "A partir de hoje, ninguém fecha os olhos com tranquilidade.",
+    "🌫️ Uma névoa estranha cobriu a cidade essa semana. Dizem que trouxe consigo alguém... ou algo... "
+    "que não hesita em matar. E está bem aqui, entre vocês.",
+]
+
+
+async def _processar_gatilho_cidade_dorme(message: discord.Message):
+    """Detecta a frase 'Jogar cidade dorme!' e inicia o fluxo do jogo."""
+    if message.guild is None:
+        return
+    texto = message.content.strip().lower()
+    if texto not in _CD_FRASES_GATILHO:
+        return
+    if message.channel.id in _jogos_cidade_dorme:
+        await message.channel.send("⚠️ Já tem uma partida de **Cidade Dorme!** rolando nesse canal.")
+        return
+    if message.author.voice is None or message.author.voice.channel is None:
+        await message.channel.send(f"{message.author.mention} você precisa estar numa call pra abrir o jogo! 🎙️")
+        return
+    asyncio.create_task(_fluxo_cidade_dorme(message))
+
+
+async def _fluxo_cidade_dorme(message: discord.Message):
+    """Conduz o lobby inteiro: pergunta nº de jogadores, abre o lobby,
+    escolhe o narrador e entrega o jogo pro modo certo (bot ou humano)."""
+    canal_texto = message.channel
+    host = message.author
+    canal_voz = host.voice.channel
+
+    await canal_texto.send(
+        f"🌆 {host.mention} quer abrir uma partida de **Cidade Dorme!**\n"
+        f"Quantas pessoas vão jogar? (mínimo {_CD_MIN_JOGADORES}, máximo {_CD_MAX_JOGADORES})"
+    )
+
+    def _check_numero(m):
+        return m.author.id == host.id and m.channel.id == canal_texto.id and m.content.strip().isdigit()
+
+    try:
+        resposta = await bot.wait_for("message", check=_check_numero, timeout=60)
+    except asyncio.TimeoutError:
+        await canal_texto.send("⌛ Ninguém respondeu a tempo. Jogo cancelado.")
+        return
+
+    numero_alvo = int(resposta.content.strip())
+    if numero_alvo < _CD_MIN_JOGADORES:
+        await canal_texto.send(f"⚠️ Precisa de pelo menos {_CD_MIN_JOGADORES} jogadores. Jogo cancelado.")
+        return
+    numero_alvo = min(numero_alvo, _CD_MAX_JOGADORES)
+
+    jogo = JogoCidadeDorme(canal_texto, canal_voz, host, numero_alvo)
+    _jogos_cidade_dorme[canal_texto.id] = jogo
+    jogo.jogadores.append(host)
+
+    try:
+        lobby_view = CDLobbyView(jogo)
+        lobby_msg = await canal_texto.send(embed=lobby_view._montar_embed(), view=lobby_view)
+
+        await lobby_view.pronto.wait()
+
+        if lobby_view.cancelado or len(jogo.jogadores) < _CD_MIN_JOGADORES:
+            if not lobby_view.cancelado:
+                await canal_texto.send(f"⚠️ Não deu o mínimo de {_CD_MIN_JOGADORES} jogadores. Jogo cancelado.")
+            _jogos_cidade_dorme.pop(canal_texto.id, None)
+            return
+
+        for item in lobby_view.children:
+            item.disabled = True
+        try:
+            await lobby_msg.edit(view=lobby_view)
+        except discord.HTTPException:
+            pass
+
+        escolha_view = CDEscolhaNarradorView(jogo)
+        await canal_texto.send(f"{host.mention}, o narrador vai ser um **humano** ou o **bot**?", view=escolha_view)
+        await escolha_view.pronto.wait()
+
+        if escolha_view.escolha is None:
+            await canal_texto.send("⌛ Ninguém escolheu o narrador a tempo. Jogo cancelado.")
+            _jogos_cidade_dorme.pop(canal_texto.id, None)
+            return
+
+        if escolha_view.escolha == "humano":
+            select_view = CDSelecionarNarradorView(jogo)
+            await canal_texto.send("Quem vai narrar essa partida?", view=select_view)
+            await select_view.pronto.wait()
+            narrador = select_view.escolhido or host
+            jogo.narrador_humano = narrador
+            jogo.vivos = {m.id for m in jogo.jogadores}
+
+            painel = CDPainelNarradorView(jogo)
+            await canal_texto.send(
+                f"🎬 **{narrador.display_name}** é o narrador dessa partida!\n"
+                f"Combine os papéis com o grupo por fora (o bot não sorteia nada nesse modo) e use o "
+                f"painel abaixo pra controlar a call durante o jogo:",
+                view=painel,
+            )
+            # A limpeza desse modo acontece quando o narrador clica em "Encerrar jogo" no painel.
+        else:
+            await _rodar_cidade_dorme_bot(jogo)
+            # A limpeza desse modo já acontece dentro de _encerrar_cidade_dorme_bot.
+    except Exception as e:
+        print(f"[cidade-dorme] ERRO no fluxo do canal {canal_texto.id}: {e!r}")
+        _jogos_cidade_dorme.pop(canal_texto.id, None)
+        try:
+            await canal_texto.send("⚠️ Deu ruim e o jogo teve que ser cancelado. Pode tentar de novo!")
+        except discord.HTTPException:
+            pass
+
+
+async def _rodar_cidade_dorme_bot(jogo: JogoCidadeDorme):
+    """Sorteia papéis, avisa cada jogador por DM e conduz as noites."""
+    canal = jogo.canal_texto
+
+    embaralhados = jogo.jogadores.copy()
+    random.shuffle(embaralhados)
+    assassino, anjo, detetive = embaralhados[0], embaralhados[1], embaralhados[2]
+    jogo.papeis[assassino.id] = "assassino"
+    jogo.papeis[anjo.id] = "anjo"
+    jogo.papeis[detetive.id] = "detetive"
+    for m in embaralhados[3:]:
+        jogo.papeis[m.id] = "normal"
+    jogo.vivos = {m.id for m in jogo.jogadores}
+
+    descricoes_papel = {
+        "assassino": "🔪 Você é o **Assassino**. Mate o máximo de gente sem ser descoberto. "
+        "Toda noite você escolhe uma vítima em segredo.",
+        "anjo": "🕊️ Você é o **Anjo**. Toda noite você pode proteger uma pessoa (inclusive você mesmo) "
+        "de um possível ataque.",
+        "detetive": "🕵️ Você é o **Detetive**. Toda noite você pode acusar alguém de ser o assassino. "
+        "Acertar termina o jogo na hora — errar não revela nada, então escolha com cuidado.",
+        "normal": "🙂 Você é um **Morador Comum**. Sem poderes especiais — sua única arma é ficar de olho "
+        "e sobreviver até o fim.",
+    }
+
+    falha_dm = []
+    for membro in jogo.jogadores:
+        papel = jogo.papeis[membro.id]
+        try:
+            await membro.send(f"🌆 **Cidade Dorme!** começou em **{canal.guild.name}**.\n\n{descricoes_papel[papel]}")
+        except discord.Forbidden:
+            falha_dm.append(membro)
+
+    if falha_dm:
+        nomes = ", ".join(m.mention for m in falha_dm)
+        await canal.send(
+            f"⚠️ Não consegui mandar DM pra: {nomes}. Abram as DMs do servidor — vocês vão "
+            f"precisar receber instruções em segredo durante o jogo."
+        )
+
+    await canal.send(
+        f"🎭 {random.choice(_CD_INTRO_HISTORIAS)}\n\n"
+        f"👥 **Jogadores ({len(jogo.jogadores)}):** " + ", ".join(m.mention for m in jogo.jogadores) + "\n\n"
+        f"Os papéis já foram enviados no privado de cada um. Boa sorte... vocês vão precisar. 🖤"
+    )
+
+    while jogo.ativo:
+        jogo.rodada += 1
+        vencedor = await _rodar_noite_cidade_dorme(jogo)
+        if vencedor:
+            await _encerrar_cidade_dorme_bot(jogo, vencedor)
+            break
+        if jogo.ativo:
+            await asyncio.sleep(20)  # "dia" — tempo pra galera discutir antes da próxima noite
+        if jogo.ativo:
+            await canal.send("☀️ A noite se aproxima de novo... quem será a próxima vítima? 🌙")
+
+
+async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
+    """Roda uma noite completa: muta a call, coleta as ações em segredo por
+    DM, desmuta e revela o resultado. Retorna 'cidade'/'assassino' se o
+    jogo acabou nessa noite, ou None se continua."""
+    canal = jogo.canal_texto
+    guild = canal.guild
+    jogo.alvo_assassino = None
+    jogo.alvo_anjo = None
+    jogo.acusacao_detetive = None
+
+    await canal.send(f"🌙 **Noite {jogo.rodada}** — a cidade vai dormir por {_CD_DURACAO_NOITE}s... 💤")
+
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=True, reason="Cidade Dorme! — noite")
+            except discord.HTTPException:
+                pass
+
+    assassino_id = jogo.id_por_papel("assassino")
+    anjo_id = jogo.id_por_papel("anjo")
+    detetive_id = jogo.id_por_papel("detetive")
+
+    async def _mandar_view(uid, view_cls, alvos):
+        if uid is None:
+            return
+        membro = guild.get_member(uid)
+        if membro is None:
+            return
+        view = view_cls(jogo, alvos)
+        try:
+            msg = await membro.send("🌙 A cidade dorme... é a sua vez de agir em segredo:", view=view)
+            view.message = msg
+        except discord.Forbidden:
+            pass
+
+    if assassino_id:
+        alvos = [guild.get_member(uid) for uid in jogo.vivos if uid != assassino_id]
+        await _mandar_view(assassino_id, CDAssassinoView, [m for m in alvos if m])
+    if anjo_id:
+        alvos = [guild.get_member(uid) for uid in jogo.vivos]
+        await _mandar_view(anjo_id, CDAnjoView, [m for m in alvos if m])
+    if detetive_id:
+        alvos = [guild.get_member(uid) for uid in jogo.vivos if uid != detetive_id]
+        await _mandar_view(detetive_id, CDDetetiveView, [m for m in alvos if m])
+
+    await asyncio.sleep(_CD_DURACAO_NOITE)
+
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=False, reason="Cidade Dorme! — fim da noite")
+            except discord.HTTPException:
+                pass
+
+    # ── Acusação do detetive é resolvida primeiro ───────────────────────
+    if jogo.acusacao_detetive is not None:
+        if jogo.acusacao_detetive == assassino_id:
+            await canal.send(f"🕵️ O Detetive acusou **{jogo.nome(jogo.acusacao_detetive)}**... e **acertou!** 🎉")
+            return "cidade"
+        else:
+            await canal.send("🕵️ O Detetive fez uma acusação essa noite... mas errou o alvo. A investigação continua.")
+
+    # ── Resultado do ataque do assassino ────────────────────────────────
+    protegido_nome = jogo.nome(jogo.alvo_anjo) if jogo.alvo_anjo else "ninguém"
+    await canal.send(f"🕊️ O Anjo protegeu: **{protegido_nome}**")
+
+    if jogo.alvo_assassino is None:
+        await canal.send("🌅 A cidade acorda... e, por sorte, ninguém morreu essa noite!")
+    elif jogo.alvo_assassino == jogo.alvo_anjo:
+        await canal.send(
+            f"🌅 A cidade acorda... o Assassino atacou **{jogo.nome(jogo.alvo_assassino)}**, "
+            f"mas o Anjo chegou primeiro! Ninguém morreu essa noite. ✨"
+        )
+    else:
+        vitima_id = jogo.alvo_assassino
+        jogo.vivos.discard(vitima_id)
+        vitima = guild.get_member(vitima_id)
+        await canal.send(f"🌅 A cidade acorda... e encontra o corpo de **{jogo.nome(vitima_id)}**. 💀")
+        if vitima:
+            try:
+                await vitima.move_to(None, reason="Cidade Dorme! — eliminado")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
+            try:
+                await vitima.send(
+                    "💀 Você foi assassinado essa noite. Você não participa mais das ações, "
+                    "mas pode continuar acompanhando pelo chat."
+                )
+            except discord.Forbidden:
+                pass
+
+        if jogo.papeis.get(vitima_id) == "detetive":
+            return "assassino"
+
+    return None
+
+
+async def _encerrar_cidade_dorme_bot(jogo: JogoCidadeDorme, vencedor: str):
+    canal = jogo.canal_texto
+    revelacao = "\n".join(f"• {jogo.nome(uid)} — {papel.capitalize()}" for uid, papel in jogo.papeis.items())
+
+    if vencedor == "cidade":
+        titulo, texto, cor = "🎉 A CIDADE VENCEU!", "O Detetive descobriu o Assassino a tempo. A cidade pode dormir em paz de novo.", 0x57F287
+    else:
+        titulo, texto, cor = "🔪 O ASSASSINO VENCEU!", "O Detetive foi silenciado antes de conseguir provar a verdade. O mal venceu dessa vez.", 0xED4245
+
+    embed = discord.Embed(title=titulo, description=f"{texto}\n\n**Papéis revelados:**\n{revelacao}", color=cor)
+    await canal.send(embed=embed)
+
+    for membro in jogo.canal_voz.members:
+        try:
+            await membro.edit(mute=False)
+        except discord.HTTPException:
+            pass
+
+    jogo.ativo = False
+    _jogos_cidade_dorme.pop(canal.id, None)
 
 
 # ══════════════════════════════════════════════════════════════════

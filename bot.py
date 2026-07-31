@@ -18204,6 +18204,11 @@ async def cmd_cancelar_punicao_call(ctx, alvo_id: int = None):
 #   • Cidade vence quando o Detetive acerta a acusação do Assassino.
 #   • Assassino vence se o Detetive morrer antes disso acontecer (não há
 #     mais ninguém que possa provar quem é o culpado).
+#   • EXCEÇÃO — Noite 1: ninguém morre nessa noite, mesmo que o Assassino
+#     tenha escolhido um alvo. Só aparece quem o Detetive suspeita, todo
+#     mundo debate mais um pouco, e o Detetive decide entre confiar no
+#     próprio palpite ou abrir uma votação pública (por botão) pra cidade
+#     inteira decidir junto quem acusar.
 # ══════════════════════════════════════════════════════════════════════
 
 _CD_FRASES_GATILHO = {"jogar cidade dorme!", "jogar cidade dorme"}
@@ -18211,6 +18216,7 @@ _CD_MIN_JOGADORES = 5
 _CD_MAX_JOGADORES = 20   # limite de segurança — menu de seleção do Discord aceita até 25 opções
 _CD_DURACAO_NOITE = 30   # segundos que a call fica muda por noite
 _CD_DURACAO_SUSPEITA = 10   # segundos da janela de "Quem vocês acham?" (botão/select)
+_CD_DURACAO_VOTACAO = 20   # segundos da votação pública (só acontece depois da noite 1 especial)
 
 _jogos_cidade_dorme: dict = {}   # { canal_texto_id: JogoCidadeDorme }
 
@@ -18655,6 +18661,135 @@ class CDAbrirSuspeitaView(discord.ui.View):
                 pass
 
 
+# ── Depois do julgamento da noite 1: o Detetive escolhe entre confiar no ───
+# próprio palpite ou jogar a decisão pra votação pública da cidade inteira.
+class CDDecisaoDetetiveView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, timeout: int = 20):
+        super().__init__(timeout=timeout)
+        self.jogo = jogo
+        self.opcao = None            # "sozinho" | "votacao" | None (não decidiu a tempo)
+        self.escolhido = asyncio.Event()
+        self.aviso_msg = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        detetive_id = self.jogo.id_por_papel("detetive")
+        if interaction.user.id != detetive_id:
+            await interaction.response.send_message("🤐 Só o Detetive pode decidir isso.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🧠 Confiar no meu palpite", style=discord.ButtonStyle.success)
+    async def sozinho(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.opcao = "sozinho"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="🧠 Você decidiu confiar no próprio palpite.", view=self)
+        self.escolhido.set()
+        self.stop()
+
+    @discord.ui.button(label="🗳️ Abrir votação", style=discord.ButtonStyle.primary)
+    async def votacao(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.opcao = "votacao"
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content="🗳️ Você decidiu jogar a decisão pra votação da cidade.", view=self)
+        self.escolhido.set()
+        self.stop()
+
+    async def on_timeout(self):
+        if self.opcao is None:
+            self.opcao = "sozinho"  # se o Detetive não decidir a tempo, segue o próprio palpite por padrão
+            self.escolhido.set()
+        for item in self.children:
+            item.disabled = True
+        if self.aviso_msg:
+            try:
+                await self.aviso_msg.edit(view=self)
+            except Exception:
+                pass
+
+
+# ── Select ephemeral do voto de um jogador na votação pública da cidade ────
+class CDVotoSelectView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, votante_id: int, votos: dict, alvos: list):
+        super().__init__(timeout=_CD_DURACAO_VOTACAO)
+        self.jogo = jogo
+        self.votante_id = votante_id
+        self.votos = votos
+        self.respondido = False
+        self.message = None
+        select = discord.ui.Select(
+            placeholder="Vote em quem vocês acham que é o assassino...",
+            options=[discord.SelectOption(label=m.display_name, value=str(m.id)) for m in alvos][:25],
+        )
+        select.callback = self._callback
+        self.add_item(select)
+
+    async def _callback(self, interaction: discord.Interaction):
+        uid = int(interaction.data["values"][0])
+        self.votos[self.votante_id] = uid
+        self.respondido = True
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(content=f"🗳️ Voto registrado em **{self.jogo.nome(uid)}**.", view=self)
+        self.stop()
+
+    async def on_timeout(self):
+        if not self.respondido and self.message:
+            try:
+                await self.message.edit(content="⏱️ Tempo esgotado — seu voto não foi registrado.", view=None)
+            except Exception:
+                pass
+
+
+# ── Botão único e igual pra todo mundo vivo votar (por botão) em quem acha ──
+# que é o Assassino, durante a votação pública aberta pelo Detetive.
+class CDVotacaoView(discord.ui.View):
+    def __init__(self, jogo: JogoCidadeDorme, votos: dict):
+        super().__init__(timeout=_CD_DURACAO_VOTACAO)
+        self.jogo = jogo
+        self.votos = votos
+        self.usados: set = set()
+        self.aviso_msg = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in self.jogo.vivos:
+            await interaction.response.send_message("💀 Você não está mais vivo pra votar.", ephemeral=True)
+            return False
+        return True
+
+    @discord.ui.button(label="🗳️ Votar", style=discord.ButtonStyle.danger)
+    async def votar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        jogo = self.jogo
+        uid = interaction.user.id
+
+        if uid in self.usados:
+            await interaction.response.send_message(
+                "✅ Você já votou — agora é só esperar o resultado.", ephemeral=True
+            )
+            return
+
+        guild = interaction.guild
+        alvos = [guild.get_member(x) for x in jogo.vivos if x != uid]
+        select_view = CDVotoSelectView(jogo, uid, self.votos, [m for m in alvos if m])
+
+        self.usados.add(uid)
+        await interaction.response.send_message("🗳️ Em quem você vota?", view=select_view, ephemeral=True)
+        try:
+            select_view.message = await interaction.original_response()
+        except Exception:
+            pass
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.aviso_msg:
+            try:
+                await self.aviso_msg.edit(view=self)
+            except Exception:
+                pass
+
+
 # ── Painel noturno único: o MESMO botão aparece pra todo mundo vivo, todo ──
 # jogador vê exatamente a mesma mensagem no canal. Quem tem papel recebe a
 # ação de verdade (ephemeral, só ele vê); quem não tem recebe um aviso
@@ -19051,6 +19186,10 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
             except discord.HTTPException:
                 pass
 
+    # ── Noite 1 é especial: ninguém morre, só o palpite do Detetive conta ──
+    if jogo.rodada == 1:
+        return await _resolver_noite_um_especial(jogo, assassino_id)
+
     # ── Acusação do detetive é resolvida primeiro ───────────────────────
     if jogo.acusacao_detetive is not None:
         if jogo.acusacao_detetive == assassino_id:
@@ -19095,6 +19234,137 @@ async def _rodar_noite_cidade_dorme(jogo: JogoCidadeDorme):
             return "assassino"
 
     return None
+
+
+async def _resolver_noite_um_especial(jogo: JogoCidadeDorme, assassino_id: int):
+    """A noite 1 é especial: ninguém morre, mesmo que o Assassino tenha
+    escolhido um alvo. Só o palpite do Detetive vem à tona, todo mundo
+    debate mais um pouco e aponta suspeitos de novo, e o Detetive escolhe
+    entre confiar no próprio instinto ou jogar a decisão pra votação
+    pública (por botão) de toda a cidade."""
+    canal = jogo.canal_texto
+    jogo.alvo_anjo_anterior = jogo.alvo_anjo  # a proteção de hoje já "gastou", mesmo sem ataque de verdade
+
+    suspeito_inicial = jogo.acusacao_detetive
+    if suspeito_inicial is not None:
+        await canal.send(
+            f"🌅 A primeira noite passa em paz — ninguém morre dessa vez. Mas o Detetive já tem um palpite: "
+            f"ele suspeita de **{jogo.nome(suspeito_inicial)}**! 🕵️"
+        )
+    else:
+        await canal.send(
+            "🌅 A primeira noite passa em paz — ninguém morre dessa vez, e o Detetive ainda não tem "
+            "nenhum suspeito claro."
+        )
+
+    await canal.send("🗣️ Agora todo mundo tem **30 segundos** com os mics abertos pra debater esse palpite!")
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=False, reason="Cidade Dorme! — julgamento da noite 1")
+            except discord.HTTPException:
+                pass
+    await asyncio.sleep(30)
+
+    jogo.sugestoes = []
+    suspeita_view = CDAbrirSuspeitaView(jogo)
+    suspeita_msg = await canal.send(
+        "🤔 **Quem vocês acham?** Cliquem no botão abaixo e apontem (de novo) um suspeito em segredo "
+        f"— {_CD_DURACAO_SUSPEITA} segundos!",
+        view=suspeita_view,
+    )
+    suspeita_view.aviso_msg = suspeita_msg
+    await asyncio.sleep(_CD_DURACAO_SUSPEITA)
+
+    for membro in jogo.canal_voz.members:
+        if membro.id in jogo.vivos:
+            try:
+                await membro.edit(mute=True, reason="Cidade Dorme! — fim do julgamento da noite 1")
+            except discord.HTTPException:
+                pass
+
+    detetive_id = jogo.id_por_papel("detetive")
+    if detetive_id is None:
+        await canal.send("🕵️ Sem Detetive vivo pra decidir nada... a cidade segue sem veredito por enquanto.")
+        return None
+
+    detetive_membro = canal.guild.get_member(detetive_id)
+    decisao_view = CDDecisaoDetetiveView(jogo)
+    decisao_msg = await canal.send(
+        f"🕵️ {detetive_membro.mention if detetive_membro else jogo.nome(detetive_id)}, é sua vez: "
+        "confia no seu próprio palpite ou prefere jogar a decisão pra votação de todo mundo?",
+        view=decisao_view,
+    )
+    decisao_view.aviso_msg = decisao_msg
+    await decisao_view.escolhido.wait()
+
+    if decisao_view.opcao == "votacao":
+        await canal.send("🗳️ O Detetive preferiu jogar a decisão pra votação da cidade!")
+        alvo_final = await _abrir_votacao_cidade_dorme(jogo)
+        if alvo_final is None:
+            await canal.send("🗳️ A votação não teve nenhum voto — a cidade segue sem veredito.")
+            return None
+        await canal.send(f"🗳️ A cidade decidiu: **{jogo.nome(alvo_final)}** é o acusado!")
+    else:
+        alvo_final = jogo.acusacao_detetive
+        if alvo_final is None:
+            await canal.send(
+                "🕵️ O Detetive decidiu confiar no próprio instinto... mas não tinha ninguém em mente. "
+                "A cidade segue sem veredito."
+            )
+            return None
+        await canal.send(f"🕵️ O Detetive confiou no próprio instinto e aponta **{jogo.nome(alvo_final)}**!")
+
+    if alvo_final == assassino_id:
+        await canal.send(f"🎉 E... **acertaram!** {jogo.nome(alvo_final)} era mesmo o Assassino!")
+        return "cidade"
+
+    await canal.send(f"😬 Só que não... {jogo.nome(alvo_final)} não era o Assassino. A investigação continua.")
+    return None
+
+
+async def _abrir_votacao_cidade_dorme(jogo: JogoCidadeDorme):
+    """Vota publicamente (por botão) em quem a cidade acha que é o Assassino.
+    Cada jogador vivo vota uma vez clicando no botão e escolhendo no select
+    ephemeral; quem tiver mais votos no fim da janela é o acusado. Empate é
+    resolvido por sorteio entre os empatados."""
+    canal = jogo.canal_texto
+    votos: dict = {}
+
+    votacao_view = CDVotacaoView(jogo, votos)
+    votacao_msg = await canal.send(
+        f"🗳️ **Votação aberta!** Cliquem no botão abaixo e escolham quem vocês acham que é o Assassino "
+        f"— {_CD_DURACAO_VOTACAO} segundos!",
+        view=votacao_view,
+    )
+    votacao_view.aviso_msg = votacao_msg
+    await asyncio.sleep(_CD_DURACAO_VOTACAO)
+
+    for item in votacao_view.children:
+        item.disabled = True
+    try:
+        await votacao_msg.edit(view=votacao_view)
+    except discord.HTTPException:
+        pass
+
+    if not votos:
+        return None
+
+    contagem: dict = defaultdict(int)
+    for alvo in votos.values():
+        contagem[alvo] += 1
+
+    maior = max(contagem.values())
+    empatados = [uid for uid, qtd in contagem.items() if qtd == maior]
+    vencedor = random.choice(empatados)
+
+    linhas = "\n".join(
+        f"• **{jogo.nome(uid)}** — {qtd} voto(s)"
+        for uid, qtd in sorted(contagem.items(), key=lambda item: -item[1])
+    )
+    await canal.send(f"📊 **Resultado da votação:**\n{linhas}")
+
+    return vencedor
 
 
 async def _encerrar_cidade_dorme_bot(jogo: JogoCidadeDorme, vencedor: str):

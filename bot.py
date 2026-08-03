@@ -20088,7 +20088,7 @@ async def cmd_estranho(ctx):
     alvo_id = _supervisao_alvo.get(ctx.author.id)
     if alvo_id is None:
         await ctx.send(
-            "⚠️ Nenhum ID carregado ainda. Manda `.supervisao <id>` no PV do bot primeiro."
+            "⚠️ Nenhum ID encontrado de estranho."
         )
         return
 

@@ -19667,6 +19667,380 @@ async def cmd_play(ctx):
             pass
 
 
+# ══════════════════════════════════════════════════════════════════════
+# AUDITORIA DO SERVIDOR — igual ao Audit Log nativo do Discord
+# Registra automaticamente no canal 1533947367647219822: criação, edição e
+# remoção de canais (inclusive calls), cargos, banimentos/kicks, timeouts,
+# apelidos, cargos de membros, emojis e alterações nas configurações do
+# servidor. Sempre que possível, identifica quem fez a ação consultando o
+# Audit Log real do Discord.
+#
+# IMPORTANTE: o bot precisa da permissão "Ver Registro de Auditoria"
+# (View Audit Log) no servidor para conseguir identificar quem fez cada
+# ação. Sem essa permissão, os embeds ainda são enviados, só que sem o
+# campo de responsável.
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_AUDITORIA_ID = 1533947367647219822  # canal onde a auditoria geral é postada
+
+_AUD_VERDE   = 0x57F287
+_AUD_VERMELHO = 0xED4245
+_AUD_AMARELO = 0xFEE75C
+
+
+async def _auditoria_pegar_responsavel(
+    guild: discord.Guild,
+    action: "discord.AuditLogAction",
+    target_id: int | None = None,
+    limite: int = 6,
+    janela_segundos: int = 20,
+):
+    """Tenta descobrir quem executou uma ação recente consultando o audit
+    log real do Discord. Retorna None se não achar (ou sem permissão)."""
+    if guild is None:
+        return None
+    try:
+        agora = datetime.now(timezone.utc)
+        async for entry in guild.audit_logs(limit=limite, action=action):
+            if (agora - entry.created_at) > timedelta(seconds=janela_segundos):
+                continue
+            if target_id is None:
+                return entry.user
+            alvo = entry.target
+            if alvo is not None and getattr(alvo, "id", None) == target_id:
+                return entry.user
+    except (discord.Forbidden, discord.HTTPException, AttributeError):
+        pass
+    return None
+
+
+def _auditoria_embed(titulo: str, cor: int, responsavel=None) -> "discord.Embed":
+    embed = discord.Embed(title=titulo, color=cor, timestamp=datetime.now(timezone.utc))
+    if responsavel is not None:
+        try:
+            embed.set_author(
+                name=f"Ação de: {responsavel}",
+                icon_url=responsavel.display_avatar.url,
+            )
+        except AttributeError:
+            embed.set_author(name=f"Ação de: {responsavel}")
+    embed.set_footer(text="📋 Auditoria do servidor")
+    return embed
+
+
+async def _auditoria_enviar(guild: discord.Guild, embed: "discord.Embed") -> None:
+    if guild is None:
+        return
+    canal = guild.get_channel(CANAL_AUDITORIA_ID)
+    if canal is None:
+        return
+    try:
+        await canal.send(embed=embed)
+    except discord.HTTPException:
+        pass
+
+
+def _auditoria_tipo_canal(channel) -> str:
+    if isinstance(channel, discord.VoiceChannel):
+        return "Call/Voz"
+    if isinstance(channel, discord.StageChannel):
+        return "Palco"
+    if isinstance(channel, discord.CategoryChannel):
+        return "Categoria"
+    if isinstance(channel, discord.ForumChannel):
+        return "Fórum"
+    if isinstance(channel, discord.TextChannel):
+        return "Texto"
+    return "Canal"
+
+
+# ── Canais (criação / edição / remoção) — cobre também as calls ────────────
+
+@bot.listen("on_guild_channel_create")
+async def auditoria_canal_criado(channel: "discord.abc.GuildChannel"):
+    guild = channel.guild
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.channel_create, channel.id)
+    tipo = _auditoria_tipo_canal(channel)
+    embed = _auditoria_embed(f"📁 Canal criado — {tipo}", _AUD_VERDE, responsavel)
+    embed.add_field(name="Canal", value=getattr(channel, "mention", channel.name), inline=True)
+    if getattr(channel, "category", None):
+        embed.add_field(name="Categoria", value=channel.category.name, inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_guild_channel_delete")
+async def auditoria_canal_deletado(channel: "discord.abc.GuildChannel"):
+    guild = channel.guild
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.channel_delete, channel.id)
+    tipo = _auditoria_tipo_canal(channel)
+    embed = _auditoria_embed(f"🗑️ Canal deletado — {tipo}", _AUD_VERMELHO, responsavel)
+    embed.add_field(name="Canal", value=f"#{channel.name}", inline=True)
+    if getattr(channel, "category", None):
+        embed.add_field(name="Categoria", value=channel.category.name, inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_guild_channel_update")
+async def auditoria_canal_atualizado(before: "discord.abc.GuildChannel", after: "discord.abc.GuildChannel"):
+    guild = after.guild
+    mudancas = []
+
+    if before.name != after.name:
+        mudancas.append(("Nome", before.name, after.name))
+    if getattr(before, "topic", None) != getattr(after, "topic", None):
+        mudancas.append(("Tópico", getattr(before, "topic", None) or "—", getattr(after, "topic", None) or "—"))
+    if getattr(before, "nsfw", None) != getattr(after, "nsfw", None):
+        mudancas.append(("NSFW", str(before.nsfw), str(after.nsfw)))
+    if getattr(before, "slowmode_delay", None) != getattr(after, "slowmode_delay", None):
+        mudancas.append(("Slowmode", f"{before.slowmode_delay}s", f"{after.slowmode_delay}s"))
+    if before.category != after.category:
+        mudancas.append((
+            "Categoria",
+            before.category.name if before.category else "—",
+            after.category.name if after.category else "—",
+        ))
+    if before.position != after.position and before.category == after.category:
+        mudancas.append(("Posição na lista de canais", str(before.position), str(after.position)))
+    if isinstance(after, discord.VoiceChannel):
+        if before.bitrate != after.bitrate:
+            mudancas.append(("Bitrate", f"{before.bitrate // 1000}kbps", f"{after.bitrate // 1000}kbps"))
+        if before.user_limit != after.user_limit:
+            mudancas.append((
+                "Limite de usuários",
+                str(before.user_limit) if before.user_limit else "Sem limite",
+                str(after.user_limit) if after.user_limit else "Sem limite",
+            ))
+        if getattr(before, "rtc_region", None) != getattr(after, "rtc_region", None):
+            mudancas.append((
+                "Região de voz",
+                str(before.rtc_region) if before.rtc_region else "Automática",
+                str(after.rtc_region) if after.rtc_region else "Automática",
+            ))
+    if before.overwrites != after.overwrites:
+        mudancas.append(("Permissões do canal", "alteradas", "veja o Audit Log do Discord p/ detalhes"))
+
+    if not mudancas:
+        return
+
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.channel_update, after.id)
+    tipo = _auditoria_tipo_canal(after)
+    embed = _auditoria_embed(f"✏️ Canal atualizado — {tipo}", _AUD_AMARELO, responsavel)
+    embed.add_field(name="Canal", value=getattr(after, "mention", after.name), inline=False)
+    for nome, antes, depois in mudancas:
+        embed.add_field(name=nome, value=f"~~{antes}~~ → **{depois}**", inline=False)
+    await _auditoria_enviar(guild, embed)
+
+
+# ── Cargos (criação / edição / remoção) ─────────────────────────────────────
+
+@bot.listen("on_guild_role_create")
+async def auditoria_cargo_criado(role: "discord.Role"):
+    guild = role.guild
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.role_create, role.id)
+    embed = _auditoria_embed("✨ Cargo criado", _AUD_VERDE, responsavel)
+    embed.add_field(name="Cargo", value=role.mention, inline=True)
+    embed.add_field(name="Cor", value=str(role.color), inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_guild_role_delete")
+async def auditoria_cargo_deletado(role: "discord.Role"):
+    guild = role.guild
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.role_delete, role.id)
+    embed = _auditoria_embed("🗑️ Cargo deletado", _AUD_VERMELHO, responsavel)
+    embed.add_field(name="Cargo", value=f"@{role.name}", inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_guild_role_update")
+async def auditoria_cargo_atualizado(before: "discord.Role", after: "discord.Role"):
+    guild = after.guild
+    mudancas = []
+
+    if before.name != after.name:
+        mudancas.append(("Nome", before.name, after.name))
+    if before.color != after.color:
+        mudancas.append(("Cor", str(before.color), str(after.color)))
+    if before.hoist != after.hoist:
+        mudancas.append(("Exibido separadamente", str(before.hoist), str(after.hoist)))
+    if before.mentionable != after.mentionable:
+        mudancas.append(("Mencionável", str(before.mentionable), str(after.mentionable)))
+    if before.position != after.position:
+        mudancas.append(("Posição na lista de cargos", str(before.position), str(after.position)))
+    if before.permissions != after.permissions:
+        antes_perms = {nome for nome, valor in before.permissions if valor}
+        depois_perms = {nome for nome, valor in after.permissions if valor}
+        ganhas = depois_perms - antes_perms
+        perdidas = antes_perms - depois_perms
+        if ganhas:
+            mudancas.append(("Permissões concedidas", "—", ", ".join(sorted(ganhas))))
+        if perdidas:
+            mudancas.append(("Permissões removidas", ", ".join(sorted(perdidas)), "—"))
+
+    if not mudancas:
+        return
+
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.role_update, after.id)
+    embed = _auditoria_embed("✏️ Cargo atualizado", _AUD_AMARELO, responsavel)
+    embed.add_field(name="Cargo", value=after.mention, inline=False)
+    for nome, antes, depois in mudancas:
+        embed.add_field(name=nome, value=f"~~{antes}~~ → **{depois}**", inline=False)
+    await _auditoria_enviar(guild, embed)
+
+
+# ── Membros: apelido, cargos adicionados/removidos e timeout ───────────────
+
+@bot.listen("on_member_update")
+async def auditoria_membro_atualizado(before: "discord.Member", after: "discord.Member"):
+    guild = after.guild
+
+    if before.nick != after.nick:
+        embed = _auditoria_embed("✏️ Apelido alterado", _AUD_AMARELO)
+        embed.add_field(name="Membro", value=after.mention, inline=False)
+        embed.add_field(
+            name="Apelido",
+            value=f"~~{before.nick or before.name}~~ → **{after.nick or after.name}**",
+            inline=False,
+        )
+        await _auditoria_enviar(guild, embed)
+
+    cargos_antes = set(before.roles)
+    cargos_depois = set(after.roles)
+    ganhos = cargos_depois - cargos_antes
+    perdidos = cargos_antes - cargos_depois
+    if ganhos or perdidos:
+        responsavel_cargo = await _auditoria_pegar_responsavel(
+            guild, discord.AuditLogAction.member_role_update, after.id
+        )
+        if ganhos:
+            embed = _auditoria_embed("➕ Cargo(s) adicionado(s) a um membro", _AUD_VERDE, responsavel_cargo)
+            embed.add_field(name="Membro", value=after.mention, inline=True)
+            embed.add_field(name="Cargo(s)", value=", ".join(r.mention for r in ganhos), inline=True)
+            await _auditoria_enviar(guild, embed)
+        if perdidos:
+            embed = _auditoria_embed("➖ Cargo(s) removido(s) de um membro", _AUD_VERMELHO, responsavel_cargo)
+            embed.add_field(name="Membro", value=after.mention, inline=True)
+            embed.add_field(name="Cargo(s)", value=", ".join(r.mention for r in perdidos), inline=True)
+            await _auditoria_enviar(guild, embed)
+
+    if before.timed_out_until != after.timed_out_until:
+        agora = datetime.now(timezone.utc)
+        if after.timed_out_until and after.timed_out_until > agora:
+            responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.member_update, after.id)
+            embed = _auditoria_embed("🔇 Membro colocado em timeout", _AUD_VERMELHO, responsavel)
+            embed.add_field(name="Membro", value=after.mention, inline=True)
+            embed.add_field(name="Até", value=discord.utils.format_dt(after.timed_out_until, style="F"), inline=True)
+            await _auditoria_enviar(guild, embed)
+        elif before.timed_out_until and not after.timed_out_until:
+            responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.member_update, after.id)
+            embed = _auditoria_embed("🔊 Timeout removido de um membro", _AUD_VERDE, responsavel)
+            embed.add_field(name="Membro", value=after.mention, inline=True)
+            await _auditoria_enviar(guild, embed)
+
+
+# ── Banimentos, desbanimentos e expulsões (kick) ────────────────────────────
+
+@bot.listen("on_member_ban")
+async def auditoria_membro_banido(guild: "discord.Guild", user):
+    responsavel = None
+    motivo = None
+    try:
+        async for entry in guild.audit_logs(limit=6, action=discord.AuditLogAction.ban):
+            if entry.target and entry.target.id == user.id:
+                responsavel = entry.user
+                motivo = entry.reason
+                break
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    embed = _auditoria_embed("🔨 Membro banido", _AUD_VERMELHO, responsavel)
+    embed.add_field(name="Membro", value=f"{user} (`{user.id}`)", inline=True)
+    if motivo:
+        embed.add_field(name="Motivo", value=motivo, inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_member_unban")
+async def auditoria_membro_desbanido(guild: "discord.Guild", user):
+    responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.unban, user.id)
+    embed = _auditoria_embed("🔓 Membro desbanido", _AUD_VERDE, responsavel)
+    embed.add_field(name="Membro", value=f"{user} (`{user.id}`)", inline=True)
+    await _auditoria_enviar(guild, embed)
+
+
+@bot.listen("on_member_remove")
+async def auditoria_possivel_kick(member: "discord.Member"):
+    """on_member_remove dispara tanto pra saída voluntária quanto pra kick —
+    aqui só avisamos na auditoria quando for uma expulsão de fato."""
+    guild = member.guild
+    try:
+        async for entry in guild.audit_logs(limit=6, action=discord.AuditLogAction.kick):
+            if entry.target and entry.target.id == member.id:
+                if (datetime.now(timezone.utc) - entry.created_at) <= timedelta(seconds=15):
+                    embed = _auditoria_embed("👢 Membro expulso (kick)", _AUD_VERMELHO, entry.user)
+                    embed.add_field(name="Membro", value=f"{member} (`{member.id}`)", inline=True)
+                    if entry.reason:
+                        embed.add_field(name="Motivo", value=entry.reason, inline=True)
+                    await _auditoria_enviar(guild, embed)
+                break
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+
+# ── Configurações do servidor (nome, ícone, banner, verificação, AFK...) ───
+
+@bot.listen("on_guild_update")
+async def auditoria_servidor_atualizado(before: "discord.Guild", after: "discord.Guild"):
+    mudancas = []
+
+    if before.name != after.name:
+        mudancas.append(("Nome do servidor", before.name, after.name))
+    if before.icon != after.icon:
+        mudancas.append(("Ícone do servidor", "alterado", "alterado"))
+    if before.banner != after.banner:
+        mudancas.append(("Banner do servidor", "alterado", "alterado"))
+    if before.verification_level != after.verification_level:
+        mudancas.append(("Nível de verificação", str(before.verification_level), str(after.verification_level)))
+    if before.afk_channel != after.afk_channel:
+        mudancas.append((
+            "Canal AFK",
+            before.afk_channel.name if before.afk_channel else "—",
+            after.afk_channel.name if after.afk_channel else "—",
+        ))
+    if before.owner_id != after.owner_id:
+        mudancas.append(("Dono do servidor", str(before.owner_id), str(after.owner_id)))
+
+    if not mudancas:
+        return
+
+    responsavel = await _auditoria_pegar_responsavel(after, discord.AuditLogAction.guild_update)
+    embed = _auditoria_embed("⚙️ Configurações do servidor atualizadas", _AUD_AMARELO, responsavel)
+    for nome, antes, depois in mudancas:
+        embed.add_field(name=nome, value=f"~~{antes}~~ → **{depois}**", inline=False)
+    await _auditoria_enviar(after, embed)
+
+
+# ── Emojis (adicionados / removidos) ────────────────────────────────────────
+
+@bot.listen("on_guild_emojis_update")
+async def auditoria_emojis_atualizados(guild: "discord.Guild", before, after):
+    ids_antes = {e.id for e in before}
+    ids_depois = {e.id for e in after}
+    criados = [e for e in after if e.id not in ids_antes]
+    removidos = [e for e in before if e.id not in ids_depois]
+
+    for emoji in criados:
+        responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.emoji_create, emoji.id)
+        embed = _auditoria_embed("😀 Emoji adicionado", _AUD_VERDE, responsavel)
+        embed.add_field(name="Emoji", value=f"{emoji} `:{emoji.name}:`", inline=True)
+        await _auditoria_enviar(guild, embed)
+
+    for emoji in removidos:
+        responsavel = await _auditoria_pegar_responsavel(guild, discord.AuditLogAction.emoji_delete, emoji.id)
+        embed = _auditoria_embed("🗑️ Emoji removido", _AUD_VERMELHO, responsavel)
+        embed.add_field(name="Emoji", value=f"`:{emoji.name}:`", inline=True)
+        await _auditoria_enviar(guild, embed)
+
+
 # ══════════════════════════════════════════════
 # START
 # ══════════════════════════════════════════════

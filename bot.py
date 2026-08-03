@@ -20041,6 +20041,85 @@ async def auditoria_emojis_atualizados(guild: "discord.Guild", before, after):
         await _auditoria_enviar(guild, embed)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# .supervisao / .estranho — marcação de conta suspeita/nova (moderação)
+#
+# Fluxo:
+#   1. No PV do bot: ".supervisao <id>" — carrega o ID da conta que você
+#      quer marcar como suspeita/nova.
+#   2. Em algum servidor: ".estranho" — o bot manda uma mensagem no canal
+#      apontando aquela conta como suspeita, usando o ID carregado no PV.
+#
+# O ID carregado fica guardado até você carregar outro (não some depois
+# de usar .estranho uma vez), então dá pra usar em mais de um canal/
+# servidor se precisar. Só o criador do bot pode usar os dois comandos.
+# ══════════════════════════════════════════════════════════════════════
+
+_supervisao_alvo: dict = {}  # author_id (quem carregou) -> id da conta marcada
+
+
+@bot.command(name="supervisao", aliases=["supervisão"])
+async def cmd_supervisao(ctx, alvo_id: int):
+    """Só funciona no PV do bot. Carrega o ID de uma conta suspeita/nova
+    pra usar depois com .estranho em algum servidor."""
+    if ctx.guild is not None:
+        return  # só funciona no PV, ignora em servidor
+
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    _supervisao_alvo[ctx.author.id] = alvo_id
+    await ctx.send(
+        f"👁️ ID `{alvo_id}` carregado. Use `.estranho` em algum servidor "
+        "pra marcar essa conta como suspeita."
+    )
+
+
+@bot.command(name="estranho")
+async def cmd_estranho(ctx):
+    """Só funciona em servidor. Usa o ID carregado via .supervisao no PV
+    e manda uma mensagem no canal apontando a conta como suspeita/nova."""
+    if ctx.guild is None:
+        return  # só funciona em servidor, ignora no PV
+
+    if ctx.author.id != CRIADOR_ID:
+        return
+
+    alvo_id = _supervisao_alvo.get(ctx.author.id)
+    if alvo_id is None:
+        await ctx.send(
+            "⚠️ Nenhum ID carregado ainda. Manda `.supervisao <id>` no PV do bot primeiro."
+        )
+        return
+
+    alvo_membro = ctx.guild.get_member(alvo_id)
+    if alvo_membro is not None:
+        mencao = alvo_membro.mention
+        criada_em = discord.utils.format_dt(alvo_membro.created_at, style="R")
+        entrou_em = (
+            discord.utils.format_dt(alvo_membro.joined_at, style="R")
+            if alvo_membro.joined_at
+            else "—"
+        )
+    else:
+        mencao = f"`{alvo_id}`"
+        criada_em = "—"
+        entrou_em = "—"
+
+    embed = discord.Embed(
+        title="🕵️ Conta suspeita detectada",
+        description=f"{mencao} foi identificado(a) como **o estranho** — conta sob supervisão.",
+        color=0xED4245,
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.add_field(name="ID", value=f"`{alvo_id}`", inline=True)
+    embed.add_field(name="Conta criada", value=criada_em, inline=True)
+    embed.add_field(name="Entrou no servidor", value=entrou_em, inline=True)
+    embed.set_footer(text="📋 Supervisão de contas")
+
+    await ctx.send(embed=embed)
+
+
 # ══════════════════════════════════════════════
 # START
 # ══════════════════════════════════════════════

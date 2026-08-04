@@ -19773,13 +19773,17 @@ async def _encerrar_cidade_dorme_bot(jogo: JogoCidadeDorme, vencedor: str):
 
 # ══════════════════════════════════════════════════════════════════
 # ANÚNCIO DE ENTRADA EM CALL (TTS) — toda vez que alguém entra numa call
-# (vindo de "sem call nenhuma"), o bot entra na MESMA call e fala em voz
-# alta "Fulano entrou na call", usando gTTS (Google Text-to-Speech).
+# (vindo de "sem call nenhuma"), o bot entra na MESMA call, fala em voz
+# alta "Fulano entrou na call" (gTTS — Google Text-to-Speech) e SAI logo
+# em seguida, na hora que termina de falar.
+#
+# Se a mesma pessoa entrar de novo NA MESMA call antes de passar 30
+# minutos do último anúncio feito pra ela ali, o bot não anuncia de novo
+# (evita ficar repetindo se ela sai e volta toda hora). Em calls
+# diferentes conta separado — entrar numa call nova sempre anuncia.
 #
 # Se várias pessoas entrarem em calls diferentes ao mesmo tempo, os
-# anúncios ficam numa fila e são feitos um de cada vez (o bot troca de
-# call conforme processa a fila). Depois de ficar um tempo sem anúncio
-# novo, o bot sai da call sozinho — não fica ocupando o canal à toa.
+# anúncios ficam numa fila e são feitos um de cada vez.
 #
 # Comandos:
 #   .anuncioentrada on   → liga o anúncio (só o DEV pode usar)
@@ -19791,11 +19795,14 @@ async def _encerrar_cidade_dorme_bot(jogo: JogoCidadeDorme, vencedor: str):
 # Preencha à vontade, ex: CANAIS_IGNORADOS_ANUNCIO_ID = {CANAL_PUNICAO_CALL_ID}
 CANAIS_IGNORADOS_ANUNCIO_ID: set = {CANAL_PUNICAO_CALL_ID}
 
-_TEMPO_ESPERA_DESCONECTAR_ANUNCIO = 10  # segundos sem fila antes do bot sair da call
+# Se a mesma pessoa entrar de novo NA MESMA call antes desse tempo passar
+# (contado a partir do último anúncio feito pra ela ali), não anuncia de
+# novo — evita ficar repetindo toda hora que ela sai e volta rapidinho.
+_COOLDOWN_ANUNCIO_SEGUNDOS = 30 * 60  # 30 minutos
 
 _anuncio_entrada_ligado = True                 # liga/desliga via .anuncioentrada
 _fila_anuncios_entrada: asyncio.Queue = None   # criada em on_ready (precisa de loop rodando)
-_tarefas_desconectar_anuncio: dict = {}        # guild_id -> asyncio.Task (desconexão adiada)
+_ultimo_anuncio_entrada: dict = {}             # (membro_id, canal_id) -> time.time() do último anúncio
 
 
 def _gerar_audio_tts_pt(texto: str) -> io.BytesIO:
@@ -19826,31 +19833,14 @@ async def _tocar_tts_na_call(vc: discord.VoiceClient, texto: str) -> None:
     await terminou.wait()
 
 
-async def _agendar_desconexao_anuncio(guild: discord.Guild) -> None:
-    """Espera um tempo parado sem anúncio novo e, se continuar tudo quieto
-    (sem tocar nada e sem coisa nova na fila), desconecta o bot da call."""
-    await asyncio.sleep(_TEMPO_ESPERA_DESCONECTAR_ANUNCIO)
-    vc = guild.voice_client
-    if vc is not None and not vc.is_playing():
-        try:
-            await vc.disconnect()
-        except discord.HTTPException:
-            pass
-    _tarefas_desconectar_anuncio.pop(guild.id, None)
-
-
 async def _worker_anuncios_entrada() -> None:
     """Processa a fila de anúncios um de cada vez: entra/move pra call
-    certa, fala o texto e espera terminar antes de pegar o próximo."""
+    certa, fala o texto e sai da call na hora em seguida — não fica
+    esperando parado, mesmo que tenha mais coisa na fila logo depois."""
     while True:
         canal, texto = await _fila_anuncios_entrada.get()
         try:
             guild = canal.guild
-
-            # Chegou anúncio novo — cancela qualquer desconexão agendada
-            tarefa_pendente = _tarefas_desconectar_anuncio.pop(guild.id, None)
-            if tarefa_pendente:
-                tarefa_pendente.cancel()
 
             vc = guild.voice_client
             try:
@@ -19867,11 +19857,12 @@ async def _worker_anuncios_entrada() -> None:
 
             await _tocar_tts_na_call(vc, texto)
 
-            # Fila vazia — agenda a saída depois de um tempo parado
-            if _fila_anuncios_entrada.empty():
-                _tarefas_desconectar_anuncio[guild.id] = asyncio.create_task(
-                    _agendar_desconexao_anuncio(guild)
-                )
+            # Fala e sai na hora — não espera ver se tem mais alguém na fila
+            if guild.voice_client is not None:
+                try:
+                    await guild.voice_client.disconnect()
+                except discord.HTTPException:
+                    pass
         except Exception as e:
             print(f"[anuncioentrada] ERRO no worker: {e!r}")
         finally:
@@ -19883,7 +19874,8 @@ async def _anunciar_entrada_call(
     member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
 ):
     """Quando alguém entra numa call vindo de fora (não estava em nenhuma
-    call antes), enfileira um anúncio de voz pro worker processar."""
+    call antes), enfileira um anúncio de voz pro worker processar — a não
+    ser que ela já tenha entrado NESSA MESMA call há menos de 30 minutos."""
     if not _anuncio_entrada_ligado or _fila_anuncios_entrada is None:
         return
     if member.bot:
@@ -19898,6 +19890,14 @@ async def _anunciar_entrada_call(
         return
     if member.guild.afk_channel and canal.id == member.guild.afk_channel.id:
         return
+
+    chave = (member.id, canal.id)
+    agora = time.time()
+    ultimo = _ultimo_anuncio_entrada.get(chave)
+    if ultimo is not None and (agora - ultimo) < _COOLDOWN_ANUNCIO_SEGUNDOS:
+        return  # já anunciou essa pessoa nessa call há menos de 30 minutos
+
+    _ultimo_anuncio_entrada[chave] = agora
 
     texto = f"{member.display_name} entrou na call."
     await _fila_anuncios_entrada.put((canal, texto))

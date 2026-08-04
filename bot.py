@@ -18277,6 +18277,188 @@ async def cmd_cancelar_punicao_call(ctx, alvo_id: int = None):
     )
 
 
+# ══════════════════════════════════════════════════════════════════
+# COMANDOS .removercallanjo / .adicionarcallanjo / .definircallanjo
+# Corrigem manualmente o tempo em call de um Anjo no Ranking Anjo.
+# Afetam os DOIS rankings ao mesmo tempo — Semanal e Mensal — e os
+# pontos são recalculados sozinhos, porque a pontuação já vem direto
+# do tempo_call (pontos = minutos_em_call * _PESO_MINUTO_CALL). Não
+# mexe em "penalidade" (isso é usado só pela puniçãocall); aqui a
+# gente corrige a hora em call de verdade, então os pontos daquele
+# tempo somem/aparecem junto, automaticamente.
+#
+# Uso:
+#   .removercallanjo  <ID do membro> <tempo>   → tira tempo da call
+#   .adicionarcallanjo <ID do membro> <tempo>   → soma tempo na call
+#   .definircallanjo   <ID do membro> <tempo>   → define o total exato
+#
+# O tempo aceita: "5h", "30m", "1h30m", "1h30m20s" ou um número puro,
+# que é interpretado como HORAS (ex: "5" = 5 horas).
+#
+# Só o CRIADOR_ID e a DEATH_ID podem usar.
+# ══════════════════════════════════════════════════════════════════
+
+def _parse_tempo_call(texto: str):
+    """Converte um texto de tempo pra segundos. Aceita combinações de
+    horas/minutos/segundos (ex: "5h", "1h30m", "45m", "20s", "1h30m20s")
+    ou um número puro, interpretado como HORAS (ex: "5" -> 5 horas).
+    Devolve None se não conseguir interpretar ou o resultado for <= 0."""
+    if not texto:
+        return None
+    texto = texto.strip().lower().replace(" ", "").replace(",", ".")
+
+    m = re.fullmatch(r"(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m)?(?:(\d+(?:\.\d+)?)s)?", texto)
+    if m and any(m.groups()):
+        horas_str, minutos_str, segundos_str = m.groups()
+        horas = float(horas_str) if horas_str else 0.0
+        minutos = float(minutos_str) if minutos_str else 0.0
+        segundos = float(segundos_str) if segundos_str else 0.0
+        total_segundos = horas * 3600 + minutos * 60 + segundos
+    else:
+        try:
+            total_segundos = float(texto) * 3600  # número puro = horas
+        except ValueError:
+            return None
+
+    if total_segundos <= 0:
+        return None
+    return total_segundos
+
+
+def _flush_call_ao_vivo_anjo(membro_id: int, periodo: str) -> None:
+    """Se o membro estiver em call agora, joga o tempo da sessão atual (ainda
+    'ao vivo', não salva) pra dentro do tempo_call salvo, e reinicia a
+    contagem a partir de agora. Assim o valor salvo fica 100% atualizado
+    antes de qualquer edição manual — sem isso, editar o tempo de alguém
+    que está em call nesse exato momento poderia "perder" o pedaço da
+    sessão em andamento."""
+    stats_dict = anjo_stats_semanal if periodo == "semanal" else anjo_stats_mensal
+    voice_dict = _anjo_voice_join_semanal if periodo == "semanal" else _anjo_voice_join_mensal
+    inicio_sessao_atual = voice_dict.get(membro_id)
+    if inicio_sessao_atual:
+        agora = time.time()
+        stats_dict[membro_id]["tempo_call"] += agora - inicio_sessao_atual
+        voice_dict[membro_id] = agora
+
+
+async def _editar_call_anjo(ctx, alvo_id, tempo_texto, modo: str):
+    """modo: 'remover' | 'adicionar' | 'definir'. Faz a validação, edita o
+    tempo_call nos dois rankings (semanal + mensal) e manda a resposta."""
+    if ctx.author.id not in (CRIADOR_ID, DEATH_ID):
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV ou a Death podem usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    nomes_uso = {
+        "remover":   (".removercallanjo",   "5h"),
+        "adicionar": (".adicionarcallanjo", "2h30m"),
+        "definir":   (".definircallanjo",   "28h"),
+    }
+    nome_cmd, exemplo_tempo = nomes_uso[modo]
+
+    if alvo_id is None or tempo_texto is None:
+        await ctx.send(
+            f"⚠️ **Uso correto:** `{nome_cmd} <ID do membro> <tempo>`\n"
+            "O tempo aceita: `5h`, `30m`, `1h30m`, `1h30m20s` ou um número puro "
+            "(interpretado como horas).\n"
+            f"Exemplo: `{nome_cmd} 123456789012345678 {exemplo_tempo}`"
+        )
+        return
+
+    segundos = _parse_tempo_call(tempo_texto)
+    if segundos is None:
+        await ctx.send(
+            "⚠️ Tempo inválido. Use algo como `5h`, `30m`, `1h30m`, `1h30m20s` "
+            "ou um número puro (interpretado como horas), sempre maior que zero."
+        )
+        return
+
+    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
+    if guild is None:
+        await ctx.send("⚠️ Não encontrei nenhum servidor.")
+        return
+
+    alvo = guild.get_member(alvo_id)
+    if alvo is None:
+        try:
+            alvo = await guild.fetch_member(alvo_id)
+        except discord.NotFound:
+            await ctx.send(f"❌ Membro com ID `{alvo_id}` não encontrado no servidor.")
+            return
+
+    resultado_linhas = []
+    total_pontos_delta = 0.0
+
+    for periodo in ("semanal", "mensal"):
+        stats_dict = anjo_stats_semanal if periodo == "semanal" else anjo_stats_mensal
+        _flush_call_ao_vivo_anjo(alvo_id, periodo)
+
+        antes = stats_dict[alvo_id]["tempo_call"]
+
+        if modo == "remover":
+            depois = max(0.0, antes - segundos)
+        elif modo == "adicionar":
+            depois = antes + segundos
+        else:  # definir
+            depois = max(0.0, segundos)
+
+        stats_dict[alvo_id]["tempo_call"] = depois
+
+        delta_pontos = ((depois - antes) / 60) * _PESO_MINUTO_CALL
+        total_pontos_delta += delta_pontos
+
+        rotulo = "Semanal" if periodo == "semanal" else "Mensal"
+        sinal = "+" if delta_pontos >= 0 else ""
+        resultado_linhas.append(
+            f"📊 **Ranking Anjo {rotulo}:** `{_formatar_tempo_call(antes)}` → "
+            f"`{_formatar_tempo_call(depois)}` em call ({sinal}{delta_pontos:.0f} pts)"
+        )
+
+    await _salvar_anjo_stats()
+    asyncio.create_task(_atualizar_ranking_anjo())
+
+    verbo = {"remover": "removido de", "adicionar": "adicionado em", "definir": "redefinido em"}[modo]
+    sinal_total = "+" if total_pontos_delta >= 0 else ""
+    await ctx.send(
+        f"🌑 **Aeon:** ...tempo em call {verbo} {alvo.mention}. 🖤🌑\n"
+        f"🌟 **Celestia:** Os dois rankings (Semanal + Mensal) já foram atualizados!! 🌸✨\n\n"
+        f"👤 **Membro:** {alvo.mention} — `{alvo.display_name}`\n"
+        + "\n".join(resultado_linhas) +
+        f"\n\n📉 **Total de pontos ajustados:** `{sinal_total}{total_pontos_delta:.0f}` pts "
+        "(soma dos dois rankings)"
+    )
+
+
+@bot.command(name="removercallanjo")
+async def cmd_remover_call_anjo(ctx, alvo_id: int = None, *, tempo: str = None):
+    """Remove tempo de call de um Anjo — afeta Ranking Semanal + Mensal,
+    e os pontos daquele tempo caem junto automaticamente.
+    Uso: .removercallanjo <ID do membro> <tempo>
+    Ex: .removercallanjo 123456789012345678 5h  (se tinha 33h, fica com 28h)"""
+    await _editar_call_anjo(ctx, alvo_id, tempo, modo="remover")
+
+
+@bot.command(name="adicionarcallanjo")
+async def cmd_adicionar_call_anjo(ctx, alvo_id: int = None, *, tempo: str = None):
+    """Adiciona tempo de call a um Anjo — afeta Ranking Semanal + Mensal,
+    e os pontos daquele tempo entram junto automaticamente.
+    Uso: .adicionarcallanjo <ID do membro> <tempo>
+    Ex: .adicionarcallanjo 123456789012345678 2h30m"""
+    await _editar_call_anjo(ctx, alvo_id, tempo, modo="adicionar")
+
+
+@bot.command(name="definircallanjo")
+async def cmd_definir_call_anjo(ctx, alvo_id: int = None, *, tempo: str = None):
+    """Define o tempo total de call de um Anjo pro valor exato informado —
+    afeta Ranking Semanal + Mensal. Útil pra corrigir de uma vez, sem
+    precisar calcular a diferença na mão.
+    Uso: .definircallanjo <ID do membro> <tempo>
+    Ex: .definircallanjo 123456789012345678 28h"""
+    await _editar_call_anjo(ctx, alvo_id, tempo, modo="definir")
+
+
 # ══════════════════════════════════════════════════════════════════════
 # JOGO "CIDADE DORME!" — mafia/lobisomem narrado por humano ou pelo bot
 #

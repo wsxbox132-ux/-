@@ -2246,6 +2246,14 @@ async def on_ready():
         except Exception as e:
             print(f"[on_ready] ERRO ao enviar painel de anjos em '{guild.name}': {e!r}")
 
+    # Garante que a call fixa de música ("🎶 Aeon & Celestia") existe na
+    # categoria configurada em todos os servidores
+    for guild in bot.guilds:
+        try:
+            await _garantir_call_musica(guild)
+        except Exception as e:
+            print(f"[on_ready] ERRO ao garantir a call de música em '{guild.name}': {e!r}")
+
     # Inicia a task de bom dia / boa noite automáticos
     if not verificar_hora_mensagens.is_running():
         verificar_hora_mensagens.start()
@@ -20079,6 +20087,9 @@ async def cmd_play(ctx):
 #                         com botões. Se já tem algo tocando, entra na
 #                         fila e o painel se atualiza sozinho mostrando
 #                         as próximas.
+#                         Também funciona com PLAYLISTS e ÁLBUNS inteiros
+#                         (YouTube, Spotify e SoundCloud/sets) — todas as
+#                         músicas da playlist entram na fila de uma vez.
 #      .sair            — limpa a fila inteira, para e desconecta.
 #                         (aliases: .parar, .stop)
 #
@@ -20091,9 +20102,24 @@ _YDL_OPTS_TOCAR = {
     "format": "bestaudio/best",
     "quiet": True,
     "no_warnings": True,
-    "noplaylist": True,
+    "noplaylist": True,  # aqui sempre é UMA faixa só — playlists usam _YDL_OPTS_PLAYLIST_FLAT
     "default_search": "ytsearch",  # se não vier link, busca no YouTube
 }
+
+# Extração "flat" pra listar as faixas de uma playlist/álbum/set rapidinho
+# (só título + link de cada uma, sem resolver o áudio ainda — isso evita
+# travar minutos numa playlist grande; o áudio de cada faixa só é
+# resolvido de verdade quando chegar a vez dela tocar).
+_YDL_OPTS_PLAYLIST_FLAT = {
+    "extract_flat": True,
+    "quiet": True,
+    "no_warnings": True,
+    "skip_download": True,
+}
+
+# Quantidade máxima de faixas que uma playlist/álbum pode jogar na fila
+# de uma vez (proteção contra playlists gigantes de milhares de músicas).
+_PLAYLIST_LIMITE_FAIXAS = 100
 
 # Se a fila ficar vazia e ninguém mandar nada nesse tempo, o bot sai
 # sozinho da call (pra não ficar preso lá parado pra sempre).
@@ -20168,6 +20194,78 @@ async def _resolver_link_spotify(link: str) -> str:
     busca = f"{faixa.name} {artistas}".strip()
     print(f"[tocar-spotify] '{link}' -> busca no YouTube: '{busca}'")
     return busca
+
+
+def _e_link_playlist(link: str) -> bool:
+    """Detecta se o link é de uma playlist/álbum inteiro (e não de uma
+    faixa/vídeo só) — YouTube, Spotify ou SoundCloud (sets)."""
+    l = link.lower()
+    if "open.spotify.com/playlist/" in l or "open.spotify.com/album/" in l:
+        return True
+    if "youtube.com/playlist" in l:
+        return True
+    if "list=" in l and "spotify.com" not in l:
+        return True
+    if "soundcloud.com" in l and "/sets/" in l:
+        return True
+    return False
+
+
+async def _extrair_playlist_youtube_ou_soundcloud(link: str) -> tuple[list[dict], str | None]:
+    """Lista as faixas de uma playlist do YouTube ou de um set do
+    SoundCloud em modo 'flat' (rápido — só título e link de cada uma,
+    sem resolver o áudio ainda)."""
+    loop = asyncio.get_event_loop()
+    with yt_dlp.YoutubeDL(_YDL_OPTS_PLAYLIST_FLAT) as ydl:
+        info = await loop.run_in_executor(
+            None, lambda: ydl.extract_info(link, download=False)
+        )
+
+    entradas = info.get("entries") or []
+    resultado = []
+    for entrada in entradas:
+        if not entrada:
+            continue
+        video_url = entrada.get("url") or entrada.get("webpage_url")
+        if not video_url:
+            continue
+        if not str(video_url).startswith("http"):
+            # modo flat às vezes só devolve o ID, não a URL completa
+            video_url = f"https://www.youtube.com/watch?v={video_url}"
+        resultado.append({
+            "titulo": entrada.get("title") or "áudio",
+            "link": video_url,
+        })
+        if len(resultado) >= _PLAYLIST_LIMITE_FAIXAS:
+            break
+    return resultado, info.get("title")
+
+
+async def _extrair_playlist_spotify(link: str) -> tuple[list[dict], str | None]:
+    """Lê uma playlist ou álbum público do Spotify (sem precisar de API
+    key) e devolve a lista de faixas — cada faixa já sai como uma busca
+    equivalente pro YouTube, já que o Spotify não deixa extrair áudio
+    direto (é DRM)."""
+    eh_album = "open.spotify.com/album/" in link.lower()
+
+    async with AsyncSpotifyClient() as client:
+        if eh_album:
+            dados = await client.get_album(link)
+            faixas_brutas = list(dados.tracks)  # tuple[Track, ...]
+        else:
+            dados = await client.get_playlist(link, max_tracks=_PLAYLIST_LIMITE_FAIXAS)
+            faixas_brutas = [pt.track for pt in dados.tracks]  # PlaylistTrack -> Track
+
+    resultado = []
+    for faixa in faixas_brutas[:_PLAYLIST_LIMITE_FAIXAS]:
+        artistas = ", ".join(a.name for a in faixa.artists) if faixa.artists else ""
+        busca = f"{faixa.name} {artistas}".strip()
+        resultado.append({
+            "titulo": f"{faixa.name} — {artistas}" if artistas else faixa.name,
+            "link": busca,
+        })
+
+    return resultado, getattr(dados, "name", None)
 
 
 async def _extrair_info_audio(link: str) -> dict:
@@ -20261,6 +20359,22 @@ async def _tocar_proxima(guild: discord.Guild) -> None:
 
     _cancelar_idle_disconnect(guild.id)
     proximo = estado.fila.pop(0)
+
+    # Faixas vindas de playlist não têm stream_url ainda (só título + link) —
+    # o áudio só é resolvido agora, na hora exata que vai tocar, pra não
+    # travar minutos resolvendo uma playlist gigante toda de uma vez.
+    if "stream_url" not in proximo:
+        try:
+            info = await _extrair_info_audio(proximo["link"])
+            proximo["stream_url"] = info["stream_url"]
+        except Exception as e:
+            if estado.canal_texto:
+                await estado.canal_texto.send(
+                    f"⚠️ Pulei **{proximo['titulo']}** — erro ao buscar o áudio: `{e}`"
+                )
+            await _tocar_proxima(guild)
+            return
+
     estado.tocando = proximo
 
     try:
@@ -20426,6 +20540,68 @@ async def _enfileirar_musica(
         await _tocar_proxima(guild)
 
 
+async def _enfileirar_playlist(
+    guild: discord.Guild,
+    canal_voz: "discord.VoiceChannel",
+    canal_texto,
+    autor,
+    link: str,
+) -> None:
+    """Lê uma playlist/álbum inteiro (YouTube, Spotify ou SoundCloud) e
+    bota TODAS as faixas na fila de uma vez. O áudio de cada faixa só é
+    resolvido quando for a vez dela tocar (ver _tocar_proxima), então
+    isso é rápido mesmo em playlists grandes."""
+    aviso = await canal_texto.send("📃 Lendo a playlist, um instante...")
+
+    try:
+        if "spotify.com" in link.lower():
+            faixas, nome_playlist = await _extrair_playlist_spotify(link)
+        else:
+            faixas, nome_playlist = await _extrair_playlist_youtube_ou_soundcloud(link)
+    except Exception as e:
+        await aviso.edit(content=f"⚠️ Não consegui ler essa playlist: `{e}`")
+        return
+
+    if not faixas:
+        await aviso.edit(content="⚠️ Essa playlist parece estar vazia, privada ou não é suportada.")
+        return
+
+    try:
+        if guild.voice_client is not None:
+            if guild.voice_client.channel.id != canal_voz.id:
+                await guild.voice_client.move_to(canal_voz)
+            vc = guild.voice_client
+        else:
+            vc = await canal_voz.connect()
+    except discord.ClientException:
+        await aviso.edit(content="⚠️ Não foi possível entrar na call.")
+        return
+
+    estado = _musica_estado.get(guild.id)
+    if estado is None:
+        estado = _EstadoMusica()
+        _musica_estado[guild.id] = estado
+    estado.canal_texto = canal_texto
+    _cancelar_idle_disconnect(guild.id)
+
+    for faixa in faixas:
+        estado.fila.append({
+            "titulo": faixa["titulo"],
+            "link": faixa["link"],
+            "requisitante": autor.display_name,
+        })
+
+    nome_exibido = nome_playlist or "playlist"
+    await aviso.edit(
+        content=f"📃 **{len(faixas)}** música(s) de **{nome_exibido}** adicionadas à fila!"
+    )
+
+    if vc.is_playing() or vc.is_paused():
+        await _atualizar_painel(estado, guild.id)
+    else:
+        await _tocar_proxima(guild)
+
+
 async def _processar_link_solto(message: discord.Message) -> None:
     """Se a mensagem tiver um link de música solto (YouTube/Spotify/
     SoundCloud, sem usar o comando .tocar) e o autor estiver numa call,
@@ -20438,9 +20614,14 @@ async def _processar_link_solto(message: discord.Message) -> None:
         return
 
     link = encontrado.group(0)
-    await _enfileirar_musica(
-        message.guild, message.author.voice.channel, message.channel, message.author, link
-    )
+    if _e_link_playlist(link):
+        await _enfileirar_playlist(
+            message.guild, message.author.voice.channel, message.channel, message.author, link
+        )
+    else:
+        await _enfileirar_musica(
+            message.guild, message.author.voice.channel, message.channel, message.author, link
+        )
 
 
 @bot.command(name="tocar")
@@ -20454,7 +20635,9 @@ async def cmd_tocar(ctx, *, link: str = None):
     if not link:
         await ctx.send(
             "⚠️ **Uso:** `.tocar <link>` — manda o link (ou nome da música) "
-            "que eu boto na fila. YouTube, Spotify e SoundCloud funcionam. "
+            "que eu boto na fila. YouTube, Spotify e SoundCloud funcionam, "
+            "e **playlists/álbuns inteiros também** — manda o link da "
+            "playlist que eu boto todas as músicas na fila de uma vez. "
             "Também dá pra só colar o link no chat sem `.tocar`, se você "
             "estiver numa call."
         )
@@ -20467,7 +20650,10 @@ async def cmd_tocar(ctx, *, link: str = None):
         )
         return
 
-    await _enfileirar_musica(ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, link)
+    if _e_link_playlist(link):
+        await _enfileirar_playlist(ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, link)
+    else:
+        await _enfileirar_musica(ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, link)
 
 
 @bot.command(name="sair", aliases=["parar", "stop"])
@@ -20498,6 +20684,127 @@ async def cmd_sair(ctx):
 
     await vc.disconnect()
     await ctx.send("⏹️ Música parada, fila limpa, saí da call.")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# CALL FIXA DE MÚSICA — "🎶 Aeon & Celestia"
+#
+# Cria (se ainda não existir) uma call de voz com esse nome dentro da
+# categoria configurada abaixo. Quando alguém entra nela, o bot entra
+# junto, manda o painel de música automaticamente no chat e explica
+# rapidinho como usar (.tocar, links soltos, playlists, botões...).
+# ══════════════════════════════════════════════════════════════════════
+
+CATEGORIA_CALL_MUSICA_ID = 1284260469128826951
+NOME_CALL_MUSICA = "🎶 Aeon & Celestia"
+
+# guild_id -> id do canal de voz fixo de música (preenchido no on_ready)
+_call_musica_ids: dict[int, int] = {}
+
+
+async def _garantir_call_musica(guild: discord.Guild) -> None:
+    """Confere se a call fixa de música já existe na categoria configurada;
+    se não existir, cria. Guarda o ID pra reconhecer a call depois."""
+    categoria = guild.get_channel(CATEGORIA_CALL_MUSICA_ID)
+    if categoria is None or not isinstance(categoria, discord.CategoryChannel):
+        return  # essa categoria não existe (ou não é categoria) nesse servidor
+
+    for canal in categoria.voice_channels:
+        if canal.name == NOME_CALL_MUSICA:
+            _call_musica_ids[guild.id] = canal.id
+            return
+
+    try:
+        canal_criado = await categoria.create_voice_channel(name=NOME_CALL_MUSICA)
+        _call_musica_ids[guild.id] = canal_criado.id
+        print(f"[call-musica] criei a call '{NOME_CALL_MUSICA}' em '{guild.name}'")
+    except discord.Forbidden:
+        print(f"[call-musica] sem permissão pra criar a call de música em '{guild.name}'")
+    except discord.HTTPException as e:
+        print(f"[call-musica] ERRO ao criar a call de música em '{guild.name}': {e!r}")
+
+
+def _canal_texto_para_call_musica(guild: discord.Guild, canal_voz: "discord.VoiceChannel"):
+    """Escolhe onde mandar o painel/explicação: preferindo um canal de
+    texto dentro da MESMA categoria da call, senão o canal de avisos do
+    servidor, senão o primeiro canal de texto em que o bot pode falar."""
+    categoria = canal_voz.category
+    if categoria is not None:
+        for tc in categoria.text_channels:
+            if tc.permissions_for(guild.me).send_messages:
+                return tc
+
+    if guild.system_channel is not None and guild.system_channel.permissions_for(guild.me).send_messages:
+        return guild.system_channel
+
+    for tc in guild.text_channels:
+        if tc.permissions_for(guild.me).send_messages:
+            return tc
+
+    return None
+
+
+@bot.listen("on_voice_state_update")
+async def call_musica_painel_automatico(
+    member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+):
+    """Quando alguém entra na call fixa de música, o bot entra junto,
+    manda (ou reaproveita) o painel no chat e explica como usar."""
+    if member.bot:
+        return
+
+    canal_novo = after.channel
+    if canal_novo is None:
+        return
+
+    guild = member.guild
+    canal_alvo_id = _call_musica_ids.get(guild.id)
+    if canal_alvo_id is None or canal_novo.id != canal_alvo_id:
+        return  # não é a call fixa de música
+
+    if before.channel is not None and before.channel.id == canal_novo.id:
+        return  # já estava lá (só mudou mute/deaf/etc), ignora
+
+    canal_texto = _canal_texto_para_call_musica(guild, canal_novo)
+    if canal_texto is None:
+        return  # sem nenhum canal de texto disponível pra avisar
+
+    try:
+        if guild.voice_client is None:
+            await canal_novo.connect()
+        elif guild.voice_client.channel.id != canal_novo.id:
+            await guild.voice_client.move_to(canal_novo)
+    except discord.ClientException:
+        pass
+    except discord.HTTPException as e:
+        print(f"[call-musica] ERRO ao entrar na call fixa em '{guild.name}': {e!r}")
+
+    estado = _musica_estado.get(guild.id)
+    if estado is None:
+        estado = _EstadoMusica()
+        _musica_estado[guild.id] = estado
+    estado.canal_texto = canal_texto
+
+    # Só manda um painel novo se ainda não tiver um "vivo" nesse chat —
+    # evita espamar o canal toda vez que alguém entra na call.
+    if estado.painel_msg is None:
+        try:
+            await _atualizar_painel(estado, guild.id)
+        except discord.HTTPException:
+            pass
+
+    texto_explicacao = (
+        f"🌑🌟 **Aeon & Celestia — Sistema de Música** • {member.mention} entrou na call!\n"
+        "É só usar `.tocar <link ou nome da música>` — YouTube, Spotify e "
+        "SoundCloud funcionam, inclusive **playlists e álbuns inteiros**. "
+        "Também dá pra só colar o link direto no chat, sem precisar do "
+        "`.tocar`. Use os botões do painel acima (⏸️ pausar, ⏭️ pular, "
+        "⏹️ sair) ou `.sair` pra encerrar quando quiser."
+    )
+    try:
+        await canal_texto.send(texto_explicacao)
+    except discord.HTTPException:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -20058,9 +20058,18 @@ async def cmd_play(ctx):
 
 
 # ══════════════════════════════════════════════════════════════════
-# COMANDO .tocar — Toca um link (YouTube, SoundCloud etc.) na call
-# Uso: .tocar <link>   — entra na call e toca até acabar ou até .parar
-#      .parar          — para a música e sai da call
+# SISTEMA DE MÚSICA COM FILA E PAINEL — Aeon & Celestia
+#
+# Uso: .tocar <link>   — se nada tocando, toca na hora + manda o painel
+#                         com botões. Se já tem algo tocando, entra na
+#                         fila e o painel se atualiza sozinho mostrando
+#                         as próximas.
+#      .sair            — limpa a fila inteira, para e desconecta.
+#                         (aliases: .parar, .stop)
+#
+# Quando uma música acaba, a próxima da fila entra automaticamente —
+# ninguém precisa digitar .tocar de novo, só ir mandando link atrás de
+# link que o bot vai empilhando. Só some a fila com .sair.
 # ══════════════════════════════════════════════════════════════════
 
 _YDL_OPTS_TOCAR = {
@@ -20071,19 +20080,255 @@ _YDL_OPTS_TOCAR = {
     "default_search": "ytsearch",  # se não vier link, busca no YouTube
 }
 
+# Se a fila ficar vazia e ninguém mandar nada nesse tempo, o bot sai
+# sozinho da call (pra não ficar preso lá parado pra sempre).
+_TEMPO_IDLE_SEGUNDOS = 5 * 60  # 5 minutos
+
+
+class _EstadoMusica:
+    """Estado da fila de música de UM servidor (guild)."""
+    def __init__(self):
+        self.fila: list[dict] = []            # próximas músicas
+        self.tocando: dict | None = None       # música atual
+        self.painel_msg: discord.Message | None = None
+        self.canal_texto = None                # onde mandar avisos/painel
+
+
+_musica_estado: dict[int, _EstadoMusica] = {}   # guild_id -> estado
+_musica_idle_tasks: dict[int, asyncio.Task] = {}  # guild_id -> tarefa de auto-saída
+
+
+def _cancelar_idle_disconnect(guild_id: int) -> None:
+    tarefa = _musica_idle_tasks.pop(guild_id, None)
+    if tarefa and not tarefa.done():
+        tarefa.cancel()
+
+
+def _agendar_idle_disconnect(guild: discord.Guild) -> None:
+    _cancelar_idle_disconnect(guild.id)
+
+    async def _esperar_e_sair():
+        try:
+            await asyncio.sleep(_TEMPO_IDLE_SEGUNDOS)
+            estado = _musica_estado.get(guild.id)
+            if estado and not estado.fila and estado.tocando is None:
+                vc = guild.voice_client
+                if vc is not None:
+                    await vc.disconnect()
+                if estado.canal_texto:
+                    try:
+                        await estado.canal_texto.send(
+                            "👋 Fila vazia fazia tempo, saí da call sozinho."
+                        )
+                    except discord.HTTPException:
+                        pass
+                _musica_estado.pop(guild.id, None)
+        except asyncio.CancelledError:
+            pass
+
+    _musica_idle_tasks[guild.id] = asyncio.create_task(_esperar_e_sair())
+
+
+async def _extrair_info_audio(link: str) -> dict:
+    """Roda o yt-dlp numa thread separada e devolve título + URL de stream."""
+    loop = asyncio.get_event_loop()
+    with yt_dlp.YoutubeDL(_YDL_OPTS_TOCAR) as ydl:
+        info = await loop.run_in_executor(
+            None, lambda: ydl.extract_info(link, download=False)
+        )
+
+    if "entries" in info and info["entries"]:
+        info = info["entries"][0]
+
+    titulo = info.get("title", "áudio")
+    if "url" in info:
+        stream_url = info["url"]
+    else:
+        formatos = [f for f in info.get("formats", []) if f.get("acodec") != "none"]
+        stream_url = formatos[-1]["url"] if formatos else info["formats"][-1]["url"]
+
+    return {"titulo": titulo, "stream_url": stream_url}
+
+
+def _criar_embed_painel(estado: "_EstadoMusica") -> discord.Embed:
+    atual = estado.tocando
+    if atual is None:
+        embed = discord.Embed(
+            title="🎵 Nada tocando agora",
+            description="A fila está vazia — manda um link com `.tocar`!",
+            color=0x2F3136,
+        )
+    else:
+        embed = discord.Embed(
+            title="🎶 Tocando agora",
+            description=f"**{atual['titulo']}**",
+            color=0x57F287,
+        )
+        embed.add_field(name="Pedido por", value=atual["requisitante"], inline=True)
+
+    if estado.fila:
+        linhas = [
+            f"`{i + 1}.` {item['titulo']} — *{item['requisitante']}*"
+            for i, item in enumerate(estado.fila[:10])
+        ]
+        if len(estado.fila) > 10:
+            linhas.append(f"... e mais {len(estado.fila) - 10} na fila")
+        embed.add_field(name=f"🎧 Próximas ({len(estado.fila)})", value="\n".join(linhas), inline=False)
+    else:
+        embed.add_field(name="🎧 Próximas", value="Fila vazia — manda mais links com `.tocar`!", inline=False)
+
+    embed.set_footer(text="🌑🌟 Aeon & Celestia  •  use os botões ou .sair pra encerrar")
+    return embed
+
+
+async def _atualizar_painel(estado: "_EstadoMusica", guild_id: int) -> None:
+    embed = _criar_embed_painel(estado)
+    view = PainelMusica(guild_id)
+
+    if estado.painel_msg is None:
+        if estado.canal_texto:
+            estado.painel_msg = await estado.canal_texto.send(embed=embed, view=view)
+        return
+
+    try:
+        await estado.painel_msg.edit(embed=embed, view=view)
+    except discord.HTTPException:
+        if estado.canal_texto:
+            estado.painel_msg = await estado.canal_texto.send(embed=embed, view=view)
+
+
+async def _tocar_proxima(guild: discord.Guild) -> None:
+    """Toca a próxima música da fila. Chamada sozinha sempre que uma
+    música termina (via callback 'after' do player)."""
+    estado = _musica_estado.get(guild.id)
+    if estado is None:
+        return  # fila foi encerrada via .sair — não toca mais nada
+
+    vc = guild.voice_client
+    if vc is None:
+        _musica_estado.pop(guild.id, None)
+        return
+
+    if not estado.fila:
+        estado.tocando = None
+        await _atualizar_painel(estado, guild.id)
+        _agendar_idle_disconnect(guild)
+        return
+
+    _cancelar_idle_disconnect(guild.id)
+    proximo = estado.fila.pop(0)
+    estado.tocando = proximo
+
+    try:
+        source = discord.FFmpegPCMAudio(proximo["stream_url"], **_FFMPEG_OPTS)
+    except Exception as e:
+        if estado.canal_texto:
+            await estado.canal_texto.send(f"⚠️ Erro ao preparar `{proximo['titulo']}`: `{e}`")
+        await _tocar_proxima(guild)
+        return
+
+    loop = asyncio.get_event_loop()
+
+    def _ao_terminar(erro):
+        if erro:
+            print(f"[tocar] erro ao tocar: {erro!r}")
+        asyncio.run_coroutine_threadsafe(_tocar_proxima(guild), loop)
+
+    vc.play(source, after=_ao_terminar)
+    await _atualizar_painel(estado, guild.id)
+
+
+class PainelMusica(discord.ui.View):
+    """Botões do painel: pausar/retomar, pular e sair."""
+
+    def __init__(self, guild_id: int):
+        super().__init__(timeout=None)
+        self.guild_id = guild_id
+
+    async def _checar_call(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        vc = guild.voice_client if guild else None
+        if vc is None:
+            await interaction.response.send_message("⚠️ Não estou em nenhuma call.", ephemeral=True)
+            return None
+
+        membro = interaction.user
+        na_mesma_call = (
+            isinstance(membro, discord.Member)
+            and membro.voice is not None
+            and membro.voice.channel is not None
+            and membro.voice.channel.id == vc.channel.id
+        )
+        if not na_mesma_call:
+            await interaction.response.send_message(
+                "⚠️ Você precisa estar na mesma call pra controlar a música.", ephemeral=True
+            )
+            return None
+        return vc
+
+    @discord.ui.button(label="⏸️ Pausar", style=discord.ButtonStyle.secondary, custom_id="musica_pausar")
+    async def botao_pausar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = await self._checar_call(interaction)
+        if vc is None:
+            return
+
+        if vc.is_playing():
+            vc.pause()
+            button.label = "▶️ Retomar"
+        elif vc.is_paused():
+            vc.resume()
+            button.label = "⏸️ Pausar"
+        else:
+            await interaction.response.send_message("⚠️ Nada tocando agora.", ephemeral=True)
+            return
+
+        estado = _musica_estado.get(self.guild_id)
+        embed = _criar_embed_painel(estado) if estado else _criar_embed_painel(_EstadoMusica())
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="⏭️ Pular", style=discord.ButtonStyle.primary, custom_id="musica_pular")
+    async def botao_pular(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = await self._checar_call(interaction)
+        if vc is None:
+            return
+        if not (vc.is_playing() or vc.is_paused()):
+            await interaction.response.send_message("⚠️ Nada tocando agora.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("⏭️ Pulando...", ephemeral=True, delete_after=3)
+        vc.stop()  # dispara o "after" -> _tocar_proxima toca a próxima sozinha
+
+    @discord.ui.button(label="⏹️ Sair", style=discord.ButtonStyle.danger, custom_id="musica_sair")
+    async def botao_sair(self, interaction: discord.Interaction, button: discord.ui.Button):
+        vc = await self._checar_call(interaction)
+        if vc is None:
+            return
+
+        _musica_estado.pop(self.guild_id, None)
+        _cancelar_idle_disconnect(self.guild_id)
+
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
+        await vc.disconnect()
+
+        embed = discord.Embed(
+            title="⏹️ Encerrado", description="Fila limpa, saí da call.", color=0xED4245
+        )
+        await interaction.response.edit_message(embed=embed, view=None)
+
 
 @bot.command(name="tocar")
 async def cmd_tocar(ctx, *, link: str = None):
-    """Entra na call do autor e toca o áudio do link informado (YouTube,
-    SoundCloud etc.) até acabar ou até alguém usar .parar."""
+    """Toca um link na hora (se nada tocando) ou bota na fila (se já tem
+    algo tocando). Uso: .tocar <link>"""
 
     if ctx.guild is None:
         return
 
     if not link:
         await ctx.send(
-            "⚠️ **Uso:** `.tocar <link>` — manda o link (YouTube, SoundCloud "
-            "etc.) que eu toco na call."
+            "⚠️ **Uso:** `.tocar <link>` — manda o link (ou nome da música) "
+            "que eu boto na fila."
         )
         return
 
@@ -20098,7 +20343,8 @@ async def cmd_tocar(ctx, *, link: str = None):
 
     try:
         if ctx.voice_client is not None:
-            await ctx.voice_client.move_to(canal_voz)
+            if ctx.voice_client.channel.id != canal_voz.id:
+                await ctx.voice_client.move_to(canal_voz)
             vc = ctx.voice_client
         else:
             vc = await canal_voz.connect()
@@ -20106,74 +20352,67 @@ async def cmd_tocar(ctx, *, link: str = None):
         await ctx.send("⚠️ Não foi possível entrar na call.")
         return
 
-    if vc.is_playing():
-        vc.stop()
+    estado = _musica_estado.get(ctx.guild.id)
+    if estado is None:
+        estado = _EstadoMusica()
+        _musica_estado[ctx.guild.id] = estado
+    estado.canal_texto = ctx.channel
+    _cancelar_idle_disconnect(ctx.guild.id)
 
     aviso = await ctx.send(f"🔎 Procurando: `{link}` ...")
 
     try:
-        loop = asyncio.get_event_loop()
-        with yt_dlp.YoutubeDL(_YDL_OPTS_TOCAR) as ydl:
-            info = await loop.run_in_executor(
-                None, lambda: ydl.extract_info(link, download=False)
-            )
-
-        # Se veio de busca (default_search), pega o primeiro resultado
-        if "entries" in info and info["entries"]:
-            info = info["entries"][0]
-
-        titulo = info.get("title", "áudio")
-
-        if "url" in info:
-            stream_url = info["url"]
-        else:
-            formatos = [
-                f for f in info.get("formats", [])
-                if f.get("acodec") != "none"
-            ]
-            stream_url = formatos[-1]["url"] if formatos else info["formats"][-1]["url"]
-
-        source = discord.FFmpegPCMAudio(stream_url, **_FFMPEG_OPTS)
-        terminou = asyncio.Event()
-
-        def _ao_terminar(erro):
-            if erro:
-                print(f"[tocar] erro ao tocar: {erro!r}")
-            loop.call_soon_threadsafe(terminou.set)
-
-        vc.play(source, after=_ao_terminar)
-        await aviso.edit(content=f"🎶 Tocando agora: **{titulo}**")
-
-        await terminou.wait()
-
-        # Só desconecta se ninguém mandou outra música enquanto essa tocava
-        if vc.is_connected() and not vc.is_playing():
-            await vc.disconnect()
-
+        info = await _extrair_info_audio(link)
     except Exception as e:
-        await ctx.send(f"⚠️ Erro ao reproduzir o áudio: `{e}`")
+        await aviso.edit(content=f"⚠️ Erro ao buscar o áudio: `{e}`")
+        return
+
+    item = {
+        "titulo": info["titulo"],
+        "stream_url": info["stream_url"],
+        "requisitante": ctx.author.display_name,
+    }
+    estado.fila.append(item)
+
+    if vc.is_playing() or vc.is_paused():
+        await aviso.edit(content=f"➕ Adicionado à fila: **{item['titulo']}**")
+        await _atualizar_painel(estado, ctx.guild.id)
+    else:
         try:
-            await vc.disconnect()
-        except Exception:
+            await aviso.delete()
+        except discord.HTTPException:
             pass
+        await _tocar_proxima(ctx.guild)
 
 
-@bot.command(name="parar", aliases=["sair", "stop"])
-async def cmd_parar(ctx):
-    """Para a música atual e desconecta o bot da call."""
+@bot.command(name="sair", aliases=["parar", "stop"])
+async def cmd_sair(ctx):
+    """Limpa a fila inteira, para a música e desconecta da call."""
     if ctx.guild is None:
         return
+
+    estado = _musica_estado.pop(ctx.guild.id, None)  # remove ANTES de parar
+    _cancelar_idle_disconnect(ctx.guild.id)
 
     vc = ctx.voice_client
     if vc is None:
         await ctx.send("⚠️ Não estou em nenhuma call.")
         return
 
+    if estado and estado.painel_msg:
+        try:
+            embed = discord.Embed(
+                title="⏹️ Encerrado", description="Fila limpa, saí da call.", color=0xED4245
+            )
+            await estado.painel_msg.edit(embed=embed, view=None)
+        except discord.HTTPException:
+            pass
+
     if vc.is_playing() or vc.is_paused():
         vc.stop()
 
     await vc.disconnect()
-    await ctx.send("⏹️ Música parada, saí da call.")
+    await ctx.send("⏹️ Música parada, fila limpa, saí da call.")
 
 
 # ══════════════════════════════════════════════════════════════════════

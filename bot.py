@@ -7,7 +7,6 @@ import json
 import aiohttp
 import time
 import asyncio
-import io
 import shutil
 import unicodedata
 from collections import defaultdict
@@ -18,12 +17,6 @@ except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
     import yt_dlp
-try:
-    from gtts import gTTS   # TTS do anúncio de entrada em call — .anuncioentrada
-except ImportError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "gTTS"])
-    from gtts import gTTS
 try:
     from spotify_scraper import AsyncSpotifyClient   # metadata de link do Spotify — .tocar
 except ImportError:
@@ -2363,13 +2356,6 @@ async def on_ready():
     # Inicia a checagem periódica das puniçõescall (libera quem já cumpriu a pena)
     if not loop_checar_punicoes_call.is_running():
         loop_checar_punicoes_call.start()
-
-    # ── Anúncio de entrada em call (TTS): cria a fila e liga o worker que
-    # processa os anúncios um de cada vez ──────────────────────────────────
-    global _fila_anuncios_entrada
-    if _fila_anuncios_entrada is None:
-        _fila_anuncios_entrada = asyncio.Queue()
-        asyncio.create_task(_worker_anuncios_entrada())
 
 
 @bot.event
@@ -19795,171 +19781,6 @@ async def _encerrar_cidade_dorme_bot(jogo: JogoCidadeDorme, vencedor: str):
     _jogos_cidade_dorme.pop(canal.id, None)
 
 
-# ══════════════════════════════════════════════════════════════════
-# ANÚNCIO DE ENTRADA EM CALL (TTS) — toda vez que alguém entra numa call
-# (vindo de "sem call nenhuma"), o bot entra na MESMA call, fala em voz
-# alta "Fulano entrou na call" (gTTS — Google Text-to-Speech) e SAI logo
-# em seguida, na hora que termina de falar.
-#
-# Se a mesma pessoa entrar de novo NA MESMA call antes de passar 30
-# minutos do último anúncio feito pra ela ali, o bot não anuncia de novo
-# (evita ficar repetindo se ela sai e volta toda hora). Em calls
-# diferentes conta separado — entrar numa call nova sempre anuncia.
-#
-# Se várias pessoas entrarem em calls diferentes ao mesmo tempo, os
-# anúncios ficam numa fila e são feitos um de cada vez.
-#
-# Comandos:
-#   .anuncioentrada on   → liga o anúncio (só o DEV pode usar)
-#   .anuncioentrada off  → desliga o anúncio
-# ══════════════════════════════════════════════════════════════════
-
-# IDs de canais de voz que NUNCA disparam anúncio (ex: o canal de
-# puniçãocall — quem é arrastado pra lá à força não precisa de boas-vindas).
-# Preencha à vontade, ex: CANAIS_IGNORADOS_ANUNCIO_ID = {CANAL_PUNICAO_CALL_ID}
-CANAIS_IGNORADOS_ANUNCIO_ID: set = {CANAL_PUNICAO_CALL_ID}
-
-# Se a mesma pessoa entrar de novo NA MESMA call antes desse tempo passar
-# (contado a partir do último anúncio feito pra ela ali), não anuncia de
-# novo — evita ficar repetindo toda hora que ela sai e volta rapidinho.
-_COOLDOWN_ANUNCIO_SEGUNDOS = 30 * 60  # 30 minutos
-
-_anuncio_entrada_ligado = True                 # liga/desliga via .anuncioentrada
-_fila_anuncios_entrada: asyncio.Queue = None   # criada em on_ready (precisa de loop rodando)
-_ultimo_anuncio_entrada: dict = {}             # (membro_id, canal_id) -> time.time() do último anúncio
-
-
-def _gerar_audio_tts_pt(texto: str) -> io.BytesIO:
-    """Gera o áudio TTS (voz em português) em memória — sem salvar arquivo
-    no disco. Roda em thread separada (é uma chamada de rede bloqueante)."""
-    tts = gTTS(text=texto, lang="pt", tld="com.br")
-    buffer = io.BytesIO()
-    tts.write_to_fp(buffer)
-    buffer.seek(0)
-    return buffer
-
-
-async def _tocar_tts_na_call(vc: discord.VoiceClient, texto: str) -> None:
-    """Gera o áudio TTS do texto e toca na call, esperando terminar antes
-    de devolver o controle (pra não sobrepor com o próximo da fila)."""
-    loop = asyncio.get_event_loop()
-    buffer = await loop.run_in_executor(None, _gerar_audio_tts_pt, texto)
-
-    source = discord.FFmpegPCMAudio(buffer, pipe=True, options="-vn")
-    terminou = asyncio.Event()
-
-    def _ao_terminar(erro):
-        if erro:
-            print(f"[anuncioentrada] erro ao tocar TTS: {erro!r}")
-        loop.call_soon_threadsafe(terminou.set)
-
-    vc.play(source, after=_ao_terminar)
-    await terminou.wait()
-
-
-async def _worker_anuncios_entrada() -> None:
-    """Processa a fila de anúncios um de cada vez: entra/move pra call
-    certa, fala o texto e sai da call na hora em seguida — não fica
-    esperando parado, mesmo que tenha mais coisa na fila logo depois."""
-    while True:
-        canal, texto = await _fila_anuncios_entrada.get()
-        try:
-            guild = canal.guild
-
-            vc = guild.voice_client
-            try:
-                if vc is None:
-                    vc = await canal.connect()
-                elif vc.channel.id != canal.id:
-                    await vc.move_to(canal)
-            except (discord.ClientException, discord.HTTPException) as e:
-                print(f"[anuncioentrada] não consegui entrar/mover pra call: {e!r}")
-                continue
-
-            if vc.is_playing():
-                vc.stop()
-
-            try:
-                await _tocar_tts_na_call(vc, texto)
-            except Exception as e:
-                print(f"[anuncioentrada] ERRO ao tocar o TTS (falou ou não, vou sair da call): {e!r}")
-            finally:
-                # Sai da call de qualquer jeito — falou certinho ou deu erro,
-                # não pode ficar preso lá dentro pra sempre.
-                if guild.voice_client is not None:
-                    try:
-                        await guild.voice_client.disconnect(force=True)
-                    except discord.HTTPException:
-                        pass
-        except Exception as e:
-            print(f"[anuncioentrada] ERRO no worker: {e!r}")
-        finally:
-            _fila_anuncios_entrada.task_done()
-
-
-@bot.listen("on_voice_state_update")
-async def _anunciar_entrada_call(
-    member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
-):
-    """Quando alguém entra numa call vindo de fora (não estava em nenhuma
-    call antes), enfileira um anúncio de voz pro worker processar — a não
-    ser que ela já tenha entrado NESSA MESMA call há menos de 30 minutos."""
-    if not _anuncio_entrada_ligado or _fila_anuncios_entrada is None:
-        return
-    if member.bot:
-        return
-
-    entrou_em_call = before.channel is None and after.channel is not None
-    if not entrou_em_call:
-        return
-
-    canal = after.channel
-    if canal.id in CANAIS_IGNORADOS_ANUNCIO_ID:
-        return
-    if member.guild.afk_channel and canal.id == member.guild.afk_channel.id:
-        return
-
-    chave = (member.id, canal.id)
-    agora = time.time()
-    ultimo = _ultimo_anuncio_entrada.get(chave)
-    if ultimo is not None and (agora - ultimo) < _COOLDOWN_ANUNCIO_SEGUNDOS:
-        return  # já anunciou essa pessoa nessa call há menos de 30 minutos
-
-    _ultimo_anuncio_entrada[chave] = agora
-
-    texto = f"{member.display_name} entrou na call."
-    await _fila_anuncios_entrada.put((canal, texto))
-
-
-@bot.command(name="anuncioentrada")
-async def cmd_anuncio_entrada(ctx, estado: str = None):
-    """Liga/desliga o anúncio por voz de quem entra em call.
-    Uso: .anuncioentrada on | .anuncioentrada off — só o DEV pode usar."""
-    global _anuncio_entrada_ligado
-
-    if ctx.author.id != CRIADOR_ID:
-        await ctx.send(
-            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
-            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
-        )
-        return
-
-    if estado is None or estado.lower() not in ("on", "off"):
-        status_atual = "ligado ✅" if _anuncio_entrada_ligado else "desligado ❌"
-        await ctx.send(
-            "⚠️ **Uso:** `.anuncioentrada on` ou `.anuncioentrada off`\n"
-            f"Status atual: **{status_atual}**"
-        )
-        return
-
-    _anuncio_entrada_ligado = estado.lower() == "on"
-    texto_status = (
-        "ligado ✅ — vou entrar na call e anunciar quem chegar." if _anuncio_entrada_ligado
-        else "desligado ❌ — não vou mais anunciar entradas."
-    )
-    await ctx.send(f"🌟 **Celestia:** Anúncio de entrada em call {texto_status}")
-
-
 @bot.command(name="checkffmpeg")
 async def cmd_check_ffmpeg(ctx):
     """Verifica se o executável do ffmpeg está disponível no PATH do
@@ -19982,7 +19803,7 @@ async def cmd_check_ffmpeg(ctx):
         path_atual = path_atual[:1500] + "... (cortado)"
     await ctx.send(
         "❌ **FFmpeg NÃO está no PATH** desse processo — é por isso que "
-        "`.play` e `.anuncioentrada` falham com `ffmpeg was not found`.\n\n"
+        "`.play` falha com `ffmpeg was not found`.\n\n"
         f"PATH atual do processo:\n```{path_atual}```"
     )
 

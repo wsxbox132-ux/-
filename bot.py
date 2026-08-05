@@ -8,6 +8,7 @@ import aiohttp
 import time
 import asyncio
 import io
+import shutil
 import unicodedata
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta, time as dtime
@@ -19855,14 +19856,18 @@ async def _worker_anuncios_entrada() -> None:
             if vc.is_playing():
                 vc.stop()
 
-            await _tocar_tts_na_call(vc, texto)
-
-            # Fala e sai na hora — não espera ver se tem mais alguém na fila
-            if guild.voice_client is not None:
-                try:
-                    await guild.voice_client.disconnect()
-                except discord.HTTPException:
-                    pass
+            try:
+                await _tocar_tts_na_call(vc, texto)
+            except Exception as e:
+                print(f"[anuncioentrada] ERRO ao tocar o TTS (falou ou não, vou sair da call): {e!r}")
+            finally:
+                # Sai da call de qualquer jeito — falou certinho ou deu erro,
+                # não pode ficar preso lá dentro pra sempre.
+                if guild.voice_client is not None:
+                    try:
+                        await guild.voice_client.disconnect(force=True)
+                    except discord.HTTPException:
+                        pass
         except Exception as e:
             print(f"[anuncioentrada] ERRO no worker: {e!r}")
         finally:
@@ -19930,6 +19935,33 @@ async def cmd_anuncio_entrada(ctx, estado: str = None):
         else "desligado ❌ — não vou mais anunciar entradas."
     )
     await ctx.send(f"🌟 **Celestia:** Anúncio de entrada em call {texto_status}")
+
+
+@bot.command(name="checkffmpeg")
+async def cmd_check_ffmpeg(ctx):
+    """Verifica se o executável do ffmpeg está disponível no PATH do
+    processo onde o bot está rodando agora. Uso: .checkffmpeg — só o DEV."""
+    if ctx.author.id != CRIADOR_ID:
+        await ctx.send(
+            "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
+            "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
+        )
+        return
+
+    caminho = shutil.which("ffmpeg")
+    if caminho:
+        await ctx.send(f"✅ **FFmpeg encontrado!** Caminho: `{caminho}`")
+        return
+
+    path_atual = os.environ.get("PATH", "(vazio)")
+    # Corta se ficar gigante — o Discord tem limite de 2000 caracteres por mensagem
+    if len(path_atual) > 1500:
+        path_atual = path_atual[:1500] + "... (cortado)"
+    await ctx.send(
+        "❌ **FFmpeg NÃO está no PATH** desse processo — é por isso que "
+        "`.play` e `.anuncioentrada` falham com `ffmpeg was not found`.\n\n"
+        f"PATH atual do processo:\n```{path_atual}```"
+    )
 
 
 # ══════════════════════════════════════════════════════════════════

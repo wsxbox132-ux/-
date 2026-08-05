@@ -24,6 +24,12 @@ except ImportError:
     import subprocess, sys
     subprocess.check_call([sys.executable, "-m", "pip", "install", "gTTS"])
     from gtts import gTTS
+try:
+    from spotify_scraper import AsyncSpotifyClient   # metadata de link do Spotify — .tocar
+except ImportError:
+    import subprocess, sys
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "spotifyscraper"])
+    from spotify_scraper import AsyncSpotifyClient
 # 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║          AEON & CELESTIA — DOIS GATOS, UMA ALMA             ║
@@ -2899,6 +2905,15 @@ async def on_message(message: discord.Message):
         await _processar_gatilho_cidade_dorme(message)
     except Exception as e:
         print(f"[cidade-dorme] ERRO ao processar gatilho de {message.author}: {e!r}")
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Auto-play: link solto de música (YouTube/Spotify/SoundCloud) já
+    # entra direto na fila, sem precisar de .tocar na frente ───────────────
+    try:
+        if message.guild is not None and not message.content.startswith(bot.command_prefix):
+            await _processar_link_solto(message)
+    except Exception as e:
+        print(f"[tocar-auto] ERRO ao processar link solto de {message.author}: {e!r}")
     # ─────────────────────────────────────────────────────────────────────────
 
     await bot.process_commands(message)
@@ -20129,8 +20144,37 @@ def _agendar_idle_disconnect(guild: discord.Guild) -> None:
     _musica_idle_tasks[guild.id] = asyncio.create_task(_esperar_e_sair())
 
 
+async def _resolver_link_spotify(link: str) -> str:
+    """O Spotify não deixa extrair áudio direto (é DRM), então quando o
+    link é do Spotify a gente só lê o nome da faixa + artista (dados
+    públicos, sem precisar de API key) e devolve uma busca equivalente
+    pro YouTube — a mesma música toca de lá. Links que não são do
+    Spotify voltam sem alteração."""
+    if "spotify.com" not in link.lower():
+        return link
+
+    try:
+        async with AsyncSpotifyClient() as client:
+            faixa = await client.get_track(link)
+    except Exception as e:
+        print(f"[tocar-spotify] não consegui ler metadata do Spotify: {e!r}")
+        raise ValueError(
+            "Não consegui ler essa música do Spotify — se for link de "
+            "playlist ou álbum, ainda não suporto isso, manda o link de "
+            "uma faixa específica."
+        )
+
+    artistas = ", ".join(a.name for a in faixa.artists) if faixa.artists else ""
+    busca = f"{faixa.name} {artistas}".strip()
+    print(f"[tocar-spotify] '{link}' -> busca no YouTube: '{busca}'")
+    return busca
+
+
 async def _extrair_info_audio(link: str) -> dict:
-    """Roda o yt-dlp numa thread separada e devolve título + URL de stream."""
+    """Resolve o link (Spotify vira busca no YouTube) e roda o yt-dlp
+    numa thread separada, devolvendo título + URL de stream."""
+    link = await _resolver_link_spotify(link)
+
     loop = asyncio.get_event_loop()
     with yt_dlp.YoutubeDL(_YDL_OPTS_TOCAR) as ydl:
         info = await loop.run_in_executor(
@@ -20317,6 +20361,88 @@ class PainelMusica(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
 
+# Reconhece link de YouTube, Spotify e SoundCloud soltos numa mensagem
+# (sem precisar do comando .tocar na frente).
+_REGEX_LINK_MUSICA = re.compile(
+    r"https?://(?:www\.|music\.)?youtube\.com/\S+"
+    r"|https?://youtu\.be/\S+"
+    r"|https?://open\.spotify\.com/\S+"
+    r"|https?://(?:www\.)?soundcloud\.com/\S+",
+    re.IGNORECASE,
+)
+
+
+async def _enfileirar_musica(
+    guild: discord.Guild,
+    canal_voz: "discord.VoiceChannel",
+    canal_texto,
+    autor,
+    link: str,
+) -> None:
+    """Lógica compartilhada entre .tocar e o auto-play de link solto no
+    chat: conecta na call se precisar, extrai o áudio e bota na fila
+    (ou toca na hora, se nada estiver tocando ainda)."""
+    try:
+        if guild.voice_client is not None:
+            if guild.voice_client.channel.id != canal_voz.id:
+                await guild.voice_client.move_to(canal_voz)
+            vc = guild.voice_client
+        else:
+            vc = await canal_voz.connect()
+    except discord.ClientException:
+        await canal_texto.send("⚠️ Não foi possível entrar na call.")
+        return
+
+    estado = _musica_estado.get(guild.id)
+    if estado is None:
+        estado = _EstadoMusica()
+        _musica_estado[guild.id] = estado
+    estado.canal_texto = canal_texto
+    _cancelar_idle_disconnect(guild.id)
+
+    aviso = await canal_texto.send(f"🔎 Procurando: `{link}` ...")
+
+    try:
+        info = await _extrair_info_audio(link)
+    except Exception as e:
+        await aviso.edit(content=f"⚠️ Erro ao buscar o áudio: `{e}`")
+        return
+
+    item = {
+        "titulo": info["titulo"],
+        "stream_url": info["stream_url"],
+        "requisitante": autor.display_name,
+    }
+    estado.fila.append(item)
+
+    if vc.is_playing() or vc.is_paused():
+        await aviso.edit(content=f"➕ Adicionado à fila: **{item['titulo']}**")
+        await _atualizar_painel(estado, guild.id)
+    else:
+        try:
+            await aviso.delete()
+        except discord.HTTPException:
+            pass
+        await _tocar_proxima(guild)
+
+
+async def _processar_link_solto(message: discord.Message) -> None:
+    """Se a mensagem tiver um link de música solto (YouTube/Spotify/
+    SoundCloud, sem usar o comando .tocar) e o autor estiver numa call,
+    bota na fila sozinho — sem precisar digitar .tocar."""
+    if message.author.voice is None or message.author.voice.channel is None:
+        return  # ninguém numa call, ignora silenciosamente
+
+    encontrado = _REGEX_LINK_MUSICA.search(message.content)
+    if not encontrado:
+        return
+
+    link = encontrado.group(0)
+    await _enfileirar_musica(
+        message.guild, message.author.voice.channel, message.channel, message.author, link
+    )
+
+
 @bot.command(name="tocar")
 async def cmd_tocar(ctx, *, link: str = None):
     """Toca um link na hora (se nada tocando) ou bota na fila (se já tem
@@ -20328,7 +20454,9 @@ async def cmd_tocar(ctx, *, link: str = None):
     if not link:
         await ctx.send(
             "⚠️ **Uso:** `.tocar <link>` — manda o link (ou nome da música) "
-            "que eu boto na fila."
+            "que eu boto na fila. YouTube, Spotify e SoundCloud funcionam. "
+            "Também dá pra só colar o link no chat sem `.tocar`, se você "
+            "estiver numa call."
         )
         return
 
@@ -20339,50 +20467,7 @@ async def cmd_tocar(ctx, *, link: str = None):
         )
         return
 
-    canal_voz = ctx.author.voice.channel
-
-    try:
-        if ctx.voice_client is not None:
-            if ctx.voice_client.channel.id != canal_voz.id:
-                await ctx.voice_client.move_to(canal_voz)
-            vc = ctx.voice_client
-        else:
-            vc = await canal_voz.connect()
-    except discord.ClientException:
-        await ctx.send("⚠️ Não foi possível entrar na call.")
-        return
-
-    estado = _musica_estado.get(ctx.guild.id)
-    if estado is None:
-        estado = _EstadoMusica()
-        _musica_estado[ctx.guild.id] = estado
-    estado.canal_texto = ctx.channel
-    _cancelar_idle_disconnect(ctx.guild.id)
-
-    aviso = await ctx.send(f"🔎 Procurando: `{link}` ...")
-
-    try:
-        info = await _extrair_info_audio(link)
-    except Exception as e:
-        await aviso.edit(content=f"⚠️ Erro ao buscar o áudio: `{e}`")
-        return
-
-    item = {
-        "titulo": info["titulo"],
-        "stream_url": info["stream_url"],
-        "requisitante": ctx.author.display_name,
-    }
-    estado.fila.append(item)
-
-    if vc.is_playing() or vc.is_paused():
-        await aviso.edit(content=f"➕ Adicionado à fila: **{item['titulo']}**")
-        await _atualizar_painel(estado, ctx.guild.id)
-    else:
-        try:
-            await aviso.delete()
-        except discord.HTTPException:
-            pass
-        await _tocar_proxima(ctx.guild)
+    await _enfileirar_musica(ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, link)
 
 
 @bot.command(name="sair", aliases=["parar", "stop"])

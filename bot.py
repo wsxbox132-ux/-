@@ -20725,12 +20725,40 @@ NOME_CALL_MUSICA = "🎶 Aeon & Celestia"
 _call_musica_ids: dict[int, int] = {}
 
 
+async def _achar_categoria_call_musica(guild: discord.Guild):
+    """Acha a categoria configurada, com fallback: primeiro tenta pelo
+    cache (get_channel), e se não achar (ex: cache desatualizado ou
+    canal criado antes do bot ter permissão de ver), busca direto na
+    API do Discord antes de desistir."""
+    categoria = guild.get_channel(CATEGORIA_CALL_MUSICA_ID)
+    if categoria is not None:
+        return categoria
+    try:
+        return await guild.fetch_channel(CATEGORIA_CALL_MUSICA_ID)
+    except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+        return None
+
+
 async def _garantir_call_musica(guild: discord.Guild) -> None:
     """Confere se a call fixa de música já existe na categoria configurada;
-    se não existir, cria. Guarda o ID pra reconhecer a call depois."""
-    categoria = guild.get_channel(CATEGORIA_CALL_MUSICA_ID)
-    if categoria is None or not isinstance(categoria, discord.CategoryChannel):
-        return  # essa categoria não existe (ou não é categoria) nesse servidor
+    se não existir, cria. Guarda o ID pra reconhecer a call depois.
+    Roda sozinho a cada vez que o bot liga (on_ready) — então se alguém
+    apagar a call, ela volta a ser criada no próximo restart. Pra forçar
+    sem precisar reiniciar o bot, use `.criarcallmusica`."""
+    categoria = await _achar_categoria_call_musica(guild)
+    if categoria is None:
+        print(
+            f"[call-musica] não encontrei a categoria {CATEGORIA_CALL_MUSICA_ID} "
+            f"em '{guild.name}' (ou não tenho permissão de ver o canal)."
+        )
+        return
+
+    if not isinstance(categoria, discord.CategoryChannel):
+        print(
+            f"[call-musica] o ID {CATEGORIA_CALL_MUSICA_ID} em '{guild.name}' "
+            f"não é uma categoria (é {type(categoria).__name__})."
+        )
+        return
 
     for canal in categoria.voice_channels:
         if canal.name == NOME_CALL_MUSICA:
@@ -20742,9 +20770,68 @@ async def _garantir_call_musica(guild: discord.Guild) -> None:
         _call_musica_ids[guild.id] = canal_criado.id
         print(f"[call-musica] criei a call '{NOME_CALL_MUSICA}' em '{guild.name}'")
     except discord.Forbidden:
-        print(f"[call-musica] sem permissão pra criar a call de música em '{guild.name}'")
+        print(
+            f"[call-musica] SEM PERMISSÃO (Gerenciar Canais) pra criar a call "
+            f"de música em '{guild.name}' — dá o cargo do bot permissão de "
+            f"'Gerenciar Canais' (na categoria ou no servidor todo) e roda "
+            f"`.criarcallmusica` pra tentar de novo."
+        )
     except discord.HTTPException as e:
         print(f"[call-musica] ERRO ao criar a call de música em '{guild.name}': {e!r}")
+
+
+@bot.command(name="criarcallmusica")
+async def cmd_criar_call_musica(ctx):
+    """Comando manual: tenta (re)criar a call fixa de música agora, sem
+    precisar reiniciar o bot, e explica no chat se não conseguir (falta
+    de permissão, ID errado, etc.). Uso: .criarcallmusica"""
+    if ctx.guild is None:
+        return
+
+    pode_usar = ctx.author.id == CRIADOR_ID or ctx.author.guild_permissions.manage_channels
+    if not pode_usar:
+        await ctx.send("⚠️ Você precisa da permissão **Gerenciar Canais** pra usar esse comando.")
+        return
+
+    categoria = await _achar_categoria_call_musica(ctx.guild)
+    if categoria is None:
+        await ctx.send(
+            f"⚠️ Não encontrei nenhum canal com o ID `{CATEGORIA_CALL_MUSICA_ID}` "
+            "nesse servidor — ou o ID tá errado, ou eu não tenho permissão "
+            "de **Ver Canal** nele. Confere os dois."
+        )
+        return
+
+    if not isinstance(categoria, discord.CategoryChannel):
+        await ctx.send(
+            f"⚠️ O ID `{CATEGORIA_CALL_MUSICA_ID}` existe, mas não é uma "
+            f"categoria — é um(a) `{type(categoria).__name__}`. Preciso do "
+            "ID da **categoria**, não de um canal dentro dela."
+        )
+        return
+
+    for canal in categoria.voice_channels:
+        if canal.name == NOME_CALL_MUSICA:
+            _call_musica_ids[ctx.guild.id] = canal.id
+            await ctx.send(f"✅ A call **{NOME_CALL_MUSICA}** já existe: {canal.mention}")
+            return
+
+    try:
+        canal_criado = await categoria.create_voice_channel(name=NOME_CALL_MUSICA)
+    except discord.Forbidden:
+        await ctx.send(
+            "⚠️ Não consegui criar a call — falta a permissão **Gerenciar "
+            "Canais** pro meu cargo (verifica tanto o cargo do bot nas "
+            "configurações do servidor quanto as permissões específicas "
+            "dessa categoria)."
+        )
+        return
+    except discord.HTTPException as e:
+        await ctx.send(f"⚠️ Erro ao criar a call: `{e}`")
+        return
+
+    _call_musica_ids[ctx.guild.id] = canal_criado.id
+    await ctx.send(f"✅ Criei a call **{NOME_CALL_MUSICA}**: {canal_criado.mention} 🌑🌟")
 
 
 def _canal_texto_para_call_musica(guild: discord.Guild, canal_voz: "discord.VoiceChannel"):

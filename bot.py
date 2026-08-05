@@ -20656,6 +20656,29 @@ async def cmd_tocar(ctx, *, link: str = None):
         await _enfileirar_musica(ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, link)
 
 
+# ── .tocardeath — link fixo e especial, dedicado à Death ──────────────────
+LINK_MUSICA_DEATH = "https://youtu.be/EJpcrZaX10Y?si=6b-R25E74_pxy7aB"
+
+
+@bot.command(name="tocardeath")
+async def cmd_tocardeath(ctx):
+    """Comando especial: toca direto a música fixa dedicada à Death,
+    sem precisar de link. Uso: .tocardeath"""
+    if ctx.guild is None:
+        return
+
+    if ctx.author.voice is None or ctx.author.voice.channel is None:
+        await ctx.send(
+            "🌑 **Aeon:** *emerge das sombras e olha em volta* "
+            "...você não está em nenhuma call. 🖤🌑 Entre em uma call primeiro."
+        )
+        return
+
+    await _enfileirar_musica(
+        ctx.guild, ctx.author.voice.channel, ctx.channel, ctx.author, LINK_MUSICA_DEATH
+    )
+
+
 @bot.command(name="sair", aliases=["parar", "stop"])
 async def cmd_sair(ctx):
     """Limpa a fila inteira, para a música e desconecta da call."""

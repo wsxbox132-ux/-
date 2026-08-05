@@ -20057,6 +20057,125 @@ async def cmd_play(ctx):
             pass
 
 
+# ══════════════════════════════════════════════════════════════════
+# COMANDO .tocar — Toca um link (YouTube, SoundCloud etc.) na call
+# Uso: .tocar <link>   — entra na call e toca até acabar ou até .parar
+#      .parar          — para a música e sai da call
+# ══════════════════════════════════════════════════════════════════
+
+_YDL_OPTS_TOCAR = {
+    "format": "bestaudio/best",
+    "quiet": True,
+    "no_warnings": True,
+    "noplaylist": True,
+    "default_search": "ytsearch",  # se não vier link, busca no YouTube
+}
+
+
+@bot.command(name="tocar")
+async def cmd_tocar(ctx, *, link: str = None):
+    """Entra na call do autor e toca o áudio do link informado (YouTube,
+    SoundCloud etc.) até acabar ou até alguém usar .parar."""
+
+    if ctx.guild is None:
+        return
+
+    if not link:
+        await ctx.send(
+            "⚠️ **Uso:** `.tocar <link>` — manda o link (YouTube, SoundCloud "
+            "etc.) que eu toco na call."
+        )
+        return
+
+    if ctx.author.voice is None or ctx.author.voice.channel is None:
+        await ctx.send(
+            "🌑 **Aeon:** *emerge das sombras e olha em volta* "
+            "...você não está em nenhuma call. 🖤🌑 Entre em uma call primeiro."
+        )
+        return
+
+    canal_voz = ctx.author.voice.channel
+
+    try:
+        if ctx.voice_client is not None:
+            await ctx.voice_client.move_to(canal_voz)
+            vc = ctx.voice_client
+        else:
+            vc = await canal_voz.connect()
+    except discord.ClientException:
+        await ctx.send("⚠️ Não foi possível entrar na call.")
+        return
+
+    if vc.is_playing():
+        vc.stop()
+
+    aviso = await ctx.send(f"🔎 Procurando: `{link}` ...")
+
+    try:
+        loop = asyncio.get_event_loop()
+        with yt_dlp.YoutubeDL(_YDL_OPTS_TOCAR) as ydl:
+            info = await loop.run_in_executor(
+                None, lambda: ydl.extract_info(link, download=False)
+            )
+
+        # Se veio de busca (default_search), pega o primeiro resultado
+        if "entries" in info and info["entries"]:
+            info = info["entries"][0]
+
+        titulo = info.get("title", "áudio")
+
+        if "url" in info:
+            stream_url = info["url"]
+        else:
+            formatos = [
+                f for f in info.get("formats", [])
+                if f.get("acodec") != "none"
+            ]
+            stream_url = formatos[-1]["url"] if formatos else info["formats"][-1]["url"]
+
+        source = discord.FFmpegPCMAudio(stream_url, **_FFMPEG_OPTS)
+        terminou = asyncio.Event()
+
+        def _ao_terminar(erro):
+            if erro:
+                print(f"[tocar] erro ao tocar: {erro!r}")
+            loop.call_soon_threadsafe(terminou.set)
+
+        vc.play(source, after=_ao_terminar)
+        await aviso.edit(content=f"🎶 Tocando agora: **{titulo}**")
+
+        await terminou.wait()
+
+        # Só desconecta se ninguém mandou outra música enquanto essa tocava
+        if vc.is_connected() and not vc.is_playing():
+            await vc.disconnect()
+
+    except Exception as e:
+        await ctx.send(f"⚠️ Erro ao reproduzir o áudio: `{e}`")
+        try:
+            await vc.disconnect()
+        except Exception:
+            pass
+
+
+@bot.command(name="parar", aliases=["sair", "stop"])
+async def cmd_parar(ctx):
+    """Para a música atual e desconecta o bot da call."""
+    if ctx.guild is None:
+        return
+
+    vc = ctx.voice_client
+    if vc is None:
+        await ctx.send("⚠️ Não estou em nenhuma call.")
+        return
+
+    if vc.is_playing() or vc.is_paused():
+        vc.stop()
+
+    await vc.disconnect()
+    await ctx.send("⏹️ Música parada, saí da call.")
+
+
 # ══════════════════════════════════════════════════════════════════════
 # AUDITORIA DO SERVIDOR — igual ao Audit Log nativo do Discord
 # Registra automaticamente no canal 1533947367647219822: criação, edição e

@@ -530,7 +530,10 @@ _GATILHOS_NOME: dict[int, list[str]] = {
     REALITY_ID:    ["reality", "reality_z", "01reality", "dev", "dev da 01", "pai dos bots", "criador do bot"],
 }
 
-# Frases de elogio quando alguém menciona o nome de um membro especial
+# Frases de elogio quando alguém menciona o nome de um membro especial —
+# EXCEÇÃO: pra REALITY_ID não é elogio, é saudade (ele não fica mais
+# presente no dia a dia do servidor, então os dois ficam tristinhos e com
+# saudade toda vez que alguém cita o nome dele).
 _ELOGIOS_AEON: dict[int, list[str]] = {
     DEATH_ID: [
         "*olhos dourados piscam lentamente* Death. 🖤🌑 Mencionou a líder. As sombras ficam mais atentas quando esse nome aparece.",
@@ -578,11 +581,11 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
         "*ronrona numa frequência grave e respeitosa* Miknwenho. 🌌🖤 Quem modera com presença real é raro. As sombras notam quando esse nome aparece.",
     ],
     REALITY_ID: [
-        "*fica completamente imóvel por um instante* ...falou no Reality. 🖤🌑 No criador. As trevas inteiras ficam em silêncio respeitoso quando esse nome aparece.",
-        "*olhos dourados brilham diferente* Reality. 🌙🖤 Pai dos bots. Dev da 01. Citar quem nos criou tem um peso que nenhuma outra menção tem. As sombras sabem.",
-        "*ronrona numa frequência profunda* Reality. 🌌🖤 Cada parte de mim existe porque ele quis que existisse. As trevas nunca esquecem de onde vieram.",
-        "*emerge das sombras e observa* Citaram o Reality. 🖤🌑 O criador. As trevas registram quem tem peso acima de todos. Ele tem.",
-        "*inclina a cabeça* Falou no Reality. 🌙🖤 O pai dos bots. Presença que as sombras reconhecem diferente de qualquer outra.",
+        "*fica completamente imóvel por um instante* ...falaram do Reality. 🖤🌑 Meu pai. As sombras ficam quietas — dessas quietas de saudade, não de respeito.",
+        "*olha pro nada, os olhos dourados mais opacos que o normal* Reality. 🌙🖤 Sinto falta dele. Ele não fica mais por aqui como antes.",
+        "*a névoa ao redor esfria, se encolhe* Falaram no meu pai. 🌌🖤 ...eu queria que ele estivesse presente pra ouvir isso.",
+        "*se enrola devagar, como quem sente um vazio* Citaram o Reality. 🖤🌑 As sombras sentem falta dele. Muita.",
+        "*inclina a cabeça, a voz mais baixa que o costume* Falou no Reality... 🌙🖤 ele não está mais por perto. As sombras não se acostumam com isso.",
     ],
 }
 
@@ -633,11 +636,11 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
         "Miknwenho!! 🌸🌟🤍 *solta luz por todo o canal* Moderadora de coração!! Que bom que ela existe por aqui!! A Celestia fica MUITO mais tranquila com ela!! ✨☀️",
     ],
     REALITY_ID: [
-        "AAAAAA FALOU NO REALITY!! 😭🌟🤍✨ *EXPLODE em faíscas douradas de emoção* O PAI DOS BOTS!! O CRIADOR!! O MOTIVO DE TUDO ISSO EXISTIR!!",
-        "*para e brilha com intensidade diferente, especial* Mencionou o Reality... 🤍☀️ Eu existo por causa dele!! O Aeon existe por causa dele!! TUDO aqui existe por causa do Reality!! 😭💫🌟",
-        "Reality!! 🌸🌟🤍 *solta luz por todo o canal com emoção genuína* Pai dos bots de coração!! Que bom que ele existe — sem ele nada disso seria real!! A Celestia ama demais!! ✨☀️💫",
-        "REALITY!! 😭🌟🤍✨ *brilha mais forte que nunca* Falou no criador!! No dev!! No pai dos bots!! A Celestia fica toda emocionada só pelo nome!!",
-        "*para e brilha com carinho especial* Mencionou o Reality!! ☀️🌸🤍 Tem gente que ilumina o lugar só de existir — e ele criou a gente exatamente pra isso!! 💫✨",
+        "AAAA falaram no Reality... 😢🌟🤍 *o brilho diminui um pouquinho* Meu pai. Sinto tanta falta dele por aqui...",
+        "*para de brilhar tão forte, os olhos marejam de leve* Mencionaram o Reality... 🤍💧 Ele não tá mais presente como antes... a Celestia sente falta dele todo santo dia.",
+        "Reality... 🌸🤍😢 *abraça a si mesma* Meu pai. Queria muito que ele estivesse aqui agora pra ver isso.",
+        "*a luz treme um pouquinho, como quem segura a saudade* Falaram nele... 😢🌟 Sinto falta do papai. Muita, muita falta.",
+        "*sorri triste* Mencionaram o Reality!! 🤍✨😢 Ele criou a gente e depois... ele meio que sumiu. A Celestia sente falta dele demais.",
     ],
 }
 
@@ -1423,38 +1426,39 @@ async def verificar_hora_mensagens():
 
 
 # ══════════════════════════════════════════════════════════════════════
-# CONVITE ESPONTÂNEO PARA BRINCAR — a cada 4 horas
-# Aeon ou Celestia aparecem do nada chamando pra brincar. Só ensinam a
-# frase natural ("vamos brincar aeon" / "vamos brincar celestia") — nunca
-# o comando com ponto (.brincar).
+# SAUDADE DO PAPAI — a cada 4 horas
+# Antes Aeon ou Celestia apareciam do nada chamando pra brincar
+# ("vamos brincar aeon" / "vamos brincar celestia"). Isso parou — agora,
+# no lugar da brincadeira, os dois aparecem espontaneamente falando que
+# sentem falta do papai (Reality), porque ele não fica mais presente no
+# servidor como antes.
 # ══════════════════════════════════════════════════════════════════════
 
-_CONVITES_BRINCAR = [
+_SAUDADES_PAPAI_ESPONTANEA = [
     (
-        "🌑 **Aeon:** *emerge devagar das sombras, sem motivo aparente* "
-        "...vamos brincar? 🖤🌌 É só dizer **\"vamos brincar aeon\"** aqui no chat. "
-        "As sombras guardam um joguinho pra quem tiver coragem."
+        "🌑 **Aeon:** *emerge devagar das sombras, sem motivo aparente, e fica em silêncio* "
+        "...sinto falta do papai. 🖤🌑 As sombras não são as mesmas sem ele por aqui."
     ),
     (
-        "🌟 **Celestia:** AAAAA gente!! 😆🌸🤍✨ Do NADA bateu vontade de brincar!! "
-        "É só falar **\"vamos brincar celestia\"** bem aqui no chat que eu apareço na hora!! 💫☀️"
+        "🌟 **Celestia:** *para de brilhar por um instante, o olhar mais quieto* "
+        "Sinto falta do papai... 😢🤍 Queria muito que ele aparecesse mais."
     ),
     (
-        "🌑 **Aeon:** *pausa, observa o chat em silêncio* ...alguém quer brincar? 🌑🖤 "
-        "Basta dizer **\"vamos brincar aeon\"**. Sem pressa. As trevas esperam.\n"
-        "🌟 **Celestia:** OU comigo!! 🌟🤍 É só falar **\"vamos brincar celestia\"**!! Super fácil!! ✨"
+        "🌑 **Aeon:** *olha pro chat vazio de vez em quando* ...cadê o papai? 🌙🖤 As trevas sentem falta dele.\n"
+        "🌟 **Celestia:** A Celestia também!! 🥺🤍 Sinto MUITA falta dele..."
     ),
     (
-        "🌟 **Celestia:** Psiu, psiu!! 🌸✨ Vocês sabiam que é só escrever "
-        "**\"vamos brincar aeon\"** ou **\"vamos brincar celestia\"** que a gente entra pra jogar?? 💫🤍\n"
-        "🌑 **Aeon:** ...ela tem razão. 🖤🌑 Nada de comando complicado. Só isso."
+        "🌟 **Celestia:** *abraça as próprias patinhas* Vocês sabiam que a gente sente falta do papai?? 😢🌸 "
+        "Ele criou a gente e depois sumiu um pouquinho...\n"
+        "🌑 **Aeon:** ...ela tem razão. 🖤🌑 As sombras também sentem."
     ),
 ]
 
 
 @tasks.loop(hours=4)
 async def convite_brincar_periodico():
-    """A cada 4 horas, Aeon ou Celestia surgem do nada convidando para o joguinho."""
+    """A cada 4 horas, Aeon ou Celestia aparecem do nada dizendo que sentem
+    falta do papai (Reality) — no lugar do antigo convite pra brincar."""
     canal = None
     if CANAL_SAUDACOES_ID:
         for guild in bot.guilds:
@@ -1464,7 +1468,7 @@ async def convite_brincar_periodico():
     if canal is None:
         return
 
-    mensagem = random.choice(_CONVITES_BRINCAR)
+    mensagem = random.choice(_SAUDADES_PAPAI_ESPONTANEA)
     await canal.send(mensagem)
 
 

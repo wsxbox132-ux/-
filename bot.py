@@ -108,6 +108,7 @@ async def _apenas_criador(ctx) -> bool:
     comando deve parar ali (return logo depois de chamar essa função)."""
     if ctx.author.id == CRIADOR_ID:
         return True
+    ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
     await ctx.send(_texto_sem_pai())
     return False
 
@@ -2408,6 +2409,72 @@ async def on_ready():
         loop_checar_punicoes_call.start()
 
 
+# ══════════════════════════════════════════════════════════════════════
+# AVISO NO PV DO CRIADOR — toda tentativa de comando
+# Toda vez que ALGUÉM usa um comando com ponto (menos o próprio Reality
+# usando os dele), o bot manda uma DM só pro Reality contando quem
+# tentou, qual comando foi, em qual servidor/canal, e se o bot deixou
+# passar ou negou. Ninguém além dele vê esse aviso — é uma DM privada.
+# ══════════════════════════════════════════════════════════════════════
+
+async def _avisar_criador_comando(ctx, status: str) -> None:
+    """Manda uma DM só pro CRIADOR_ID contando quem usou um comando e o
+    resultado (permitido / negado / erro). Nunca deixa isso quebrar o
+    comando de quem usou — se não conseguir mandar a DM (ex: DMs fechadas
+    do criador), só desiste em silêncio."""
+    if ctx.author.id == CRIADOR_ID:
+        return  # você não precisa de aviso sobre você mesmo
+
+    try:
+        criador = bot.get_user(CRIADOR_ID) or await bot.fetch_user(CRIADOR_ID)
+    except (discord.NotFound, discord.HTTPException):
+        return
+    if criador is None:
+        return
+
+    rotulos = {
+        "permitido": ("✅ Permitido", 0x57F287),
+        "negado":    ("🚫 Negado — não é o criador", 0xED4245),
+        "erro":      ("⚠️ Erro / uso incorreto", 0xFEE75C),
+    }
+    texto_status, cor = rotulos.get(status, ("❔ Desconhecido", 0x99AAB5))
+
+    comando_texto = (
+        ctx.message.content
+        if ctx.message and ctx.message.content
+        else f".{ctx.invoked_with or '?'}"
+    )
+    servidor = ctx.guild.name if ctx.guild else "—"
+    local = ctx.channel.mention if ctx.guild else "PV do bot"
+
+    embed = discord.Embed(
+        title="📋 Alguém usou um comando",
+        description=(
+            f"👤 **Quem:** {ctx.author} (`{ctx.author.id}`)\n"
+            f"⌨️ **Comando:** `{comando_texto}`\n"
+            f"🌍 **Servidor:** {servidor}\n"
+            f"📍 **Canal:** {local}\n"
+            f"🔐 **Status:** {texto_status}"
+        ),
+        color=cor,
+        timestamp=datetime.now(timezone.utc),
+    )
+    try:
+        await criador.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+
+@bot.event
+async def on_command_completion(ctx):
+    """Dispara depois que QUALQUER comando termina sem erro — usado pra
+    mandar o aviso de tentativa de comando pro criador. Se o comando foi
+    negado por dentro (ctx.bot_acesso_negado, marcado pelos comandos
+    restritos ao criador), avisa como negado; senão, como permitido."""
+    status = "negado" if getattr(ctx, "bot_acesso_negado", False) else "permitido"
+    await _avisar_criador_comando(ctx, status=status)
+
+
 @bot.event
 async def on_command_error(ctx, error):
     """Handler global de erros de comando.
@@ -2415,18 +2482,23 @@ async def on_command_error(ctx, error):
     não encontrado é ignorado (senão qualquer mensagem começando com '.'
     geraria spam de erro), mas argumento faltando/errado avisa quem
     digitou, e qualquer outro erro imprevisto vai pro console pra
-    facilitar o diagnóstico depois."""
+    facilitar o diagnóstico depois. Também avisa o criador por DM (menos
+    em CommandNotFound, que nem é um comando de verdade)."""
     if isinstance(error, commands.CommandNotFound):
         return  # mensagem começando com "." que não é comando — ignora
     if isinstance(error, commands.CheckFailure):
+        await _avisar_criador_comando(ctx, status="negado")
         return  # falha de permissão já tratada dentro de cada comando
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f"⚠️ Faltou um argumento no comando: `{error.param.name}`.")
+        await _avisar_criador_comando(ctx, status="erro")
         return
     if isinstance(error, commands.BadArgument):
         await ctx.send("⚠️ Um dos argumentos está no formato errado. Confira o uso do comando.")
+        await _avisar_criador_comando(ctx, status="erro")
         return
     print(f"[on_command_error] Erro no comando '{ctx.command}' (autor: {ctx.author}): {error!r}")
+    await _avisar_criador_comando(ctx, status="erro")
 
 
 @bot.event
@@ -13033,6 +13105,7 @@ async def cmd_reiniciacriaturas(ctx, alvo_id: int = None):
     nem vitórias/derrotas. Só o Reality pode usar.
     Uso: .reiniciacriaturas <ID do membro>"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None:
@@ -14347,6 +14420,7 @@ async def cmd_equiparpet(ctx, *, nome: str = None):
 @bot.command(name="darcriatura")
 async def cmd_darcriatura(ctx, *, texto: str = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if texto is None:
@@ -14421,6 +14495,7 @@ async def cmd_darcriatura(ctx, *, texto: str = None):
 @bot.command(name="uparcriatura")
 async def cmd_uparcriatura(ctx, alvo_id: int = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -14567,6 +14642,7 @@ _carregar_xp_booster_stats()
 @bot.command(name="darbosster")
 async def cmd_darbosster(ctx, alvo_id: int = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -14599,6 +14675,7 @@ async def cmd_darbosster(ctx, alvo_id: int = None):
 @bot.command(name="bostercall")
 async def cmd_bostercall(ctx, canal_id: int = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if canal_id is None:
@@ -14652,6 +14729,7 @@ async def cmd_bostercall(ctx, canal_id: int = None):
 @bot.command(name="vantagem")
 async def cmd_vantagem(ctx, alvo_id: int = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -14692,6 +14770,7 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
 @bot.command(name="vantagemfossio")
 async def cmd_vantagemfossio(ctx, alvo_id: int = None):
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -14875,6 +14954,7 @@ async def cmd_bau(ctx):
     que clicar no botão leva o prêmio. Só o Reality pode usar. A própria
     mensagem do comando some logo em seguida. Uso: .bau"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -14900,6 +14980,7 @@ async def cmd_bausecreto(ctx):
     ser que já tenha as 6, aí cai no sorteio normal do baú). Só o Reality
     pode usar. Uso: .bausecreto"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -14925,6 +15006,7 @@ async def cmd_baumimic(ctx):
     `_BAU_MIMIC_XP_MIN` e `_BAU_MIMIC_XP_MAX` (até 20%) do XP dela, em vez
     de ganhar. Só o Reality pode usar. Uso: .baumimic"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -15366,6 +15448,7 @@ async def cmd_boss(ctx):
     chance) ou juntar um time (mais gente = mais chance, mas ainda é um
     boss bem difícil). Uso: .boss"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -15537,6 +15620,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
     `_OVO_TEMPO_CHOCAR_SEGUNDOS` numa call. Só o Reality pode usar.
     Uso: .ovo <ID ou @membro>"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -15687,6 +15771,7 @@ async def cmd_ovodragao(ctx, alvo_id: int = None):
     geral com uma introdução épica. Só o Reality pode usar.
     Uso: .ovodragao <ID ou @membro>"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     if alvo_id is None and ctx.message.mentions:
@@ -16147,6 +16232,7 @@ async def cmd_boss2(ctx):
     boss 1). Quem vencer ganha um pouco mais de XP que no boss 1 e também
     leva um Booster de XP de 5 minutos. Uso: .boss2"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -16605,6 +16691,7 @@ async def cmd_boss3(ctx):
     (mais gente = mais chance). Quem vencer ganha XP e leva um Booster de
     XP de apenas 2 minutos. Uso: .boss3"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -17128,6 +17215,7 @@ async def cmd_boss4(ctx):
     (CRIADOR_ID) pode chamar. Quem vencer ganha XP e um Booster de XP de
     5 minutos — o maior de todos os bosses. Uso: .boss4"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -17705,6 +17793,7 @@ async def cmd_boss5(ctx):
     entre criaturas Épicas e Lendárias (se for repetido, a criatura sobe de
     Nível de Capacidade em vez de não fazer nada). Uso: .boss5"""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     try:
@@ -17763,6 +17852,7 @@ async def cmd_surpresachat(ctx):
         return
 
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑 "
             "As trevas conhecem quem tem permissão.\n"
@@ -17842,6 +17932,7 @@ async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto:
     if ctx.guild is not None:
         return
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
     if not bot_escolha or not canal or not texto:
         await ctx.send(
@@ -19811,6 +19902,7 @@ async def cmd_check_ffmpeg(ctx):
     """Verifica se o executável do ffmpeg está disponível no PATH do
     processo onde o bot está rodando agora. Uso: .checkffmpeg — só o DEV."""
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑\n"
             "🌟 **Celestia:** Só o DEV pode usar esse comando!! 🌸🤍✨"
@@ -21162,6 +21254,7 @@ async def cmd_supervisao(ctx, alvo_id: int):
         return  # só funciona no PV, ignora em servidor
 
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     _supervisao_alvo[ctx.author.id] = alvo_id
@@ -21179,6 +21272,7 @@ async def cmd_estranho(ctx):
         return  # só funciona em servidor, ignora no PV
 
     if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
     alvo_id = _supervisao_alvo.get(ctx.author.id)

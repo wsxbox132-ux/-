@@ -19706,6 +19706,126 @@ async def cmd_estranho(ctx):
     await ctx.send(embed=embed)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# COMANDO .diretrizes — mostra as diretrizes da 01, uma de cada vez, com
+# a Aeon/Celestia "escrevendo" antes de cada uma. No final, pergunta se
+# a pessoa está de acordo.
+# ══════════════════════════════════════════════════════════════════════
+
+_DIRETRIZES_01 = [
+    (
+        "📜 Diretriz I — Preservação da Estrutura",
+        (
+            "Nenhum canal da 01 deverá ser apagado ou alterado de forma indevida. "
+            "A integridade da estrutura do servidor deve ser preservada em todos os momentos. "
+            "Apenas membros com cargos elevados e devidamente autorizados poderão realizar "
+            "alterações administrativas — o bot não possui permissão para executar tais ações.\n\n"
+            "🌑 *A estrutura é a casa de todos nós — cuidamos dela com carinho.* 🖤"
+        ),
+        0x95A5A6,
+    ),
+    (
+        "☮️ Diretriz II — Harmonia na 01",
+        (
+            "A paz e a harmonia dentro da 01 devem ser sempre priorizadas. Conflitos, provocações "
+            "e atitudes que possam prejudicar a convivência entre os membros deverão ser evitados "
+            "e, quando necessário, devidamente contidos.\n\n"
+            "🌟 *Aqui a gente cresce junto — sem briga, com colo.* 🤍"
+        ),
+        0x3498DB,
+    ),
+    (
+        "🛡️ Diretriz III — Proteção de Todos",
+        (
+            "A segurança de cada membro da 01 é uma responsabilidade coletiva. Devemos garantir um "
+            "ambiente protegido, respeitoso e acolhedor, intervindo sempre que houver qualquer ameaça "
+            "à integridade ou ao bem-estar de nossos membros.\n\n"
+            "🌑 *Ninguém fica desprotegido enquanto a gente estiver de olho.* 🖤🌑"
+        ),
+        0xE67E22,
+    ),
+    (
+        "💜 Diretriz IV — Proteção de Death",
+        (
+            "Durante a ausência de Reality, a segurança e o bem-estar de Death deverão permanecer "
+            "como prioridade. Ela deve ser mantida segura, protegida e, acima de tudo, sorridente. "
+            "Cuidar dela não é apenas uma responsabilidade, mas um compromisso que deve ser levado a sério.\n\n"
+            "🌟 *Ela é o coração da 01 — protegê-la é o mínimo que a gente pode fazer.* 💜✨"
+        ),
+        0x9B59B6,
+    ),
+]
+
+_ENTRE_DIRETRIZES_SEGUNDOS = (2.0, 3.2)  # tempo "escrevendo" antes de cada uma (min, max)
+
+
+class ConcordaDiretrizesView(discord.ui.View):
+    """Botão único no fim das diretrizes — só quem pediu o comando pode
+    clicar, pra ninguém confirmar concordância por outra pessoa."""
+
+    def __init__(self, autor_id: int):
+        super().__init__(timeout=300)  # 5 minutos pra responder
+        self.autor_id = autor_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.autor_id:
+            await interaction.response.send_message(
+                "🌑 **Aeon:** *observa em silêncio* ...essas diretrizes não são suas pra concordar. 🖤",
+                ephemeral=True,
+            )
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        for item in self.children:
+            item.disabled = True
+        if self.message is not None:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="Você está de acordo?", style=discord.ButtonStyle.success, emoji="✅", custom_id="concorda_diretrizes")
+    async def concordar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(
+            "🌟 **Celestia:** Permissão cedida! 🌟🤍✨"
+        )
+        self.stop()
+
+
+@bot.command(name="diretrizes")
+async def cmd_diretrizes(ctx):
+    """Mostra as diretrizes da 01, uma de cada vez, com a Aeon/Celestia
+    'escrevendo' antes de cada uma. Uso: .diretrizes"""
+    async with ctx.typing():
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+    await ctx.send(
+        "🌑 **Aeon:** *as sombras se aquietam* ...preste atenção — estas são as diretrizes da 01, criadas em 14/06/26. 🖤🌑\n"
+        "🌟 **Celestia:** Lê com carinho, tá?? São importantes pra gente!! 🌸🤍"
+    )
+
+    for titulo, descricao, cor in _DIRETRIZES_01:
+        async with ctx.typing():
+            await asyncio.sleep(random.uniform(*_ENTRE_DIRETRIZES_SEGUNDOS))
+        embed = discord.Embed(title=titulo, description=descricao, color=cor)
+        embed.set_footer(text="📜 Diretrizes da 01 — Aeon & Celestia")
+        await ctx.send(embed=embed)
+
+    async with ctx.typing():
+        await asyncio.sleep(random.uniform(1.5, 2.5))
+
+    view = ConcordaDiretrizesView(autor_id=ctx.author.id)
+    msg = await ctx.send(
+        "🌟 **Celestia:** Foi tudo lido com carinho até aqui!! 🌸✨\n"
+        "🌑 **Aeon:** Só falta uma coisa. 🖤",
+        view=view,
+    )
+    view.message = msg
+
+
 # ══════════════════════════════════════════════
 # START
 # ══════════════════════════════════════════════

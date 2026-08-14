@@ -88,12 +88,35 @@ def _texto_sem_pai() -> str:
     return f"🌑 **Aeon:** {frase_aeon}\n🌟 **Celestia:** {frase_celestia}"
 
 
-async def _apenas_criador(ctx) -> bool:
-    """Verifica se quem usou o comando é o criador do bot (CRIADOR_ID).
-    Se não for, Aeon & Celestia recusam com a reação fofa acima. Devolve
-    True se pode seguir em frente, False se foi negado — nesse caso o
-    comando deve parar ali (return logo depois de chamar essa função)."""
+# ══════════════════════════════════════════════════════════════════════
+# AUTORIZAÇÃO REMOTA — quando um comando restrito é negado, o criador
+# recebe a DM com botões e pode autorizar aquela tentativa específica na
+# hora, sem precisar estar no servidor. Guarda o ID da MENSAGEM original
+# que foi autorizada; assim que o comando é reexecutado com sucesso, o ID
+# sai da lista (autorização vale só pra aquela tentativa, uma vez).
+# ══════════════════════════════════════════════════════════════════════
+_autorizacoes_pendentes: set = set()  # ids de mensagens autorizadas remotamente pelo criador
+
+
+def _autorizado(ctx) -> bool:
+    """True se quem usou o comando for o criador, OU se essa mensagem
+    específica acabou de ser autorizada remotamente pela DM do criador."""
     if ctx.author.id == CRIADOR_ID:
+        return True
+    if ctx.message.id in _autorizacoes_pendentes:
+        _autorizacoes_pendentes.discard(ctx.message.id)  # autorização de uso único
+        return True
+    return False
+
+
+async def _apenas_criador(ctx) -> bool:
+    """Verifica se quem usou o comando é o criador do bot (CRIADOR_ID) —
+    ou se essa tentativa foi autorizada remotamente pelo criador via DM.
+    Se não for nenhum dos dois, Aeon & Celestia recusam com a reação fofa
+    acima. Devolve True se pode seguir em frente, False se foi negado —
+    nesse caso o comando deve parar ali (return logo depois de chamar
+    essa função)."""
+    if _autorizado(ctx):
         return True
     ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
     await ctx.send(_texto_sem_pai())
@@ -2395,19 +2418,123 @@ async def on_ready():
 # usando os dele), o bot manda uma DM só pro Reality contando quem
 # tentou, qual comando foi, em qual servidor/canal, e se o bot deixou
 # passar ou negou. Ninguém além dele vê esse aviso — é uma DM privada.
+#
+# Quando o status é "negado", a DM vem com botões: o criador pode
+# autorizar aquela tentativa específica na hora (o bot reexecuta o
+# comando original com permissão liberada) ou manter a recusa.
 # ══════════════════════════════════════════════════════════════════════
+
+class AutorizacaoComandoView(discord.ui.View):
+    """Botões ✅ Autorizar / ❌ Negar que aparecem na DM do criador quando
+    um comando restrito é negado. Autorizar reexecuta a mensagem original
+    (agora com permissão liberada, uma única vez) e avisa no canal onde
+    o comando foi digitado, no estilo fofo do Aeon & Celestia."""
+
+    def __init__(self, *, channel_id: int, message_id: int, autor_id: int):
+        super().__init__(timeout=300)  # 5 minutos pra decidir
+        self.channel_id = channel_id
+        self.message_id = message_id
+        self.autor_id = autor_id
+        self.decidido = False
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == CRIADOR_ID
+
+    async def on_timeout(self) -> None:
+        if self.decidido or self.message is None:
+            return
+        for item in self.children:
+            item.disabled = True
+        try:
+            embed = self.message.embeds[0] if self.message.embeds else discord.Embed()
+            embed.add_field(name="⏳ Expirado", value="Passaram 5 minutos sem resposta — a recusa original ficou valendo.", inline=False)
+            await self.message.edit(embed=embed, view=self)
+        except discord.HTTPException:
+            pass
+
+    @discord.ui.button(label="✅ Autorizar", style=discord.ButtonStyle.success, custom_id="autorizar_comando_negado")
+    async def autorizar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.decidido = True
+        for item in self.children:
+            item.disabled = True
+
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
+        embed.add_field(
+            name="🔎 Analisando...",
+            value=(
+                "🌑 **Aeon:** *as sombras reconsideram* ...meu pai autorizou. Pode passar. 🖤🌙\n"
+                "🌟 **Celestia:** ANALISANDO... ✅ **PERMITIDO!!** Papai disse que pode!! 🌟🤍✨"
+            ),
+            inline=False,
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+
+        try:
+            canal = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
+            mensagem_original = await canal.fetch_message(self.message_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(
+                "⚠️ Não encontrei mais a mensagem original (foi apagada ou o canal sumiu) — não deu pra reexecutar o comando.",
+                ephemeral=True,
+            )
+            return
+
+        ctx_novo = await bot.get_context(mensagem_original)
+        if ctx_novo.command is None:
+            await interaction.followup.send(
+                "⚠️ Não reconheci mais um comando válido nessa mensagem (pode ter sido editada) — não reexecutei nada.",
+                ephemeral=True,
+            )
+            return
+
+        _autorizacoes_pendentes.add(mensagem_original.id)
+
+        try:
+            await mensagem_original.channel.send(
+                f"🔎 **Analisando pedido de {mensagem_original.author.display_name}...** ✅ **Permitido!**",
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            pass
+
+        try:
+            await bot.invoke(ctx_novo)
+        except Exception as e:
+            _autorizacoes_pendentes.discard(mensagem_original.id)
+            print(f"[autorizacao-remota] erro ao reexecutar comando autorizado de {self.autor_id}: {e!r}")
+            try:
+                await interaction.followup.send(f"⚠️ O comando rodou com erro: `{e!r}`", ephemeral=True)
+            except discord.HTTPException:
+                pass
+
+    @discord.ui.button(label="❌ Negar", style=discord.ButtonStyle.danger, custom_id="negar_comando_negado")
+    async def negar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self.decidido = True
+        for item in self.children:
+            item.disabled = True
+        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
+        embed.add_field(
+            name="🔒 Mantido negado",
+            value="🌑 **Aeon:** As sombras concordam. Continua fechado.\n🌟 **Celestia:** Negado é negado!! Fica assim mesmo!! 😤🌸",
+            inline=False,
+        )
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.stop()
+
 
 async def _avisar_criador_comando(ctx, status: str) -> None:
     """Manda uma DM só pro CRIADOR_ID contando quem usou um comando e o
-    resultado (permitido / negado / erro). Nunca deixa isso quebrar o
-    comando de quem usou — se não conseguir mandar a DM (ex: DMs fechadas
-    do criador), só desiste em silêncio."""
+    resultado (permitido / negado / erro). Se for "negado", a DM vem com
+    botões de autorização remota. Nunca deixa isso quebrar o comando de
+    quem usou — se não conseguir mandar a DM, loga o motivo no console
+    em vez de desistir em silêncio."""
     if ctx.author.id == CRIADOR_ID:
         return  # você não precisa de aviso sobre você mesmo
 
     try:
         criador = bot.get_user(CRIADOR_ID) or await bot.fetch_user(CRIADOR_ID)
-    except (discord.NotFound, discord.HTTPException):
+    except (discord.NotFound, discord.HTTPException) as e:
+        print(f"[aviso-criador] não encontrei o usuário do criador (ID {CRIADOR_ID}): {e!r}")
         return
     if criador is None:
         return
@@ -2439,10 +2566,29 @@ async def _avisar_criador_comando(ctx, status: str) -> None:
         color=cor,
         timestamp=datetime.now(timezone.utc),
     )
+    if status == "negado":
+        embed.set_footer(text="Autorize abaixo se quiser liberar essa tentativa específica.")
+
+    view = None
+    if status == "negado":
+        view = AutorizacaoComandoView(
+            channel_id=ctx.channel.id,
+            message_id=ctx.message.id,
+            autor_id=ctx.author.id,
+        )
+
     try:
-        await criador.send(embed=embed)
-    except (discord.Forbidden, discord.HTTPException):
-        pass
+        msg_dm = await criador.send(embed=embed, view=view)
+        if view is not None:
+            view.message = msg_dm
+    except discord.Forbidden:
+        print(
+            f"[aviso-criador] DM bloqueada — não consegui te avisar sobre o comando de "
+            f"{ctx.author} ({ctx.author.id}). Confira se 'Permitir DMs de membros do "
+            "servidor' está ativado pra você nesse servidor."
+        )
+    except discord.HTTPException as e:
+        print(f"[aviso-criador] Falha ao enviar DM de aviso: {e!r}")
 
 
 @bot.event
@@ -12307,7 +12453,7 @@ async def cmd_reiniciacriaturas(ctx, alvo_id: int = None):
     favorita) de UMA pessoa específica, por ID. Não mexe em XP/nível geral
     nem vitórias/derrotas. Só o Reality pode usar.
     Uso: .reiniciacriaturas <ID do membro>"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13622,7 +13768,7 @@ async def cmd_equiparpet(ctx, *, nome: str = None):
 
 @bot.command(name="darcriatura")
 async def cmd_darcriatura(ctx, *, texto: str = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13697,7 +13843,7 @@ async def cmd_darcriatura(ctx, *, texto: str = None):
 
 @bot.command(name="uparcriatura")
 async def cmd_uparcriatura(ctx, alvo_id: int = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13844,7 +13990,7 @@ _carregar_xp_booster_stats()
 
 @bot.command(name="darbosster")
 async def cmd_darbosster(ctx, alvo_id: int = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13877,7 +14023,7 @@ async def cmd_darbosster(ctx, alvo_id: int = None):
 
 @bot.command(name="bostercall")
 async def cmd_bostercall(ctx, canal_id: int = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13931,7 +14077,7 @@ async def cmd_bostercall(ctx, canal_id: int = None):
 
 @bot.command(name="vantagem")
 async def cmd_vantagem(ctx, alvo_id: int = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13972,7 +14118,7 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
 
 @bot.command(name="vantagemfossio")
 async def cmd_vantagemfossio(ctx, alvo_id: int = None):
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14156,7 +14302,7 @@ async def cmd_bau(ctx):
     """Joga um baú de recompensa no canal do chat geral — a primeira pessoa
     que clicar no botão leva o prêmio. Só o Reality pode usar. A própria
     mensagem do comando some logo em seguida. Uso: .bau"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14182,7 +14328,7 @@ async def cmd_bausecreto(ctx):
     GARANTIDAMENTE uma criatura 🌌 Secreta ainda não desbloqueada (a não
     ser que já tenha as 6, aí cai no sorteio normal do baú). Só o Reality
     pode usar. Uso: .bausecreto"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14208,7 +14354,7 @@ async def cmd_baumimic(ctx):
     disfarçado: quem clicar primeiro cai numa armadilha e PERDE entre
     `_BAU_MIMIC_XP_MIN` e `_BAU_MIMIC_XP_MAX` (até 20%) do XP dela, em vez
     de ganhar. Só o Reality pode usar. Uso: .baumimic"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14650,7 +14796,7 @@ async def cmd_boss(ctx):
     (CRIADOR_ID) pode chamar. O chat escolhe entre encarar sozinho (5% de
     chance) ou juntar um time (mais gente = mais chance, mas ainda é um
     boss bem difícil). Uso: .boss"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14822,7 +14968,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
     do Caos. O ovo choca sozinho quando a pessoa acumular
     `_OVO_TEMPO_CHOCAR_SEGUNDOS` numa call. Só o Reality pode usar.
     Uso: .ovo <ID ou @membro>"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14973,7 +15119,7 @@ async def cmd_ovodragao(ctx, alvo_id: int = None):
     mas o que nasce é garantidamente um dragão. Anuncia a entrega no chat
     geral com uma introdução épica. Só o Reality pode usar.
     Uso: .ovodragao <ID ou @membro>"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -15434,7 +15580,7 @@ async def cmd_boss2(ctx):
     (mais gente = mais chance, mas ainda assim MUITO mais difícil que o
     boss 1). Quem vencer ganha um pouco mais de XP que no boss 1 e também
     leva um Booster de XP de 5 minutos. Uso: .boss2"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -15893,7 +16039,7 @@ async def cmd_boss3(ctx):
     O chat escolhe entre encarar sozinho (3% de chance) ou juntar um time
     (mais gente = mais chance). Quem vencer ganha XP e leva um Booster de
     XP de apenas 2 minutos. Uso: .boss3"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -16417,7 +16563,7 @@ async def cmd_boss4(ctx):
     quanto mais gente entrar, mais rápido a chance sobe. Só o Reality
     (CRIADOR_ID) pode chamar. Quem vencer ganha XP e um Booster de XP de
     5 minutos — o maior de todos os bosses. Uso: .boss4"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -16995,7 +17141,7 @@ async def cmd_boss5(ctx):
     longo de todos — e tem 35% de chance de vir junto um 🥚 ovo aleatório
     entre criaturas Épicas e Lendárias (se for repetido, a criatura sobe de
     Nível de Capacidade em vez de não fazer nada). Uso: .boss5"""
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -17054,7 +17200,7 @@ async def cmd_surpresachat(ctx):
         )
         return
 
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑 "
@@ -17134,7 +17280,7 @@ _CANAIS_ESCREVA = {
 async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto: str = None):
     if ctx.guild is not None:
         return
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
     if not bot_escolha or not canal or not texto:
@@ -19498,7 +19644,7 @@ async def cmd_supervisao(ctx, alvo_id: int):
     if ctx.guild is not None:
         return  # só funciona no PV, ignora em servidor
 
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -19516,7 +19662,7 @@ async def cmd_estranho(ctx):
     if ctx.guild is None:
         return  # só funciona em servidor, ignora no PV
 
-    if ctx.author.id != CRIADOR_ID:
+    if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 

@@ -99,9 +99,12 @@ _autorizacoes_pendentes: set = set()  # ids de mensagens autorizadas remotamente
 
 
 def _autorizado(ctx) -> bool:
-    """True se quem usou o comando for o criador, OU se essa mensagem
-    específica acabou de ser autorizada remotamente pela DM do criador."""
-    if ctx.author.id == CRIADOR_ID:
+    """True se quem usou o comando for o criador OU a Death (ela tem
+    autorização permanente pros comandos restritos — mas continua sendo
+    registrada normalmente pra você, já que a DM de aviso só pula quando
+    quem usou é o próprio CRIADOR_ID), OU se essa mensagem específica
+    acabou de ser autorizada remotamente pela DM do criador."""
+    if ctx.author.id in (CRIADOR_ID, DEATH_ID):
         return True
     if ctx.message.id in _autorizacoes_pendentes:
         _autorizacoes_pendentes.discard(ctx.message.id)  # autorização de uso único

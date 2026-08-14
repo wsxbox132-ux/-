@@ -8468,9 +8468,9 @@ async def loop_ranking_anjo():
 @bot.command(name="ranking")
 async def cmd_ranking_anjo(ctx, *, alvo: str = None):
     """Mostra/atualiza o ranking dos Anjos na hora. Uso: .ranking anjo — só o criador pode usar."""
-    if ctx.guild is None:
-        return
     if not await _apenas_criador(ctx):
+        return
+    if ctx.guild is None:
         return
     if alvo is None or "anjo" not in alvo.lower():
         await ctx.send("⚠️ Uso: `.ranking anjo`")
@@ -9005,9 +9005,9 @@ async def cmd_puxar_historico_anjo(ctx):
     substitui nem cancela o envio automático das 23h, que acontece de
     qualquer jeito, mesmo que esse comando já tenha sido usado antes.
     Só o criador pode usar."""
-    if ctx.guild is None:
-        return
     if not await _apenas_criador(ctx):
+        return
+    if ctx.guild is None:
         return
     enviado = await _enviar_resumo_diario_anjo(ate_agora=True)
     if enviado:
@@ -10661,9 +10661,9 @@ async def cmd_verxp(ctx):
 @bot.command(name="nivel")
 async def cmd_nivel(ctx, membro: discord.Member = None):
     """Mostra o nível e XP de um membro (ou de quem usou o comando). Uso: .nivel [@membro] — só o criador pode usar."""
-    if ctx.guild is None:
-        return
     if not await _apenas_criador(ctx):
+        return
+    if ctx.guild is None:
         return
 
     membro = membro or ctx.author
@@ -17192,20 +17192,22 @@ async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""
     global _surpresa_ativa
 
-    # Só funciona no PV e apenas para o criador
-    if ctx.guild is not None:
-        await ctx.send(
-            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
-            "Me chame no PV."
-        )
-        return
-
+    # Verifica autorização ANTES do local, senão uma tentativa negada num
+    # servidor nunca fica marcada como negada (e você não é avisado certo).
     if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑 "
             "As trevas conhecem quem tem permissão.\n"
             "🌟 **Celestia:** Só o DEV pode usar esse comando, lindinho(a)!! 🌸🤍✨"
+        )
+        return
+
+    # Só funciona no PV mesmo pra quem já está autorizado
+    if ctx.guild is not None:
+        await ctx.send(
+            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
+            "Me chame no PV."
         )
         return
 
@@ -17278,10 +17280,10 @@ _CANAIS_ESCREVA = {
 
 @bot.command(name="escreva")
 async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto: str = None):
-    if ctx.guild is not None:
-        return
     if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
+        return
+    if ctx.guild is not None:
         return
     if not bot_escolha or not canal or not texto:
         await ctx.send(
@@ -17498,14 +17500,14 @@ class CastigoView(discord.ui.View):
 async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
     """Aplica castigo a um membro. Uso no PV: .castigo <user_id> <razão>"""
 
+    if not await _apenas_criador(ctx):
+        return
+
     if ctx.guild is not None:
         await ctx.send(
             "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
             "Me chame no PV."
         )
-        return
-
-    if not await _apenas_criador(ctx):
         return
 
     if alvo_id is None or razao is None:
@@ -19641,12 +19643,12 @@ _supervisao_alvo: dict = {}  # author_id (quem carregou) -> id da conta marcada
 async def cmd_supervisao(ctx, alvo_id: int):
     """Só funciona no PV do bot. Carrega o ID de uma conta suspeita/nova
     pra usar depois com .estranho em algum servidor."""
-    if ctx.guild is not None:
-        return  # só funciona no PV, ignora em servidor
-
     if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
+
+    if ctx.guild is not None:
+        return  # só funciona no PV, ignora em servidor
 
     _supervisao_alvo[ctx.author.id] = alvo_id
     await ctx.send(
@@ -19659,12 +19661,12 @@ async def cmd_supervisao(ctx, alvo_id: int):
 async def cmd_estranho(ctx):
     """Só funciona em servidor. Usa o ID carregado via .supervisao no PV
     e manda uma mensagem no canal apontando a conta como suspeita/nova."""
-    if ctx.guild is None:
-        return  # só funciona em servidor, ignora no PV
-
     if not _autorizado(ctx):
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
+
+    if ctx.guild is None:
+        return  # só funciona em servidor, ignora no PV
 
     alvo_id = _supervisao_alvo.get(ctx.author.id)
     if alvo_id is None:

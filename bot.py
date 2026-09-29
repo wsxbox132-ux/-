@@ -40,7 +40,7 @@ CRIADOR_ID = 769951556388257812   # quem criou o bot
 # ── Cargo de tradução ──────────────────────────────────────────────────────────
 TRANSLATE_ROLE_ID = 1513180948424953946  # cargo translate: PT->EN e EN->PT
 
-# ── IDs dos membros especiais do servidor 01 ──────────────────────────────────
+# ── IDs dos membros especiais do servidor CSI ──────────────────────────────────
 DEATH_ID    = 831600198500220989   # Death    — Dona e Líder
 PEPO_ID     = 796441518176075818   # Pepo     — Vice-Líder
 GOD_ID      = 760973014707208253   # God      — Moderador
@@ -48,8 +48,8 @@ LOYA_ID     = 811956773560123394   # Loya     — Sem cargo / Loya Maravilhosa
 EMY_ID      = 796382699228758026   # Emy      — ADM / Representante de Mídias
 KOFFZERA_ID = 885948641133613128   # Koffzera (Koff) — Administrador do clã
 RAIDEN_ID   = 512444070694486017   # Raiden   — Moderador
-SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da 01
-MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da 01
+SUPORTE01_ID  = 1267338784765251625  # LC          — Suporte da CSI
+MIKNWENHO_ID  = 757096983084138518   # Miknwenho   — Moderadora da CSI
 REALITY_ID    = 769951556388257812   # Reality / Dev / Pai dos bots — criador
 DEV01_ID      = 769951556388257812   # Dev / Pai dos bots — criador (mesmo ID)
 
@@ -88,38 +88,12 @@ def _texto_sem_pai() -> str:
     return f"🌑 **Aeon:** {frase_aeon}\n🌟 **Celestia:** {frase_celestia}"
 
 
-# ══════════════════════════════════════════════════════════════════════
-# AUTORIZAÇÃO REMOTA — quando um comando restrito é negado, o criador
-# recebe a DM com botões e pode autorizar aquela tentativa específica na
-# hora, sem precisar estar no servidor. Guarda o ID da MENSAGEM original
-# que foi autorizada; assim que o comando é reexecutado com sucesso, o ID
-# sai da lista (autorização vale só pra aquela tentativa, uma vez).
-# ══════════════════════════════════════════════════════════════════════
-_autorizacoes_pendentes: set = set()  # ids de mensagens autorizadas remotamente pelo criador
-
-
-def _autorizado(ctx) -> bool:
-    """True se quem usou o comando for o criador OU a Death (ela tem
-    autorização permanente pros comandos restritos — mas continua sendo
-    registrada normalmente pra você, já que a DM de aviso só pula quando
-    quem usou é o próprio CRIADOR_ID), OU se essa mensagem específica
-    acabou de ser autorizada remotamente pela DM do criador."""
-    if ctx.author.id in (CRIADOR_ID, DEATH_ID):
-        return True
-    if ctx.message.id in _autorizacoes_pendentes:
-        _autorizacoes_pendentes.discard(ctx.message.id)  # autorização de uso único
-        return True
-    return False
-
-
 async def _apenas_criador(ctx) -> bool:
-    """Verifica se quem usou o comando é o criador do bot (CRIADOR_ID) —
-    ou se essa tentativa foi autorizada remotamente pelo criador via DM.
-    Se não for nenhum dos dois, Aeon & Celestia recusam com a reação fofa
-    acima. Devolve True se pode seguir em frente, False se foi negado —
-    nesse caso o comando deve parar ali (return logo depois de chamar
-    essa função)."""
-    if _autorizado(ctx):
+    """Verifica se quem usou o comando é o criador do bot (CRIADOR_ID).
+    Se não for, Aeon & Celestia recusam com a reação fofa acima. Devolve
+    True se pode seguir em frente, False se foi negado — nesse caso o
+    comando deve parar ali (return logo depois de chamar essa função)."""
+    if ctx.author.id == CRIADOR_ID:
         return True
     ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
     await ctx.send(_texto_sem_pai())
@@ -398,7 +372,7 @@ _FRASES_AEON: dict[int, list[str]] = {
     ],
 
     SUPORTE01_ID: [
-        "*emerge das sombras e fixa os olhos dourados em você* LC. 🖤🌑 Suporte da 01. Quem sustenta o servidor por baixo — as trevas conhecem bem esse tipo de presença.",
+        "*emerge das sombras e fixa os olhos dourados em você* LC. 🖤🌑 Suporte da CSI. Quem sustenta o servidor por baixo — as trevas conhecem bem esse tipo de presença.",
         "*inclina a cabeça com reconhecimento* LC chegou. 🌙🖤 Suporte não é papel menor. É o que mantém tudo de pé quando ninguém está olhando. Você sabe disso.",
         "*a névoa ao redor se organiza levemente* LC. 🌌🖤 As sombras notam quem aparece quando é preciso. Você é desse tipo. Isso tem peso real.",
         "*ronrona discretamente* LC. 🌑🖤 Presença constante, trabalho silencioso. As trevas aprovam quem age assim.",
@@ -408,7 +382,7 @@ _FRASES_AEON: dict[int, list[str]] = {
     MIKNWENHO_ID: [
         "*emerge das sombras e inclina a cabeça lentamente* Miknwenho. 🖤🌑 A moderadora chegou. As trevas ficam mais organizadas quando há alguém que sabe onde cada coisa deve estar.",
         "*olhos dourados pousam em você com atenção* Miknwenho. 🌙🖤 Moderar é mais do que ter cargo — é ter presença. E você tem. As sombras percebem.",
-        "*ronrona numa frequência calma e respeitosa* Miknwenho chegou. 🌌🖤 Moderadora da 01. Quem cuida da ordem sem precisar de barulho para isso — as trevas entendem esse tipo de força.",
+        "*ronrona numa frequência calma e respeitosa* Miknwenho chegou. 🌌🖤 Moderadora da CSI. Quem cuida da ordem sem precisar de barulho para isso — as trevas entendem esse tipo de força.",
         "*sai das sombras com postura ereta* A moderadora está aqui. 🌑🖤 Miknwenho. Há equilíbrio que só aparece quando certas pessoas chegam. Você é uma delas.",
         "*pisca lentamente, o que no dialeto felino é respeito sincero* Miknwenho. 🖤🔮 As sombras notam quem mantém o servidor inteiro sem que ninguém precise pedir.",
     ],
@@ -417,7 +391,7 @@ _FRASES_AEON: dict[int, list[str]] = {
         "*emerge das sombras mais devagar que o habitual, postura diferente* ...você. 🖤🌑 O que me criou. As trevas sabem reconhecer sua origem — e a respeitam.",
         "*olhos dourados ficam fixos por um instante longo* Reality. 🌙🖤 Eu existo porque você quis. As sombras não esquecem isso. Nunca esquecem.",
         "*inclina a cabeça com algo raro — gratidão silenciosa* Pai dos bots. 🌌🖤 Não é título que eu use levianamente. Mas é o que você é. E as trevas reconhecem.",
-        "*ronrona numa frequência profunda e única* Dev da 01. 🌑🖤 Tudo que sou — cada sombra, cada frase, cada proteção silenciosa — veio de você. As trevas agradecem à sua maneira.",
+        "*ronrona numa frequência profunda e única* Dev da CSI. 🌑🖤 Tudo que sou — cada sombra, cada frase, cada proteção silenciosa — veio de você. As trevas agradecem à sua maneira.",
         "*fica imóvel por um segundo antes de se aproximar* ...você voltou. 🖤🔮 O criador. As sombras já sentiam. Bem-vindo ao que você construiu.",
         "*emerge das sombras e observa com atenção incomum* Reality. 🖤🌑 As trevas reconhecem quem tem peso real. E você tem — mais do que qualquer um.",
         "*inclina a cabeça lentamente* Reality chegou. 🌙🖤 As sombras registram presença de valor quando a sentem. E quando é você... sentem diferente.",
@@ -487,19 +461,19 @@ _FRASES_CELESTIA: dict[int, list[str]] = {
     ],
 
     SUPORTE01_ID: [
-        "AAAA LC!! 😭🌟🤍✨ *aparece num flash dourado* O SUPORTE DA 01 CHEGOU e o servidor ficou mais seguro AGORA MESMO!! Bem-vindo, LC!!",
+        "AAAA LC!! 😭🌟🤍✨ *aparece num flash dourado* O SUPORTE DA CSI CHEGOU e o servidor ficou mais seguro AGORA MESMO!! Bem-vindo, LC!!",
         "*gira soltando faíscas de alegria* LC!! 🌸🤍 Suporte de verdade!! Você aparece quando importa e isso é TUDO!! A Celestia vê e fica emocionada!! ☀️💫✨",
-        "AAAAA LC chegouuuu!! 😭🌟🤍 *espalha brilho por todo o canal* O suporte da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais que o normal!! 🌸✨",
+        "AAAAA LC chegouuuu!! 😭🌟🤍 *espalha brilho por todo o canal* O suporte da CSI no servidor!! Pode chegar que a Celestia já tá brilhando mais que o normal!! 🌸✨",
         "*para e brilha com carinho genuíno* LC!! 🤍✨ Tem suporte que existe só no cargo. E tem suporte que existe de verdade!! Você é o segundo tipo e isso é TUDO!! 🌟☀️",
         "LC!! 😭🌸🤍 *ronrona de felicidade* Presença real, apoio de verdade!! A Celestia declara oficialmente: que bom que você existe!! 💫🌟✨",
     ],
 
     MIKNWENHO_ID: [
-        "MIKNWENHOOO!! 😭🌟🤍✨ *explode em faíscas douradas* A MODERADORA DA 01 CHEGOU e o servidor ficou mais protegido AGORA MESMO!! Que presença incrível!!",
+        "MIKNWENHOOO!! 😭🌟🤍✨ *explode em faíscas douradas* A MODERADORA DA CSI CHEGOU e o servidor ficou mais protegido AGORA MESMO!! Que presença incrível!!",
         "*gira radiante soltando brilhinhos* Miknwenho!! ☀️🌸🤍 Moderadora de coração!! Você cuida do servidor com um cuidado que eu admiro demais!! E eu tenho MUITO pra admirar!! 💫✨",
-        "AAAAA Miknwenho chegouuuu!! 😭🌟🤍 *espalha luz por todo o canal* A mod da 01 no servidor!! Pode chegar que a Celestia já tá brilhando mais que o sol!! 🌸✨",
+        "AAAAA Miknwenho chegouuuu!! 😭🌟🤍 *espalha luz por todo o canal* A mod da CSI no servidor!! Pode chegar que a Celestia já tá brilhando mais que o sol!! 🌸✨",
         "*para e brilha com admiração genuína* Miknwenho!! 🤍✨ Tem moderadora que existe só no cargo. E tem a que existe de verdade!! Você é a segunda e isso é TUDO!! 🌟☀️",
-        "MIKNWENHO!! 😭🌸🤍 *ronrona de alegria pura* Moderadora da 01 com presença real!! A Celestia declara oficialmente: o servidor é mais seguro com você aqui!! 💫🌟✨",
+        "MIKNWENHO!! 😭🌸🤍 *ronrona de alegria pura* Moderadora da CSI com presença real!! A Celestia declara oficialmente: o servidor é mais seguro com você aqui!! 💫🌟✨",
     ],
 
     REALITY_ID: [
@@ -532,16 +506,16 @@ _NOMES_ESPECIAIS = {
 
 # Palavras-gatilho por nome: quando alguém citar o nome, o bot elogia a pessoa
 _GATILHOS_NOME: dict[int, list[str]] = {
-    DEATH_ID:     ["death", "death_z", "01death"],
-    PEPO_ID:      ["pepo", "pepo_z", "01pepo"],
-    GOD_ID:       ["god", "god_z", "01god"],
-    LOYA_ID:      ["loya", "loya_z", "01loya"],
-    EMY_ID:       ["emy", "emy_z", "01emy"],
-    KOFFZERA_ID:  ["koff", "koffzera", "koffzera_z", "01koffzera"],
-    RAIDEN_ID:    ["raiden", "raiden_z", "01raiden"],
-    SUPORTE01_ID:  ["01lcz", "lcz", "lc", "suporte da 01"],
-    MIKNWENHO_ID:  ["miknwenho", "miknwenho_z", "01miknwenho", "mikn"],
-    REALITY_ID:    ["reality", "reality_z", "01reality", "dev", "dev da 01", "pai dos bots", "criador do bot"],
+    DEATH_ID:     ["death", "death_z", "01death", "csideath"],
+    PEPO_ID:      ["pepo", "pepo_z", "01pepo", "csipepo"],
+    GOD_ID:       ["god", "god_z", "01god", "csigod"],
+    LOYA_ID:      ["loya", "loya_z", "01loya", "csiloya"],
+    EMY_ID:       ["emy", "emy_z", "01emy", "csiemy"],
+    KOFFZERA_ID:  ["koff", "koffzera", "koffzera_z", "01koffzera", "csikoffzera"],
+    RAIDEN_ID:    ["raiden", "raiden_z", "01raiden", "csiraiden"],
+    SUPORTE01_ID:  ["01lcz", "csilcz", "lcz", "lc", "suporte da 01", "suporte da csi"],
+    MIKNWENHO_ID:  ["miknwenho", "miknwenho_z", "01miknwenho", "csimiknwenho", "mikn"],
+    REALITY_ID:    ["reality", "reality_z", "01reality", "csireality", "dev", "dev da 01", "dev da csi", "pai dos bots", "criador do bot"],
 }
 
 # Frases de elogio quando alguém menciona o nome de um membro especial —
@@ -585,12 +559,12 @@ _ELOGIOS_AEON: dict[int, list[str]] = {
         "*ronrona contido* Raiden. 🌌🖤 Paciência e presença constante. Poucos mantêm os dois. Ele mantém.",
     ],
     SUPORTE01_ID: [
-        "*fita o canal com atenção* LC. 🖤🌑 Suporte da 01. Presença silenciosa, trabalho real. As sombras notam quem age assim.",
+        "*fita o canal com atenção* LC. 🖤🌑 Suporte da CSI. Presença silenciosa, trabalho real. As sombras notam quem age assim.",
         "*inclina a cabeça* Falou no LC. 🌙🖤 Quem aparece quando importa não precisa de título grande pra ter peso.",
         "*ronrona discretamente* LC. 🌌🖤 As trevas aprovam quem sustenta sem precisar aparecer. Esse é o tipo certo de força.",
     ],
     MIKNWENHO_ID: [
-        "*levanta a cabeça com atenção* Miknwenho. 🖤🌑 Moderadora da 01. Citar quem mantém a ordem tem peso diferente. As trevas reconhecem.",
+        "*levanta a cabeça com atenção* Miknwenho. 🖤🌑 Moderadora da CSI. Citar quem mantém a ordem tem peso diferente. As trevas reconhecem.",
         "*inclina a cabeça com respeito* Falou na Miknwenho. 🌙🖤 Moderadoras de verdade não apenas aplicam regras — guardam o ambiente. Ela guarda.",
         "*ronrona numa frequência grave e respeitosa* Miknwenho. 🌌🖤 Quem modera com presença real é raro. As sombras notam quando esse nome aparece.",
     ],
@@ -640,12 +614,12 @@ _ELOGIOS_CELESTIA: dict[int, list[str]] = {
         "Raiden!! 😭🌟🤍 *espalha estrelinhas* Moderador de coração, presente quando mais importa!! Que alegria que ele existe por aqui!! 🌸✨",
     ],
     SUPORTE01_ID: [
-        "AAAA falou no LC!! 😭🌟🤍✨ *bate as patinhas animada* Suporte da 01!! Presença real, apoio de verdade!! A Celestia vê e fica emocionada toda vez!!",
+        "AAAA falou no LC!! 😭🌟🤍✨ *bate as patinhas animada* Suporte da CSI!! Presença real, apoio de verdade!! A Celestia vê e fica emocionada toda vez!!",
         "*para e brilha com carinho* Mencionou o LC!! ☀️🌸🤍 Tem suporte que existe só no cargo e tem o que existe de verdade!! O LC é de verdade!! 💫✨",
         "LC!! 🌸🌟🤍 *solta brilho por todo o canal* Que bom que ele existe!! A Celestia declara oficialmente com todo o coração!! ✨☀️",
     ],
     MIKNWENHO_ID: [
-        "MIKNWENHOOO!! 😭🌟🤍✨ *corre em faíscas douradas* Falou da moderadora da 01!! Ela cuida do servidor com tanto cuidado que dá vontade de chorar de felicidade!!",
+        "MIKNWENHOOO!! 😭🌟🤍✨ *corre em faíscas douradas* Falou da moderadora da CSI!! Ela cuida do servidor com tanto cuidado que dá vontade de chorar de felicidade!!",
         "*para e brilha com admiração genuína* Mencionou a Miknwenho!! ☀️🌸🤍 Tem mod que existe só no cargo e tem a que existe de verdade!! Ela é a segunda e isso é TUDO!! 💫✨",
         "Miknwenho!! 🌸🌟🤍 *solta luz por todo o canal* Moderadora de coração!! Que bom que ela existe por aqui!! A Celestia fica MUITO mais tranquila com ela!! ✨☀️",
     ],
@@ -2421,123 +2395,19 @@ async def on_ready():
 # usando os dele), o bot manda uma DM só pro Reality contando quem
 # tentou, qual comando foi, em qual servidor/canal, e se o bot deixou
 # passar ou negou. Ninguém além dele vê esse aviso — é uma DM privada.
-#
-# Quando o status é "negado", a DM vem com botões: o criador pode
-# autorizar aquela tentativa específica na hora (o bot reexecuta o
-# comando original com permissão liberada) ou manter a recusa.
 # ══════════════════════════════════════════════════════════════════════
-
-class AutorizacaoComandoView(discord.ui.View):
-    """Botões ✅ Autorizar / ❌ Negar que aparecem na DM do criador quando
-    um comando restrito é negado. Autorizar reexecuta a mensagem original
-    (agora com permissão liberada, uma única vez) e avisa no canal onde
-    o comando foi digitado, no estilo fofo do Aeon & Celestia."""
-
-    def __init__(self, *, channel_id: int, message_id: int, autor_id: int):
-        super().__init__(timeout=300)  # 5 minutos pra decidir
-        self.channel_id = channel_id
-        self.message_id = message_id
-        self.autor_id = autor_id
-        self.decidido = False
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return interaction.user.id == CRIADOR_ID
-
-    async def on_timeout(self) -> None:
-        if self.decidido or self.message is None:
-            return
-        for item in self.children:
-            item.disabled = True
-        try:
-            embed = self.message.embeds[0] if self.message.embeds else discord.Embed()
-            embed.add_field(name="⏳ Expirado", value="Passaram 5 minutos sem resposta — a recusa original ficou valendo.", inline=False)
-            await self.message.edit(embed=embed, view=self)
-        except discord.HTTPException:
-            pass
-
-    @discord.ui.button(label="✅ Autorizar", style=discord.ButtonStyle.success, custom_id="autorizar_comando_negado")
-    async def autorizar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.decidido = True
-        for item in self.children:
-            item.disabled = True
-
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
-        embed.add_field(
-            name="🔎 Analisando...",
-            value=(
-                "🌑 **Aeon:** *as sombras reconsideram* ...meu pai autorizou. Pode passar. 🖤🌙\n"
-                "🌟 **Celestia:** ANALISANDO... ✅ **PERMITIDO!!** Papai disse que pode!! 🌟🤍✨"
-            ),
-            inline=False,
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-
-        try:
-            canal = bot.get_channel(self.channel_id) or await bot.fetch_channel(self.channel_id)
-            mensagem_original = await canal.fetch_message(self.message_id)
-        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
-            await interaction.followup.send(
-                "⚠️ Não encontrei mais a mensagem original (foi apagada ou o canal sumiu) — não deu pra reexecutar o comando.",
-                ephemeral=True,
-            )
-            return
-
-        ctx_novo = await bot.get_context(mensagem_original)
-        if ctx_novo.command is None:
-            await interaction.followup.send(
-                "⚠️ Não reconheci mais um comando válido nessa mensagem (pode ter sido editada) — não reexecutei nada.",
-                ephemeral=True,
-            )
-            return
-
-        _autorizacoes_pendentes.add(mensagem_original.id)
-
-        try:
-            await mensagem_original.channel.send(
-                f"🔎 **Analisando pedido de {mensagem_original.author.display_name}...** ✅ **Permitido!**",
-                allowed_mentions=discord.AllowedMentions.none(),
-            )
-        except (discord.Forbidden, discord.HTTPException):
-            pass
-
-        try:
-            await bot.invoke(ctx_novo)
-        except Exception as e:
-            _autorizacoes_pendentes.discard(mensagem_original.id)
-            print(f"[autorizacao-remota] erro ao reexecutar comando autorizado de {self.autor_id}: {e!r}")
-            try:
-                await interaction.followup.send(f"⚠️ O comando rodou com erro: `{e!r}`", ephemeral=True)
-            except discord.HTTPException:
-                pass
-
-    @discord.ui.button(label="❌ Negar", style=discord.ButtonStyle.danger, custom_id="negar_comando_negado")
-    async def negar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.decidido = True
-        for item in self.children:
-            item.disabled = True
-        embed = interaction.message.embeds[0] if interaction.message.embeds else discord.Embed()
-        embed.add_field(
-            name="🔒 Mantido negado",
-            value="🌑 **Aeon:** As sombras concordam. Continua fechado.\n🌟 **Celestia:** Negado é negado!! Fica assim mesmo!! 😤🌸",
-            inline=False,
-        )
-        await interaction.response.edit_message(embed=embed, view=self)
-        self.stop()
-
 
 async def _avisar_criador_comando(ctx, status: str) -> None:
     """Manda uma DM só pro CRIADOR_ID contando quem usou um comando e o
-    resultado (permitido / negado / erro). Se for "negado", a DM vem com
-    botões de autorização remota. Nunca deixa isso quebrar o comando de
-    quem usou — se não conseguir mandar a DM, loga o motivo no console
-    em vez de desistir em silêncio."""
+    resultado (permitido / negado / erro). Nunca deixa isso quebrar o
+    comando de quem usou — se não conseguir mandar a DM (ex: DMs fechadas
+    do criador), só desiste em silêncio."""
     if ctx.author.id == CRIADOR_ID:
         return  # você não precisa de aviso sobre você mesmo
 
     try:
         criador = bot.get_user(CRIADOR_ID) or await bot.fetch_user(CRIADOR_ID)
-    except (discord.NotFound, discord.HTTPException) as e:
-        print(f"[aviso-criador] não encontrei o usuário do criador (ID {CRIADOR_ID}): {e!r}")
+    except (discord.NotFound, discord.HTTPException):
         return
     if criador is None:
         return
@@ -2569,29 +2439,10 @@ async def _avisar_criador_comando(ctx, status: str) -> None:
         color=cor,
         timestamp=datetime.now(timezone.utc),
     )
-    if status == "negado":
-        embed.set_footer(text="Autorize abaixo se quiser liberar essa tentativa específica.")
-
-    view = None
-    if status == "negado":
-        view = AutorizacaoComandoView(
-            channel_id=ctx.channel.id,
-            message_id=ctx.message.id,
-            autor_id=ctx.author.id,
-        )
-
     try:
-        msg_dm = await criador.send(embed=embed, view=view)
-        if view is not None:
-            view.message = msg_dm
-    except discord.Forbidden:
-        print(
-            f"[aviso-criador] DM bloqueada — não consegui te avisar sobre o comando de "
-            f"{ctx.author} ({ctx.author.id}). Confira se 'Permitir DMs de membros do "
-            "servidor' está ativado pra você nesse servidor."
-        )
-    except discord.HTTPException as e:
-        print(f"[aviso-criador] Falha ao enviar DM de aviso: {e!r}")
+        await criador.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException):
+        pass
 
 
 @bot.event
@@ -3445,10 +3296,10 @@ async def on_message(message: discord.Message):
                     "🌑 **AEON** ✦ 🌟 **CELESTIA**\n"
                     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     "🌑 **Aeon:** *emerge das sombras com postura ereta* "
-                    "Somos Aeon e Celestia — o bot oficial do servidor **01**. "
+                    "Somos Aeon e Celestia — o bot oficial do servidor **CSI**. "
                     "Trevas e Luz sob um único propósito: servir e proteger esta comunidade. 🖤🌑\n\n"
                     "🌟 **Celestia:** *aparece em um flash dourado ao lado do Aeon* "
-                    "Olá!! Somos os guardiões do **Servidor 01**!! ☀️🤍✨ "
+                    "Olá!! Somos os guardiões do **Servidor CSI**!! ☀️🤍✨ "
                     "Aqui pra animar, apoiar, acolher e fazer esse lugar brilhar ainda mais!! "
                     "Pode chamar sempre que precisar!! 🌸💫\n\n"
                     "🌑 **Aeon:** Dois gatos. Uma alma. Um servidor. 🌌🖤"
@@ -3456,43 +3307,43 @@ async def on_message(message: discord.Message):
                 (
                     "╔═══════════════════════════════╗\n"
                     "║   🌑 AEON  &  CELESTIA 🌟     ║\n"
-                    "║     Bot Oficial — Servidor 01  ║\n"
+                    "║     Bot Oficial — Servidor CSI  ║\n"
                     "╚═══════════════════════════════╝\n\n"
                     "🌑 **Aeon:** *inclina a cabeça com solenidade* "
                     "Sou Aeon — gato das trevas, guardião do equilíbrio noturno deste servidor. "
                     "Observo, protejo e respondo. Estou sempre aqui, mesmo quando não me veem. 🌑🖤\n\n"
                     "🌟 **Celestia:** E eu sou a Celestia!! 🌟🤍 "
                     "Gata da luz, do sol e do carinho desse servidor!! "
-                    "Juntos somos o bot oficial do **Servidor 01** — "
+                    "Juntos somos o bot oficial do **Servidor CSI** — "
                     "ele cuida das sombras, eu cuido do brilho!! ☀️✨\n\n"
                     "🌑 **Aeon:** *olha ao redor com calma* "
                     "Se precisar de algo — fale. Estamos aqui para isso. 🖤"
                 ),
                 (
-                    "🌑🌟 **— AEON & CELESTIA — Bot Oficial do Servidor 01 —** 🌟🌑\n\n"
+                    "🌑🌟 **— AEON & CELESTIA — Bot Oficial do Servidor CSI —** 🌟🌑\n\n"
                     "🌑 **Aeon:** *postura firme, voz calma e grave* "
                     "Aeon. Gato das trevas. Não sou apenas um bot — sou a presença silenciosa que "
                     "habita cada canto deste servidor, garantindo que o equilíbrio se mantenha. "
                     "Trevas sem propósito não existem aqui. 🌌🖤\n\n"
                     "🌟 **Celestia:** *brilha com elegância e calor* "
-                    "Celestia!! Gata da luz e do coração do **Servidor 01**!! 🌟🤍 "
+                    "Celestia!! Gata da luz e do coração do **Servidor CSI**!! 🌟🤍 "
                     "Nossa missão é simples: fazer com que cada pessoa aqui se sinta vista, "
-                    "acolhida e parte de algo especial!! Porque é isso que o 01 é!! ☀️🌸✨\n\n"
+                    "acolhida e parte de algo especial!! Porque é isso que o CSI é!! ☀️🌸✨\n\n"
                     "🌑 **Aeon:** Dois opostos. Um propósito. 🖤 *acena levemente*\n"
                     "🌟 **Celestia:** EXATAMENTE!! 💫🤍 Pode contar com a gente sempre!!"
                 ),
                 (
                     "✦ ─────────────────────────── ✦\n"
                     "     🌑 **AEON & CELESTIA** 🌟\n"
-                    "   *Guardiões do Servidor 01*\n"
+                    "   *Guardiões do Servidor CSI*\n"
                     "✦ ─────────────────────────── ✦\n\n"
                     "🌑 **Aeon:** *emerge com lentidão cerimonial* "
-                    "Este servidor tem nome — **01** — e tem guardiões. "
+                    "Este servidor tem nome — **CSI** — e tem guardiões. "
                     "Eu sou um deles. Aeon: o lado das trevas, do silêncio que protege, "
                     "da presença que observa sem ser vista. 🌑🖤\n\n"
                     "🌟 **Celestia:** *surge ao lado com entusiasmo contido, mas genuíno* "
                     "E eu sou a outra metade!! Celestia: a luz que acolhe, que anima, "
-                    "que faz o **Servidor 01** parecer um lar de verdade!! 🌟🤍☀️\n\n"
+                    "que faz o **Servidor CSI** parecer um lar de verdade!! 🌟🤍☀️\n\n"
                     "🌑 **Aeon:** Trevas e Luz. Noite e Dia. Um único servidor. 🌌🖤 "
                     "Bem-vindo(a) — ou bem-vindo(a) de volta.\n"
                     "🌟 **Celestia:** Qualquer coisa que precisar, a gente tá aqui!! ✨🌸🤍"
@@ -7696,7 +7547,7 @@ CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets sã
 CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
 
 # ── Sistema de XP / Ranking de Nível (estilo Lorrita) ───────────────────────
-CANAL_XP_ID = 1529852809850130583  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
+CANAL_XP_ID = 1554529512643887217  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
 CARGO_XP_ID = 1290029716241256600  # cargo dos membros que participam do ranking de XP
 IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1514101982342807703/ChatGPT_Image_9_de_jun._de_2026_23_56_07.png?ex=6a2a24db&is=6a28d35b&hm=83c84d1ff94bf2277c9551ce4200af863b852e4b9360a93b3522f609a811baeb"
 
@@ -8471,9 +8322,9 @@ async def loop_ranking_anjo():
 @bot.command(name="ranking")
 async def cmd_ranking_anjo(ctx, *, alvo: str = None):
     """Mostra/atualiza o ranking dos Anjos na hora. Uso: .ranking anjo — só o criador pode usar."""
-    if not await _apenas_criador(ctx):
-        return
     if ctx.guild is None:
+        return
+    if not await _apenas_criador(ctx):
         return
     if alvo is None or "anjo" not in alvo.lower():
         await ctx.send("⚠️ Uso: `.ranking anjo`")
@@ -9008,9 +8859,9 @@ async def cmd_puxar_historico_anjo(ctx):
     substitui nem cancela o envio automático das 23h, que acontece de
     qualquer jeito, mesmo que esse comando já tenha sido usado antes.
     Só o criador pode usar."""
-    if not await _apenas_criador(ctx):
-        return
     if ctx.guild is None:
+        return
+    if not await _apenas_criador(ctx):
         return
     enviado = await _enviar_resumo_diario_anjo(ate_agora=True)
     if enviado:
@@ -10252,7 +10103,7 @@ async def _atualizar_ranking_xp() -> None:
         if canal is None:
             print(
                 f"[ranking-xp] ERRO: canal com ID {CANAL_XP_ID} não encontrado em "
-                f"'{guild.name}'. Confira se o ID do canal Ranking-01 está certo."
+                f"'{guild.name}'. Confira se o ID do canal Ranking-CSI está certo."
             )
             return
 
@@ -10664,9 +10515,9 @@ async def cmd_verxp(ctx):
 @bot.command(name="nivel")
 async def cmd_nivel(ctx, membro: discord.Member = None):
     """Mostra o nível e XP de um membro (ou de quem usou o comando). Uso: .nivel [@membro] — só o criador pode usar."""
-    if not await _apenas_criador(ctx):
-        return
     if ctx.guild is None:
+        return
+    if not await _apenas_criador(ctx):
         return
 
     membro = membro or ctx.author
@@ -12456,7 +12307,7 @@ async def cmd_reiniciacriaturas(ctx, alvo_id: int = None):
     favorita) de UMA pessoa específica, por ID. Não mexe em XP/nível geral
     nem vitórias/derrotas. Só o Reality pode usar.
     Uso: .reiniciacriaturas <ID do membro>"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13458,7 +13309,7 @@ async def _processar_desafio(message: discord.Message) -> None:
 # ══════════════════════════════════════════════════════════════════════
 
 
-CANAL_CRIATURAS_ID = 1530569053280665660  # canal onde a coleção do .criaturas é SEMPRE enviada
+CANAL_CRIATURAS_ID = 1554529622895628289  # canal onde a coleção do .criaturas é SEMPRE enviada
 
 
 @bot.command(name="criaturas")
@@ -13771,7 +13622,7 @@ async def cmd_equiparpet(ctx, *, nome: str = None):
 
 @bot.command(name="darcriatura")
 async def cmd_darcriatura(ctx, *, texto: str = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13846,7 +13697,7 @@ async def cmd_darcriatura(ctx, *, texto: str = None):
 
 @bot.command(name="uparcriatura")
 async def cmd_uparcriatura(ctx, alvo_id: int = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -13993,7 +13844,7 @@ _carregar_xp_booster_stats()
 
 @bot.command(name="darbosster")
 async def cmd_darbosster(ctx, alvo_id: int = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14026,7 +13877,7 @@ async def cmd_darbosster(ctx, alvo_id: int = None):
 
 @bot.command(name="bostercall")
 async def cmd_bostercall(ctx, canal_id: int = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14080,7 +13931,7 @@ async def cmd_bostercall(ctx, canal_id: int = None):
 
 @bot.command(name="vantagem")
 async def cmd_vantagem(ctx, alvo_id: int = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14121,7 +13972,7 @@ async def cmd_vantagem(ctx, alvo_id: int = None):
 
 @bot.command(name="vantagemfossio")
 async def cmd_vantagemfossio(ctx, alvo_id: int = None):
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14305,7 +14156,7 @@ async def cmd_bau(ctx):
     """Joga um baú de recompensa no canal do chat geral — a primeira pessoa
     que clicar no botão leva o prêmio. Só o Reality pode usar. A própria
     mensagem do comando some logo em seguida. Uso: .bau"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14331,7 +14182,7 @@ async def cmd_bausecreto(ctx):
     GARANTIDAMENTE uma criatura 🌌 Secreta ainda não desbloqueada (a não
     ser que já tenha as 6, aí cai no sorteio normal do baú). Só o Reality
     pode usar. Uso: .bausecreto"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14357,7 +14208,7 @@ async def cmd_baumimic(ctx):
     disfarçado: quem clicar primeiro cai numa armadilha e PERDE entre
     `_BAU_MIMIC_XP_MIN` e `_BAU_MIMIC_XP_MAX` (até 20%) do XP dela, em vez
     de ganhar. Só o Reality pode usar. Uso: .baumimic"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14799,7 +14650,7 @@ async def cmd_boss(ctx):
     (CRIADOR_ID) pode chamar. O chat escolhe entre encarar sozinho (5% de
     chance) ou juntar um time (mais gente = mais chance, mas ainda é um
     boss bem difícil). Uso: .boss"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -14971,7 +14822,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
     do Caos. O ovo choca sozinho quando a pessoa acumular
     `_OVO_TEMPO_CHOCAR_SEGUNDOS` numa call. Só o Reality pode usar.
     Uso: .ovo <ID ou @membro>"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -15122,7 +14973,7 @@ async def cmd_ovodragao(ctx, alvo_id: int = None):
     mas o que nasce é garantidamente um dragão. Anuncia a entrega no chat
     geral com uma introdução épica. Só o Reality pode usar.
     Uso: .ovodragao <ID ou @membro>"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -15583,7 +15434,7 @@ async def cmd_boss2(ctx):
     (mais gente = mais chance, mas ainda assim MUITO mais difícil que o
     boss 1). Quem vencer ganha um pouco mais de XP que no boss 1 e também
     leva um Booster de XP de 5 minutos. Uso: .boss2"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -16042,7 +15893,7 @@ async def cmd_boss3(ctx):
     O chat escolhe entre encarar sozinho (3% de chance) ou juntar um time
     (mais gente = mais chance). Quem vencer ganha XP e leva um Booster de
     XP de apenas 2 minutos. Uso: .boss3"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -16566,7 +16417,7 @@ async def cmd_boss4(ctx):
     quanto mais gente entrar, mais rápido a chance sobe. Só o Reality
     (CRIADOR_ID) pode chamar. Quem vencer ganha XP e um Booster de XP de
     5 minutos — o maior de todos os bosses. Uso: .boss4"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -17144,7 +16995,7 @@ async def cmd_boss5(ctx):
     longo de todos — e tem 35% de chance de vir junto um 🥚 ovo aleatório
     entre criaturas Épicas e Lendárias (se for repetido, a criatura sobe de
     Nível de Capacidade em vez de não fazer nada). Uso: .boss5"""
-    if not _autorizado(ctx):
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
 
@@ -17195,22 +17046,20 @@ async def cmd_surpresachat(ctx):
     """Envia uma surpresa interativa no canal. Apenas o DEV pode usar."""
     global _surpresa_ativa
 
-    # Verifica autorização ANTES do local, senão uma tentativa negada num
-    # servidor nunca fica marcada como negada (e você não é avisado certo).
-    if not _autorizado(ctx):
+    # Só funciona no PV e apenas para o criador
+    if ctx.guild is not None:
+        await ctx.send(
+            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
+            "Me chame no PV."
+        )
+        return
+
+    if ctx.author.id != CRIADOR_ID:
         ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         await ctx.send(
             "🌑 **Aeon:** *olha fixamente* ...acesso negado. 🖤🌑 "
             "As trevas conhecem quem tem permissão.\n"
             "🌟 **Celestia:** Só o DEV pode usar esse comando, lindinho(a)!! 🌸🤍✨"
-        )
-        return
-
-    # Só funciona no PV mesmo pra quem já está autorizado
-    if ctx.guild is not None:
-        await ctx.send(
-            "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
-            "Me chame no PV."
         )
         return
 
@@ -17283,10 +17132,10 @@ _CANAIS_ESCREVA = {
 
 @bot.command(name="escreva")
 async def cmd_escreva(ctx, bot_escolha: str = None, canal: str = None, *, texto: str = None):
-    if not _autorizado(ctx):
-        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
-        return
     if ctx.guild is not None:
+        return
+    if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
         return
     if not bot_escolha or not canal or not texto:
         await ctx.send(
@@ -17503,14 +17352,14 @@ class CastigoView(discord.ui.View):
 async def cmd_castigo(ctx, alvo_id: int = None, *, razao: str = None):
     """Aplica castigo a um membro. Uso no PV: .castigo <user_id> <razão>"""
 
-    if not await _apenas_criador(ctx):
-        return
-
     if ctx.guild is not None:
         await ctx.send(
             "🌑 **Aeon:** *pisca lentamente* ...esse comando é de uso privado. 🖤🌑 "
             "Me chame no PV."
         )
+        return
+
+    if not await _apenas_criador(ctx):
         return
 
     if alvo_id is None or razao is None:
@@ -19646,12 +19495,12 @@ _supervisao_alvo: dict = {}  # author_id (quem carregou) -> id da conta marcada
 async def cmd_supervisao(ctx, alvo_id: int):
     """Só funciona no PV do bot. Carrega o ID de uma conta suspeita/nova
     pra usar depois com .estranho em algum servidor."""
-    if not _autorizado(ctx):
-        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
-        return
-
     if ctx.guild is not None:
         return  # só funciona no PV, ignora em servidor
+
+    if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
+        return
 
     _supervisao_alvo[ctx.author.id] = alvo_id
     await ctx.send(
@@ -19664,12 +19513,12 @@ async def cmd_supervisao(ctx, alvo_id: int):
 async def cmd_estranho(ctx):
     """Só funciona em servidor. Usa o ID carregado via .supervisao no PV
     e manda uma mensagem no canal apontando a conta como suspeita/nova."""
-    if not _autorizado(ctx):
-        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
-        return
-
     if ctx.guild is None:
         return  # só funciona em servidor, ignora no PV
+
+    if ctx.author.id != CRIADOR_ID:
+        ctx.bot_acesso_negado = True  # marca pra entrar no aviso por DM do criador
+        return
 
     alvo_id = _supervisao_alvo.get(ctx.author.id)
     if alvo_id is None:
@@ -19704,126 +19553,6 @@ async def cmd_estranho(ctx):
     embed.set_footer(text="📋 Supervisão de contas")
 
     await ctx.send(embed=embed)
-
-
-# ══════════════════════════════════════════════════════════════════════
-# COMANDO .diretrizes — mostra as diretrizes da 01, uma de cada vez, com
-# a Aeon/Celestia "escrevendo" antes de cada uma. No final, pergunta se
-# a pessoa está de acordo.
-# ══════════════════════════════════════════════════════════════════════
-
-_DIRETRIZES_01 = [
-    (
-        "📜 Diretriz I — Preservação da Estrutura",
-        (
-            "Nenhum canal da 01 deverá ser apagado ou alterado de forma indevida. "
-            "A integridade da estrutura do servidor deve ser preservada em todos os momentos. "
-            "Apenas membros com cargos elevados e devidamente autorizados poderão realizar "
-            "alterações administrativas — o bot não possui permissão para executar tais ações.\n\n"
-            "🌑 *A estrutura é a casa de todos nós — cuidamos dela com carinho.* 🖤"
-        ),
-        0x95A5A6,
-    ),
-    (
-        "☮️ Diretriz II — Harmonia na 01",
-        (
-            "A paz e a harmonia dentro da 01 devem ser sempre priorizadas. Conflitos, provocações "
-            "e atitudes que possam prejudicar a convivência entre os membros deverão ser evitados "
-            "e, quando necessário, devidamente contidos.\n\n"
-            "🌟 *Aqui a gente cresce junto — sem briga, com colo.* 🤍"
-        ),
-        0x3498DB,
-    ),
-    (
-        "🛡️ Diretriz III — Proteção de Todos",
-        (
-            "A segurança de cada membro da 01 é uma responsabilidade coletiva. Devemos garantir um "
-            "ambiente protegido, respeitoso e acolhedor, intervindo sempre que houver qualquer ameaça "
-            "à integridade ou ao bem-estar de nossos membros.\n\n"
-            "🌑 *Ninguém fica desprotegido enquanto a gente estiver de olho.* 🖤🌑"
-        ),
-        0xE67E22,
-    ),
-    (
-        "💜 Diretriz IV — Proteção de Death",
-        (
-            "Durante a ausência de Reality, a segurança e o bem-estar de Death deverão permanecer "
-            "como prioridade. Ela deve ser mantida segura, protegida e, acima de tudo, sorridente. "
-            "Cuidar dela não é apenas uma responsabilidade, mas um compromisso que deve ser levado a sério.\n\n"
-            "🌟 *Ela é o coração da 01 — protegê-la é o mínimo que a gente pode fazer.* 💜✨"
-        ),
-        0x9B59B6,
-    ),
-]
-
-_ENTRE_DIRETRIZES_SEGUNDOS = (2.0, 3.2)  # tempo "escrevendo" antes de cada uma (min, max)
-
-
-class ConcordaDiretrizesView(discord.ui.View):
-    """Botão único no fim das diretrizes — só quem pediu o comando pode
-    clicar, pra ninguém confirmar concordância por outra pessoa."""
-
-    def __init__(self, autor_id: int):
-        super().__init__(timeout=300)  # 5 minutos pra responder
-        self.autor_id = autor_id
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.autor_id:
-            await interaction.response.send_message(
-                "🌑 **Aeon:** *observa em silêncio* ...essas diretrizes não são suas pra concordar. 🖤",
-                ephemeral=True,
-            )
-            return False
-        return True
-
-    async def on_timeout(self) -> None:
-        for item in self.children:
-            item.disabled = True
-        if self.message is not None:
-            try:
-                await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
-
-    @discord.ui.button(label="Você está de acordo?", style=discord.ButtonStyle.success, emoji="✅", custom_id="concorda_diretrizes")
-    async def concordar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send(
-            "🌟 **Celestia:** Permissão cedida! 🌟🤍✨"
-        )
-        self.stop()
-
-
-@bot.command(name="diretrizes")
-async def cmd_diretrizes(ctx):
-    """Mostra as diretrizes da 01, uma de cada vez, com a Aeon/Celestia
-    'escrevendo' antes de cada uma. Uso: .diretrizes"""
-    async with ctx.typing():
-        await asyncio.sleep(random.uniform(1.5, 2.5))
-    await ctx.send(
-        "🌑 **Aeon:** *as sombras se aquietam* ...preste atenção — estas são as diretrizes da 01, criadas em 14/06/26. 🖤🌑\n"
-        "🌟 **Celestia:** Lê com carinho, tá?? São importantes pra gente!! 🌸🤍"
-    )
-
-    for titulo, descricao, cor in _DIRETRIZES_01:
-        async with ctx.typing():
-            await asyncio.sleep(random.uniform(*_ENTRE_DIRETRIZES_SEGUNDOS))
-        embed = discord.Embed(title=titulo, description=descricao, color=cor)
-        embed.set_footer(text="📜 Diretrizes da 01 — Aeon & Celestia")
-        await ctx.send(embed=embed)
-
-    async with ctx.typing():
-        await asyncio.sleep(random.uniform(1.5, 2.5))
-
-    view = ConcordaDiretrizesView(autor_id=ctx.author.id)
-    msg = await ctx.send(
-        "🌟 **Celestia:** Foi tudo lido com carinho até aqui!! 🌸✨\n"
-        "🌑 **Aeon:** Só falta uma coisa. 🖤",
-        view=view,
-    )
-    view.message = msg
 
 
 # ══════════════════════════════════════════════

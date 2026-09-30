@@ -8942,7 +8942,7 @@ _COR_PADRAO = "roxo"
 
 # Cargo de Booster do servidor — só quem tem esse cargo pode escolher as
 # cores especiais (marcadas com "booster": True) lá embaixo.
-_CARGO_BOOSTER_CORES_ID = 1284279730287280189
+_CARGO_BOOSTER_CORES_ID = 1304759720925728818
 
 _CORES_QUADRADO = {
     # ── Cores normais — disponíveis pra qualquer pessoa ──────────────────

@@ -10085,7 +10085,55 @@ async def _atualizar_enciclopedia(canal: discord.TextChannel) -> None:
         print(f"[ranking-xp] ERRO ao enviar mensagem de enciclopédia em #{canal.name}: {e!r}")
 
 
-async def _atualizar_ranking_xp() -> None:
+async def _achar_canal_xp():
+    """Localiza o canal do ranking (CANAL_XP_ID) em QUALQUER servidor em que o
+    bot esteja. Antes só olhava o primeiro servidor da lista (bot.guilds[0]) —
+    se o canal estivesse em outro, o ranking e os textos nunca eram postados,
+    e sem nenhum aviso. Devolve (guild, canal, erro): `erro` é None quando
+    está tudo certo, ou um texto explicando exatamente o que impede o envio."""
+    servidores = ", ".join(f"{g.name} ({g.id})" for g in bot.guilds) or "nenhum"
+
+    canal = bot.get_channel(CANAL_XP_ID)
+    if canal is None:
+        try:
+            canal = await bot.fetch_channel(CANAL_XP_ID)
+        except discord.NotFound:
+            return None, None, (
+                f"o canal `{CANAL_XP_ID}` não existe — confira o ID. "
+                f"Servidores do bot: {servidores}."
+            )
+        except discord.Forbidden:
+            return None, None, (
+                f"o bot não enxerga o canal `{CANAL_XP_ID}`: ou ele não está no servidor "
+                f"desse canal, ou falta a permissão **Ver canal**. Servidores do bot: {servidores}."
+            )
+        except discord.HTTPException as e:
+            return None, None, f"o Discord recusou a busca do canal `{CANAL_XP_ID}`: `{e}`."
+
+    guild = getattr(canal, "guild", None)
+    if guild is None or not hasattr(canal, "send"):
+        return None, None, f"o ID `{CANAL_XP_ID}` não é um canal de texto de servidor."
+
+    eu = guild.me or guild.get_member(bot.user.id)
+    if eu is not None:
+        perms = canal.permissions_for(eu)
+        faltando = [
+            nome for nome, ok in (
+                ("Ver canal", perms.view_channel),
+                ("Enviar mensagens", perms.send_messages),
+                ("Inserir links", perms.embed_links),
+            ) if not ok
+        ]
+        if faltando:
+            return guild, canal, (
+                f"faltam permissões do bot em #{canal.name}: "
+                + ", ".join(f"**{n}**" for n in faltando) + "."
+            )
+
+    return guild, canal, None
+
+
+async def _atualizar_ranking_xp():
     """Atualiza (ou cria, se ainda não existir) as mensagens de ranking de XP.
     Normalmente é só 1 mensagem, sempre editada (fixa no topo, nunca
     duplica). Todo mundo elegível aparece — inclusive quem está no Nível 0 —
@@ -10102,18 +10150,14 @@ async def _atualizar_ranking_xp() -> None:
     global _xp_ranking_message_id, _xp_ranking_pagina_atual
 
     async with (_xp_ranking_update_lock or asyncio.Lock()):
-        guild = bot.guilds[0] if bot.guilds else None
-        if guild is None:
-            print("[ranking-xp] ERRO: bot não está em nenhum servidor ainda.")
-            return
+        # Devolve None se deu tudo certo, ou um texto com o motivo da falha
+        # (usado pelo comando .postarranking pra explicar o problema no chat).
+        erro_envio = None
 
-        canal = guild.get_channel(CANAL_XP_ID)
-        if canal is None:
-            print(
-                f"[ranking-xp] ERRO: canal com ID {CANAL_XP_ID} não encontrado em "
-                f"'{guild.name}'. Confira se o ID do canal Ranking-CSI está certo."
-            )
-            return
+        guild, canal, erro = await _achar_canal_xp()
+        if erro:
+            print(f"[ranking-xp] ERRO: {erro}")
+            return erro
 
         embeds = _montar_embeds_ranking_xp(guild)
         total_paginas = len(embeds)
@@ -10163,6 +10207,7 @@ async def _atualizar_ranking_xp() -> None:
                 _xp_ranking_message_id = nova.id
                 print(f"[ranking-xp] Mensagem do ranking criada em #{canal.name} (id {nova.id}).")
             except discord.HTTPException as e:
+                erro_envio = f"o Discord recusou o envio em #{canal.name}: `{e}`"
                 print(f"[ranking-xp] ERRO ao enviar mensagem do ranking em #{canal.name}: {e!r}")
 
         # Mantém o menu de escolha de cor sempre fixo logo abaixo do ranking
@@ -10184,6 +10229,7 @@ async def _atualizar_ranking_xp() -> None:
             print(f"[ranking-xp] ERRO ao atualizar mensagem de enciclopédia: {e!r}")
 
         await _salvar_xp_stats()
+        return erro_envio
 
 
 _XP_POR_TICK_CALL = 12   # xp ganho a cada 1 min em call de voz — dobrado de novo (era 6, antes disso era 2)
@@ -10425,7 +10471,15 @@ async def loop_ranking_xp():
             await _processar_xp_call(guild)
         except Exception as e:
             print(f"[ranking-xp] ERRO ao processar xp de call em '{guild.name}': {e!r}")
-    await _atualizar_ranking_xp()
+    # Protegido: um erro aqui antes matava o loop inteiro (o discord.py cancela
+    # uma tasks.loop quando sobe uma exceção que ninguém tratou) e o ranking
+    # parava de ser postado/atualizado pra sempre, sem aviso.
+    try:
+        await _atualizar_ranking_xp()
+    except Exception as e:
+        import traceback
+        print(f"[ranking-xp] ERRO inesperado ao atualizar o ranking: {e!r}")
+        traceback.print_exc()
 
 
 _VERXP_SOME_SEGUNDOS = 10   # a resposta do .verxp some sozinha depois desse tempo
@@ -10670,12 +10724,13 @@ async def cmd_xp_debug(ctx):
         return
 
     cargo_xp = guild.get_role(CARGO_XP_ID)
-    canal_xp = guild.get_channel(CANAL_XP_ID)
+    canal_xp = bot.get_channel(CANAL_XP_ID)   # procura em TODOS os servidores do bot
 
     linhas = [
         f"**Cargo de XP encontrado:** {'✅ sim' if cargo_xp else '❌ NÃO — verifique o ID do cargo'}",
         f"**Membros com o cargo:** {len(cargo_xp.members) if cargo_xp else 0}",
         f"**Canal de XP encontrado:** {'✅ sim' if canal_xp else '❌ NÃO — verifique o ID do canal'}",
+        f"**Servidores do bot:** {', '.join(f'{g.name} ({g.id})' for g in bot.guilds) or 'nenhum'}",
         f"**ID da mensagem de ranking salva:** `{_xp_ranking_message_id}` (página atual: `{_xp_ranking_pagina_atual}`)",
         f"**Entradas em xp_stats (memória):** {len(xp_stats)}",
         f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_XP_DATA_FILE) else '❌ não'}",
@@ -10694,6 +10749,29 @@ async def cmd_xp_debug(ctx):
     if len(texto) > 1900:
         texto = texto[:1900] + "\n... (cortado)"
     await ctx.send(f"🔍 **Diagnóstico do Ranking de XP**\n{texto}")
+
+
+@bot.command(name="postarranking")
+async def cmd_postar_ranking(ctx):
+    """Força AGORA o envio/atualização do ranking e dos textos fixos (cor,
+    batalhas, enciclopédia) no canal CANAL_XP_ID, sem esperar o loop de 1 min.
+    Se não conseguir, explica no chat exatamente o motivo. Só o criador."""
+    if not await _apenas_criador(ctx):
+        return
+
+    aviso = await ctx.send("⏳ Enviando o ranking e os textos pro canal...")
+    try:
+        erro = await _atualizar_ranking_xp()
+    except Exception as e:
+        erro = f"erro inesperado: `{e!r}`"
+
+    if erro:
+        await aviso.edit(content=f"❌ Não consegui postar no canal: {erro}")
+        return
+
+    canal = bot.get_channel(CANAL_XP_ID)
+    destino = canal.mention if canal else f"`{CANAL_XP_ID}`"
+    await aviso.edit(content=f"✅ Ranking, menu de cor, batalhas e enciclopédia enviados/atualizados em {destino}!")
 
 
 class ReiniciarRankingView(discord.ui.View):

@@ -2340,7 +2340,7 @@ async def on_ready():
     _membros_elegiveis_call_booster: set = set()
     for guild in bot.guilds:
         for canal_voz in guild.voice_channels:
-            if canal_voz.id in _XP_CALLS_PRIVADAS:
+            if canal_voz.id not in _XP_CALLS_PONTUAM:
                 continue
             for membro in canal_voz.members:
                 if membro.bot:
@@ -8887,13 +8887,17 @@ async def cmd_puxar_historico_anjo(ctx):
 # sobreviver a reinícios.
 #
 # Regras de canais:
-#   • Os 3 canais em _XP_CANAIS_RANKING dão XP "cheio" (ou bônus, no canal
-#     bônus) — e mandar mensagem neles é o que faz a pessoa PASSAR A
-#     APARECER no ranking (flag "elegivel" salva por pessoa).
-#   • Qualquer outro canal do servidor também dá XP, só que bem menos
-#     (_XP_MULTIPLICADOR_OUTROS), e sozinho NÃO destrava a aparição no
+#   • Os 3 canais em _XP_CANAIS_RANKING destravam a aparição no ranking
+#     (flag "elegivel" salva por pessoa) e têm multiplicador próprio de XP
+#     por mensagem (_XP_CANAIS_MULTIPLICADOR): um vale x1, outro x2 (dobro)
+#     e outro x3 (triplo).
+#   • Qualquer outro canal de texto do servidor também dá XP normal (x1,
+#     _XP_MULTIPLICADOR_OUTROS), mas sozinho NÃO destrava a aparição no
 #     ranking — só conta se a pessoa já tiver mandado mensagem em algum
-#     dos 3 canais principais alguma vez.
+#     dos 3 canais acima alguma vez.
+#   • Calls de voz: SÓ as calls em _XP_CALLS_PONTUAM marcam pontuação (uma
+#     delas vale o triplo — ver _XP_CALLS_MULTIPLICADOR). Qualquer outra
+#     call de voz não pontua.
 # ══════════════════════════════════════════════════════════════════════
 
 _XP_DATA_FILE = os.path.join(_ANJO_DATA_DIR, "xp_ranking_data.json")
@@ -8903,28 +8907,31 @@ _XP_MIN_POR_MSG       = 15   # xp mínimo ganho por mensagem válida (canais nor
 _XP_MAX_POR_MSG       = 25   # xp máximo ganho por mensagem válida (canais normais/principais)
 _XP_COOLDOWN_SEGUNDOS = 60   # tempo mínimo entre ganhos de xp da mesma pessoa
 
-# Canais que valem XP "cheio" e que destravam a aparição no ranking
-_XP_CANAL_1        = 1284257046740602901
-_XP_CANAL_BONUS    = 1284258192414740490   # este dá XP extra (bônus)
-_XP_CANAL_3        = 1284258354964856903
+# Canais que destravam a aparição no ranking (cada um com seu multiplicador)
+_XP_CANAL_1        = 1499002824627847299   # normal — xp x1
+_XP_CANAL_BONUS    = 1552971855487574036   # dá o DOBRO de pontuação — xp x2
+_XP_CANAL_3        = 1549352811521646622   # dá o TRIPLO de pontuação — xp x3
 _XP_CANAIS_RANKING = {_XP_CANAL_1, _XP_CANAL_BONUS, _XP_CANAL_3}
 
-_XP_MULTIPLICADOR_BONUS  = 1.6    # canal bônus: 60% a mais de xp por mensagem
-_XP_MULTIPLICADOR_OUTROS = 0.35   # qualquer outro canal do servidor: bem menos xp (35% do normal)
+# canal_id -> multiplicador do xp de mensagem naquele canal
+_XP_CANAIS_MULTIPLICADOR = {
+    _XP_CANAL_1:     1.0,
+    _XP_CANAL_BONUS: 2.0,
+    _XP_CANAL_3:     3.0,
+}
 
-# Calls privadas — quem está numa dessas calls de voz NÃO ganha xp de call
-# (_XP_POR_TICK_CALL). Não afeta xp de mensagem, só o tick de call.
-_XP_CALLS_PRIVADAS = {
-    1390460781941751848,
-    1289963328248217672,
-    1503862574251507813,
-    1284260414850470030,
-    1299047064029892708,
-    1299047106870378506,
-    1299047207957430292,
-    1284266770299093133,
-    1284260876035031040,
-    1531774501048553623,
+_XP_MULTIPLICADOR_OUTROS = 1.0    # qualquer outro canal de texto do servidor: pontuação normal (x1)
+
+# Calls que pontuam — SÓ quem está numa dessas 5 calls de voz ganha xp de
+# call (_XP_POR_TICK_CALL) e conta pro Booster de Call. Qualquer outra call
+# de voz do servidor NÃO pontua. Uma delas vale o triplo (ver
+# _XP_CALLS_MULTIPLICADOR mais abaixo).
+_XP_CALLS_PONTUAM = {
+    1499002755535081472,
+    1499002758966149180,
+    1499002747159056537,   # esta dá o TRIPLO de pontuação
+    1499002760497074196,
+    1499002764699897986,
 }
 
 # ── Personalização de cor do quadradinho no ranking ─────────────────────────
@@ -9192,19 +9199,24 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
     """Dá XP pra qualquer pessoa que mandar mensagem (com cooldown) e cuida do
     level-up, se acontecer. Não exige nenhum cargo — vale pra todo mundo.
 
-    Mensagens nos 3 canais de _XP_CANAIS_RANKING valem xp cheio (ou bônus, no
-    canal bônus) e são o que faz a pessoa "destravar" a aparição no ranking.
-    Mensagens em qualquer outro canal do servidor ainda dão xp, só que bem
-    menos, e sozinhas não fazem a pessoa aparecer no ranking. Calls privadas
-    (_XP_CALLS_PRIVADAS) são exceção total: nada de xp por lá.
+    Mensagens nos 3 canais de _XP_CANAIS_RANKING valem xp com o multiplicador
+    de cada canal (x1, x2 ou x3, ver _XP_CANAIS_MULTIPLICADOR) e são o que faz
+    a pessoa "destravar" a aparição no ranking. Mensagens em qualquer outro
+    canal de texto do servidor dão xp normal (x1), e sozinhas não fazem a
+    pessoa aparecer no ranking. O chat de uma call de voz que NÃO está em
+    _XP_CALLS_PONTUAM é exceção total: nada de xp por lá.
     """
     if message.guild is None or message.author.bot:
         return
 
-    # Calls privadas (_XP_CALLS_PRIVADAS) não pontuam de jeito nenhum — nem
-    # xp de call, nem xp de mensagem mandada por lá. Sai antes até de gastar
-    # o cooldown, pra não prejudicar o próximo ganho de xp da pessoa.
-    if message.channel.id in _XP_CALLS_PRIVADAS:
+    # Calls de voz que não estão em _XP_CALLS_PONTUAM não pontuam de jeito
+    # nenhum — nem xp de call, nem xp de mensagem mandada no chat delas. Sai
+    # antes até de gastar o cooldown, pra não prejudicar o próximo ganho de
+    # xp da pessoa.
+    if (
+        isinstance(message.channel, (discord.VoiceChannel, discord.StageChannel))
+        and message.channel.id not in _XP_CALLS_PONTUAM
+    ):
         return
 
     # ⚠️ Destravado: NÃO exige mais o cargo CARGO_XP_ID. Qualquer pessoa que
@@ -9220,12 +9232,8 @@ async def _processar_xp_mensagem(message: discord.Message) -> None:
     _xp_ultimo_ganho[uid] = agora
 
     canal_id = message.channel.id
-    if canal_id == _XP_CANAL_BONUS:
-        multiplicador = _XP_MULTIPLICADOR_BONUS
-    elif canal_id in _XP_CANAIS_RANKING:
-        multiplicador = 1.0
-    else:
-        multiplicador = _XP_MULTIPLICADOR_OUTROS
+    # x1 / x2 / x3 nos canais que destravam o ranking; x1 em todos os outros
+    multiplicador = _XP_CANAIS_MULTIPLICADOR.get(canal_id, _XP_MULTIPLICADOR_OUTROS)
 
     ganho = max(1, round(random.randint(_XP_MIN_POR_MSG, _XP_MAX_POR_MSG) * multiplicador))
 
@@ -10181,10 +10189,11 @@ async def _atualizar_ranking_xp() -> None:
 _XP_POR_TICK_CALL = 12   # xp ganho a cada 1 min em call de voz — dobrado de novo (era 6, antes disso era 2)
 
 # Calls com xp bônus — canal_id -> multiplicador aplicado em cima do
-# _XP_POR_TICK_CALL normal. Qualquer call que não estiver aqui usa o valor
-# padrão (1x). Não afeta calls privadas, essas continuam sem xp nenhum.
+# _XP_POR_TICK_CALL normal. Qualquer call de _XP_CALLS_PONTUAM que não
+# estiver aqui usa o valor padrão (1x). Calls que não estão em
+# _XP_CALLS_PONTUAM continuam sem xp nenhum.
 _XP_CALLS_MULTIPLICADOR = {
-    1284260386635251713: 3.0,   # o triplo de xp por minuto comparado às outras calls
+    1499002747159056537: 3.0,   # o triplo de xp por minuto comparado às outras calls
 }
 
 
@@ -10343,8 +10352,8 @@ async def _processar_call_booster_voice(member: discord.Member, before: discord.
         if trocou_de_canal:
             _resetar_call_booster(member.id)
 
-        # Calls privadas não participam do booster de call (mesma regra do xp de call)
-        if canal_depois.id in _XP_CALLS_PRIVADAS:
+        # Só as calls de _XP_CALLS_PONTUAM participam do booster de call (mesma regra do xp de call)
+        if canal_depois.id not in _XP_CALLS_PONTUAM:
             _resetar_call_booster(member.id)
             return
 
@@ -10365,12 +10374,12 @@ async def _processar_xp_call(guild: discord.Guild) -> None:
     """A cada 1 minuto (mesmo ritmo do loop de ranking), dá um pouco de xp pra
     quem está numa call de voz agora. É só um reforço — bem menos do que
     mandar mensagem nos canais principais, mas já soma algo. Destravado pra
-    todo mundo, sem exigir cargo. Calls privadas (_XP_CALLS_PRIVADAS) não
-    pontuam — quem está nelas é ignorado. Quem está mutado (silenciado por
+    todo mundo, sem exigir cargo. Só as calls de _XP_CALLS_PONTUAM pontuam —
+    quem está em qualquer outra call é ignorado. Quem está mutado (silenciado por
     si mesmo ou pelo servidor) também não pontua — só ganha quem está de
     fato participando da call com o microfone aberto."""
     for canal_voz in guild.voice_channels:
-        if canal_voz.id in _XP_CALLS_PRIVADAS:
+        if canal_voz.id not in _XP_CALLS_PONTUAM:
             continue
         for membro in canal_voz.members:
             if membro.bot:
@@ -10455,8 +10464,8 @@ async def cmd_verxp(ctx):
             "🌑 **Aeon:** ...você não está em nenhuma call agora. 🖤🌑 Sem call, sem xp de call — "
             f"entre numa call pra começar a ganhar (base: `{_XP_POR_TICK_CALL}` xp/min)."
         )
-    elif canal_voz.id in _XP_CALLS_PRIVADAS:
-        resposta = "🌑 **Aeon:** ...essa call é privada. 🖤🌑 Não rende xp nenhum, por aqui as sombras não contam."
+    elif canal_voz.id not in _XP_CALLS_PONTUAM:
+        resposta = "🌑 **Aeon:** ...essa call não marca pontuação. 🖤🌑 Não rende xp nenhum, por aqui as sombras não contam."
     elif estado_voz.self_mute or estado_voz.mute:
         resposta = (
             "🌑 **Aeon:** ...você está mutado. 🖤🌑 Sem microfone aberto, sem xp de call — "
@@ -14710,7 +14719,7 @@ async def cmd_boss(ctx):
 # reinício do bot perde os ovos ainda chocando.
 # ══════════════════════════════════════════════════════════════════════
 
-_OVO_CANAL_ID = _XP_CANAL_1              # 1284257046740602901 — onde o nascimento é anunciado
+_OVO_CANAL_ID = 1284257046740602901      # onde o nascimento é anunciado (canal fixo — não segue mais o _XP_CANAL_1)
 _OVO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60      # 5 minutos acumulados numa call pra chocar
 _OVO_CHECAGEM_INTERVALO_SEGUNDOS = 20    # de quanto em quanto tempo confere quem já bateu a meta
 
@@ -14872,7 +14881,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
 # automaticamente se algum dragão novo for adicionado no futuro.
 _DRAGOES_DISPONIVEIS = [c for c in _BATALHA_CRIATURAS if c["id"].startswith("dragao_")]
 
-_OVO_DRAGAO_CANAL_ID = _XP_CANAL_1                  # mesmo canal do chat geral — onde tudo é anunciado
+_OVO_DRAGAO_CANAL_ID = 1284257046740602901          # canal fixo do chat geral antigo — onde tudo é anunciado (não segue mais o _XP_CANAL_1)
 _OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60          # 5 minutos acumulados numa call pra chocar
 _OVO_DRAGAO_CHECAGEM_INTERVALO_SEGUNDOS = 20        # de quanto em quanto tempo confere quem já bateu a meta
 

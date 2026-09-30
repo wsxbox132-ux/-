@@ -1767,6 +1767,343 @@ async def _log_mensagem_apagada(
 
 
 # ══════════════════════════════════════════════════════════════════════
+# LOGS DE AUDITORIA — Aeon & Celestia
+# Registra no canal CANAL_AUDITORIA_ID as ações administrativas do servidor:
+# bans, desbans, expulsões, castigos (timeout), cargos dados/tirados de
+# membros, apelidos alterados, canais criados/apagados/editados e cargos
+# criados/apagados/editados. Sempre que possível mostra QUEM fez a ação e o
+# motivo, consultando o Log de Auditoria do Discord (o bot precisa da
+# permissão "Ver Registro de Auditoria" pra isso — sem ela o log sai igual,
+# só com "não identificado" no lugar de quem fez).
+# Usa @bot.listen, então convive com os outros eventos do bot sem substituir
+# nenhum deles. Os logs de call e de chat continuam nos canais deles.
+# ══════════════════════════════════════════════════════════════════════
+
+CANAL_AUDITORIA_ID = 1554532119865200670   # canal dos logs de auditoria
+
+COR_AUD_CRIADO   = 0x57F287   # verde — criado / desbanido / cargo dado
+COR_AUD_APAGADO  = 0xED4245   # vermelho — apagado / cargo tirado
+COR_AUD_EDITADO  = 0xFAA61A   # laranja — editado / apelido alterado
+COR_AUD_PUNICAO  = 0x992D22   # vermelho escuro — ban / expulsão / castigo
+
+_AUD_JANELA_SEGUNDOS = 20     # só aceita entradas do Log de Auditoria dos últimos 20s
+_aud_aviso_canal_sumido = False
+
+_AUD_TIPOS_CANAL = {
+    "text": "Texto", "voice": "Voz", "category": "Categoria",
+    "stage_voice": "Palco", "forum": "Fórum", "news": "Anúncios",
+}
+
+# (rótulo, atributo) dos campos de canal que valem um log quando mudam
+_AUD_ATRIBUTOS_CANAL = (
+    ("Nome", "name"), ("Tópico", "topic"), ("Modo lento (s)", "slowmode_delay"),
+    ("NSFW", "nsfw"), ("Limite de usuários", "user_limit"), ("Bitrate", "bitrate"),
+)
+
+
+def _aud_cortar(texto, limite: int = 1000) -> str:
+    texto = str(texto)
+    return texto if len(texto) <= limite else texto[:limite - 1] + "…"
+
+
+def _aud_pessoa(u) -> str:
+    return f"{u.mention} (`{u.id}`)"
+
+
+def _aud_tipo_canal(canal) -> str:
+    nome = getattr(canal.type, "name", str(canal.type))
+    return _AUD_TIPOS_CANAL.get(nome, nome.replace("_", " ").title())
+
+
+def _aud_canal(guild: discord.Guild):
+    """Devolve o canal de auditoria, ou None. Só devolve se ele pertencer a
+    ESTE servidor — assim eventos de outro servidor do bot não vazam pra cá.
+    Avisa no console (uma vez só) se o canal não existir em servidor nenhum."""
+    global _aud_aviso_canal_sumido
+    canal = bot.get_channel(CANAL_AUDITORIA_ID)
+    if canal is None:
+        if not _aud_aviso_canal_sumido:
+            _aud_aviso_canal_sumido = True
+            print(f"[auditoria] AVISO: canal {CANAL_AUDITORIA_ID} não encontrado em nenhum servidor do bot.")
+        return None
+    if getattr(canal, "guild", None) is None or canal.guild.id != guild.id:
+        return None
+    return canal
+
+
+async def _aud_executor(guild: discord.Guild, acao, alvo_id: int):
+    """Procura no Log de Auditoria do Discord quem fez `acao` contra `alvo_id`
+    nos últimos segundos. Devolve (executor, motivo) ou (None, None)."""
+    await asyncio.sleep(2)   # o Discord demora um instante pra gravar a entrada
+    try:
+        agora = discord.utils.utcnow()
+        async for entry in guild.audit_logs(limit=10, action=acao):
+            if getattr(entry.target, "id", None) != alvo_id:
+                continue
+            if (agora - entry.created_at).total_seconds() > _AUD_JANELA_SEGUNDOS:
+                continue
+            return entry.user, entry.reason
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+    return None, None
+
+
+async def _aud_enviar(canal, titulo: str, cor: int, campos: list,
+                      executor=None, motivo=None, mostrar_executor: bool = True) -> None:
+    embed = discord.Embed(title=titulo, color=cor, timestamp=discord.utils.utcnow())
+    for nome, valor, inline in campos:
+        embed.add_field(name=nome, value=_aud_cortar(valor) or "—", inline=inline)
+    if mostrar_executor:
+        embed.add_field(
+            name="👮 Feito por",
+            value=_aud_pessoa(executor) if executor else "*não identificado* (automático, ou o bot não pode ver o Log de Auditoria)",
+            inline=False,
+        )
+    if motivo:
+        embed.add_field(name="📝 Motivo", value=_aud_cortar(motivo), inline=False)
+    embed.set_footer(text=LOGS_FOOTER_TEXT)
+    try:
+        await canal.send(embed=embed)
+    except (discord.Forbidden, discord.HTTPException) as e:
+        print(f"[auditoria] ERRO ao enviar log '{titulo}' em #{canal.name}: {e!r}")
+
+
+# ── Punições ─────────────────────────────────────────────────────────────────
+
+@bot.listen("on_member_ban")
+async def _aud_on_member_ban(guild: discord.Guild, user):
+    canal = _aud_canal(guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(guild, discord.AuditLogAction.ban, user.id)
+    await _aud_enviar(canal, "🔨 Membro banido", COR_AUD_PUNICAO,
+                      [("Membro", _aud_pessoa(user), False)], executor, motivo)
+
+
+@bot.listen("on_member_unban")
+async def _aud_on_member_unban(guild: discord.Guild, user):
+    canal = _aud_canal(guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(guild, discord.AuditLogAction.unban, user.id)
+    await _aud_enviar(canal, "🕊️ Membro desbanido", COR_AUD_CRIADO,
+                      [("Membro", _aud_pessoa(user), False)], executor, motivo)
+
+
+@bot.listen("on_member_remove")
+async def _aud_on_member_remove(member: discord.Member):
+    """Só loga se foi EXPULSÃO — quem saiu sozinho não aparece na auditoria."""
+    canal = _aud_canal(member.guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(member.guild, discord.AuditLogAction.kick, member.id)
+    if executor is None:
+        return
+    await _aud_enviar(canal, "👢 Membro expulso", COR_AUD_PUNICAO,
+                      [("Membro", _aud_pessoa(member), False)], executor, motivo)
+
+
+# ── Membros: cargos, apelido e castigo ───────────────────────────────────────
+
+@bot.listen("on_member_update")
+async def _aud_on_member_update(before: discord.Member, after: discord.Member):
+    canal = _aud_canal(after.guild)
+    if canal is None:
+        return
+    guild = after.guild
+
+    dados_antes = set(before.roles)
+    dados_depois = set(after.roles)
+    adicionados = [r for r in after.roles if r not in dados_antes]
+    removidos = [r for r in before.roles if r not in dados_depois]
+    if adicionados or removidos:
+        executor, motivo = await _aud_executor(guild, discord.AuditLogAction.member_role_update, after.id)
+        campos = [("Membro", _aud_pessoa(after), False)]
+        if adicionados:
+            campos.append(("➕ Cargos dados", " ".join(r.mention for r in adicionados), False))
+        if removidos:
+            campos.append(("➖ Cargos tirados", " ".join(r.mention for r in removidos), False))
+        cor = COR_AUD_CRIADO if adicionados and not removidos else COR_AUD_APAGADO if removidos and not adicionados else COR_AUD_EDITADO
+        await _aud_enviar(canal, "🎭 Cargos de membro alterados", cor, campos, executor, motivo)
+
+    if before.nick != after.nick:
+        executor, motivo = await _aud_executor(guild, discord.AuditLogAction.member_update, after.id)
+        await _aud_enviar(canal, "✏️ Apelido alterado", COR_AUD_EDITADO, [
+            ("Membro", _aud_pessoa(after), False),
+            ("Antes", f"`{before.nick}`" if before.nick else "*sem apelido*", True),
+            ("Depois", f"`{after.nick}`" if after.nick else "*sem apelido*", True),
+        ], executor, motivo)
+
+    if before.timed_out_until != after.timed_out_until:
+        executor, motivo = await _aud_executor(guild, discord.AuditLogAction.member_update, after.id)
+        if after.timed_out_until:
+            titulo, cor = "🤐 Membro em castigo (timeout)", COR_AUD_PUNICAO
+            detalhe = f"Até {discord.utils.format_dt(after.timed_out_until, 'F')} ({discord.utils.format_dt(after.timed_out_until, 'R')})"
+        else:
+            titulo, cor = "😮‍💨 Castigo (timeout) removido", COR_AUD_CRIADO
+            detalhe = "O castigo foi retirado."
+        await _aud_enviar(canal, titulo, cor, [
+            ("Membro", _aud_pessoa(after), False),
+            ("Detalhe", detalhe, False),
+        ], executor, motivo)
+
+
+# ── Canais ───────────────────────────────────────────────────────────────────
+
+@bot.listen("on_guild_channel_create")
+async def _aud_on_channel_create(channel: discord.abc.GuildChannel):
+    canal = _aud_canal(channel.guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(channel.guild, discord.AuditLogAction.channel_create, channel.id)
+    await _aud_enviar(canal, "📁 Canal criado", COR_AUD_CRIADO, [
+        ("Canal", f"{channel.mention} (`{channel.id}`)", False),
+        ("Tipo", _aud_tipo_canal(channel), True),
+        ("Categoria", channel.category.name if getattr(channel, "category", None) else "—", True),
+    ], executor, motivo)
+
+
+@bot.listen("on_guild_channel_delete")
+async def _aud_on_channel_delete(channel: discord.abc.GuildChannel):
+    canal = _aud_canal(channel.guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(channel.guild, discord.AuditLogAction.channel_delete, channel.id)
+    await _aud_enviar(canal, "🗑️ Canal apagado", COR_AUD_APAGADO, [
+        ("Canal", f"`#{channel.name}` (`{channel.id}`)", False),
+        ("Tipo", _aud_tipo_canal(channel), True),
+        ("Categoria", channel.category.name if getattr(channel, "category", None) else "—", True),
+    ], executor, motivo)
+
+
+@bot.listen("on_guild_channel_update")
+async def _aud_on_channel_update(before: discord.abc.GuildChannel, after: discord.abc.GuildChannel):
+    canal = _aud_canal(after.guild)
+    if canal is None:
+        return
+
+    campos = [("Canal", f"{after.mention} (`{after.id}`)", False)]
+    mudou = False
+    for rotulo, attr in _AUD_ATRIBUTOS_CANAL:
+        antes, depois = getattr(before, attr, None), getattr(after, attr, None)
+        if antes != depois:
+            mudou = True
+            campos.append((rotulo, f"`{antes if antes not in (None, '') else '—'}` ➜ `{depois if depois not in (None, '') else '—'}`", False))
+
+    cat_antes = getattr(before, "category", None)
+    cat_depois = getattr(after, "category", None)
+    if getattr(cat_antes, "id", None) != getattr(cat_depois, "id", None):
+        mudou = True
+        campos.append(("Categoria", f"`{cat_antes.name if cat_antes else '—'}` ➜ `{cat_depois.name if cat_depois else '—'}`", False))
+
+    permissoes_mudaram = before.overwrites != after.overwrites
+    if permissoes_mudaram:
+        mudou = True
+        campos.append(("Permissões", "As permissões do canal foram alteradas.", False))
+
+    if not mudou:
+        return   # ex.: só mudou de posição na lista — não vale log
+
+    acao = discord.AuditLogAction.overwrite_update if (permissoes_mudaram and len(campos) == 2) else discord.AuditLogAction.channel_update
+    executor, motivo = await _aud_executor(after.guild, acao, after.id)
+    if executor is None and acao != discord.AuditLogAction.channel_update:
+        executor, motivo = await _aud_executor(after.guild, discord.AuditLogAction.channel_update, after.id)
+    await _aud_enviar(canal, "🛠️ Canal editado", COR_AUD_EDITADO, campos, executor, motivo)
+
+
+# ── Cargos ───────────────────────────────────────────────────────────────────
+
+def _aud_permissoes_diff(antes: discord.Permissions, depois: discord.Permissions):
+    ganhou = [n for n, v in depois if v and not getattr(antes, n)]
+    perdeu = [n for n, v in antes if v and not getattr(depois, n)]
+    return ganhou, perdeu
+
+
+@bot.listen("on_guild_role_create")
+async def _aud_on_role_create(role: discord.Role):
+    canal = _aud_canal(role.guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(role.guild, discord.AuditLogAction.role_create, role.id)
+    await _aud_enviar(canal, "🆕 Cargo criado", COR_AUD_CRIADO,
+                      [("Cargo", f"{role.mention} (`{role.id}`)", False)], executor, motivo)
+
+
+@bot.listen("on_guild_role_delete")
+async def _aud_on_role_delete(role: discord.Role):
+    canal = _aud_canal(role.guild)
+    if canal is None:
+        return
+    executor, motivo = await _aud_executor(role.guild, discord.AuditLogAction.role_delete, role.id)
+    await _aud_enviar(canal, "🗑️ Cargo apagado", COR_AUD_APAGADO,
+                      [("Cargo", f"`@{role.name}` (`{role.id}`)", False)], executor, motivo)
+
+
+@bot.listen("on_guild_role_update")
+async def _aud_on_role_update(before: discord.Role, after: discord.Role):
+    canal = _aud_canal(after.guild)
+    if canal is None:
+        return
+
+    campos = [("Cargo", f"{after.mention} (`{after.id}`)", False)]
+    mudou = False
+    if before.name != after.name:
+        mudou = True
+        campos.append(("Nome", f"`{before.name}` ➜ `{after.name}`", False))
+    if before.color != after.color:
+        mudou = True
+        campos.append(("Cor", f"`{before.color}` ➜ `{after.color}`", False))
+    if before.hoist != after.hoist:
+        mudou = True
+        campos.append(("Separado na lista", f"`{before.hoist}` ➜ `{after.hoist}`", True))
+    if before.mentionable != after.mentionable:
+        mudou = True
+        campos.append(("Mencionável", f"`{before.mentionable}` ➜ `{after.mentionable}`", True))
+    if before.permissions != after.permissions:
+        mudou = True
+        ganhou, perdeu = _aud_permissoes_diff(before.permissions, after.permissions)
+        if ganhou:
+            campos.append(("➕ Permissões ganhas", ", ".join(f"`{p}`" for p in ganhou), False))
+        if perdeu:
+            campos.append(("➖ Permissões perdidas", ", ".join(f"`{p}`" for p in perdeu), False))
+
+    if not mudou:
+        return   # ex.: só mudou de posição na lista — não vale log
+
+    executor, motivo = await _aud_executor(after.guild, discord.AuditLogAction.role_update, after.id)
+    await _aud_enviar(canal, "🛠️ Cargo editado", COR_AUD_EDITADO, campos, executor, motivo)
+
+
+@bot.command(name="testeauditoria")
+async def cmd_teste_auditoria(ctx):
+    """Manda um log de teste no canal de auditoria e diz o motivo se não der.
+    Só o criador pode usar."""
+    if not await _apenas_criador(ctx):
+        return
+
+    canal = bot.get_channel(CANAL_AUDITORIA_ID)
+    if canal is None:
+        servidores = ", ".join(f"{g.name} ({g.id})" for g in bot.guilds) or "nenhum"
+        await ctx.send(f"❌ Não achei o canal `{CANAL_AUDITORIA_ID}` em nenhum servidor do bot. Servidores do bot: {servidores}.")
+        return
+
+    try:
+        await _aud_enviar(canal, "🧪 Teste dos logs de auditoria", COR_AUD_EDITADO,
+                          [("Pedido por", _aud_pessoa(ctx.author), False)], mostrar_executor=False)
+    except Exception as e:
+        await ctx.send(f"❌ Falhou ao enviar em {canal.mention}: `{e!r}`")
+        return
+
+    eu = canal.guild.me
+    pode_ver_auditoria = bool(eu and eu.guild_permissions.view_audit_log)
+    aviso = "" if pode_ver_auditoria else (
+        "\n⚠️ Falta a permissão **Ver Registro de Auditoria** pro bot — os logs saem, "
+        "mas sem mostrar *quem* fez cada ação."
+    )
+    await ctx.send(f"✅ Teste enviado em {canal.mention}. Se ele apareceu lá, está tudo certo!{aviso}")
+
+
+# ══════════════════════════════════════════════════════════════════════
 # SISTEMA DE CONVITES — Aeon & Celestia
 # Registra quem convidou quem: sempre que alguém entra no servidor usando
 # um convite, descobre qual convite foi usado e quem o criou, soma +1 no
@@ -11239,8 +11576,10 @@ def _garantir_criaturas_iniciais(user_id: int) -> list:
 
 
 # Detecta a frase em qualquer lugar da mensagem (com ou sem acento), desde
-# que tenha alguém mencionado junto.
-_BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf", re.IGNORECASE)
+# que tenha alguém mencionado junto. Frases aceitas:
+#   • "eu te desafio @alguém"
+#   • "vamo batalhar @alguém"  (também vale "vamos batalhar")
+_BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf|vamos?\s+batalhar", re.IGNORECASE)
 
 _BATALHA_COOLDOWN_SEGUNDOS = 120    # tempo mínimo entre desafios lançados pela MESMA pessoa
 _batalha_ultimo_desafio: dict = {}  # user_id -> time.time() do último desafio lançado
@@ -13367,11 +13706,22 @@ async def _processar_desafio(message: discord.Message) -> None:
         return
 
     guild = message.guild
-    cargo_xp = guild.get_role(CARGO_XP_ID)
-    if not cargo_xp or cargo_xp not in desafiante.roles or cargo_xp not in desafiado.roles:
+    # ⚠️ O ranking foi destravado — não exige mais o cargo CARGO_XP_ID. Quem
+    # participa do ranking é quem já mandou mensagem em algum dos canais que o
+    # liberam (flag "elegivel"), e é essa mesma flag que vale aqui. Antes esta
+    # checagem ainda exigia o cargo antigo e barrava gente que já estava no
+    # ranking.
+    fora_do_ranking = [
+        p for p in (desafiante, desafiado)
+        if not xp_stats.get(p.id, {}).get("elegivel")
+    ]
+    if fora_do_ranking:
+        nomes = " e ".join(f"**{p.display_name}**" for p in fora_do_ranking)
         await message.channel.send(
             "🌟 **Celestia:** Pra batalhar valendo pontos, os dois precisam estar "
-            "participando do ranking de nível!! 🌸✨"
+            "participando do ranking de nível!! 🌸✨\n"
+            f"› Ainda fora do ranking: {nomes} — mande uma mensagem em "
+            f"<#{_XP_CANAL_1}>, <#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}> pra entrar!"
         )
         return
 

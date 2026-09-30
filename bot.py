@@ -11071,6 +11071,8 @@ async def cmd_xp_debug(ctx):
         f"**ID da mensagem de ranking salva:** `{_xp_ranking_message_id}` (página atual: `{_xp_ranking_pagina_atual}`)",
         f"**Entradas em xp_stats (memória):** {len(xp_stats)}",
         f"**Arquivo de dados existe?** {'✅ sim' if os.path.exists(_XP_DATA_FILE) else '❌ não'}",
+        f"**Pasta de dados:** `{_ANJO_DATA_DIR}`",
+        f"**Volume do Railway:** {'✅ detectado — os dados sobrevivem a reinícios' if os.getenv('RAILWAY_VOLUME_MOUNT_PATH') else '⚠️ NÃO detectado — os dados serão perdidos no próximo redeploy!'}",
         "",
         "**Conteúdo bruto de xp_stats:**",
     ]
@@ -11352,6 +11354,24 @@ async def cmd_xp_backfill(ctx, limite: int = None):
 # Carrega o histórico de XP salvo assim que o módulo sobe — antes mesmo de conectar no Discord
 _carregar_xp_stats()
 
+# Aviso no console (log do Railway) sobre a persistência: mostra qual pasta
+# está sendo usada, se existe Volume anexado e quantas pessoas foram
+# recuperadas do arquivo. Se o Volume NÃO estiver anexado, os dados caem na
+# pasta do próprio bot, que o Railway apaga a cada redeploy — o ranking zeraria.
+if os.getenv("RAILWAY_VOLUME_MOUNT_PATH"):
+    print(f"[dados] ✅ Volume do Railway detectado em '{_ANJO_DATA_DIR}' — XP, ranking e criaturas sobrevivem a reinícios.")
+else:
+    print(
+        f"[dados] ⚠️ NENHUM Volume do Railway detectado (RAILWAY_VOLUME_MOUNT_PATH vazia). "
+        f"Usando '{_ANJO_DATA_DIR}' — esses dados serão PERDIDOS no próximo redeploy. "
+        f"Anexe um Volume ao serviço (mount path /data) pra o ranking não zerar."
+    )
+print(
+    f"[dados] xp_ranking_data.json: "
+    f"{'encontrado' if os.path.exists(_XP_DATA_FILE) else 'NÃO encontrado (primeira execução, ou dados perdidos)'} "
+    f"— {len(xp_stats)} pessoa(s) carregada(s) na memória."
+)
+
 # Carrega a streak salva do Booster de Call — a reconciliação final (quem
 # realmente ainda está numa call válida) acontece no on_ready.
 _carregar_call_booster_stats()
@@ -11578,8 +11598,8 @@ def _garantir_criaturas_iniciais(user_id: int) -> list:
 # Detecta a frase em qualquer lugar da mensagem (com ou sem acento), desde
 # que tenha alguém mencionado junto. Frases aceitas:
 #   • "eu te desafio @alguém"
-#   • "vamo batalhar @alguém"  (também vale "vamos batalhar")
-_BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf|vamos?\s+batalhar", re.IGNORECASE)
+#   • "vamo batalha @alguém" ou "vamo batalhar @alguém"  (também vale "vamos ...")
+_BATALHA_REGEX = re.compile(r"eu\s+te\s+desaf|vamos?\s+batalha", re.IGNORECASE)
 
 _BATALHA_COOLDOWN_SEGUNDOS = 120    # tempo mínimo entre desafios lançados pela MESMA pessoa
 _batalha_ultimo_desafio: dict = {}  # user_id -> time.time() do último desafio lançado

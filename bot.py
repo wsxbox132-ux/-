@@ -14213,7 +14213,12 @@ async def cmd_uparcriatura(ctx, alvo_id: int = None):
 # ══════════════════════════════════════════════════════════════════════
 
 _BAU_GIF = "https://static2.klipy.com/ii/d7aec6f6f171607374b2065c836f92f4/be/e0/WQOIGADT.gif"
-_BAU_CANAL_ID = 1284257046740602901  # mesmo canal do chat geral (_XP_CANAL_1)
+# 🎯 Canal ÚNICO onde caem baús, bosses e ovos (tudo que depende de comando do Reality).
+# Pra mudar de novo no futuro, é só trocar esse número aqui — _BAU, _BOSS (e boss2-5),
+# _OVO e _OVO_DRAGAO seguem ele.
+_RPG_COMANDOS_CANAL_ID = 1499002824627847299
+
+_BAU_CANAL_ID = _RPG_COMANDOS_CANAL_ID  # baús caem aqui
 
 _BAU_CHANCE_SECRETO = 0.08    # 8% de chance — ainda o prêmio mais raro do baú (o booster é 15%), uma criatura 🌌 Secreta
 _BAU_CHANCE_BOOSTER = 0.15    # 15% de chance de sair o booster
@@ -14610,7 +14615,7 @@ def _montar_embed_bau() -> discord.Embed:
 
 @bot.command(name="bau")
 async def cmd_bau(ctx):
-    """Joga um baú de recompensa no canal do chat geral — a primeira pessoa
+    """Joga um baú de recompensa no canal do RPG (_RPG_COMANDOS_CANAL_ID) — a primeira pessoa
     que clicar no botão leva o prêmio. Só o Reality pode usar. A própria
     mensagem do comando some logo em seguida. Uso: .bau"""
     if ctx.author.id != CRIADOR_ID:
@@ -14704,7 +14709,7 @@ async def cmd_baumimic(ctx):
 # mais precisar trocar.
 _BOSS_DRAGAO_CAOS_GIF = "https://cdn.discordapp.com/attachments/926913851172204577/1529955698690228294/gif-ezgif.com-optimize.gif?ex=6a63d1c7&is=6a628047&hm=7ce47d57d6827c7b60f48d9bb849950abdfe7893b460ef32a5a6755650ecc065"
 
-_BOSS_CANAL_ID = 1284257046740602901   # mesmo canal do chat geral (_XP_CANAL_1) — só aparece aqui
+_BOSS_CANAL_ID = _RPG_COMANDOS_CANAL_ID   # bosses 1-5 só aparecem aqui (boss2-5 herdam esse canal)
 
 _BOSS_TEMPO_ESCOLHA      = 60   # segundos pra decidir "todos juntos" ou "sozinho"
 _BOSS_TEMPO_RECRUTAMENTO = 10   # segundos pra galera clicar "quero participar" depois de "todos juntos"
@@ -15103,7 +15108,7 @@ class BossEscolhaView(discord.ui.View):
 
 @bot.command(name="boss")
 async def cmd_boss(ctx):
-    """🐉 Invoca o Dragão do Caos no canal do chat geral — só o Reality
+    """🐉 Invoca o Dragão do Caos no canal do RPG (_RPG_COMANDOS_CANAL_ID) — só o Reality
     (CRIADOR_ID) pode chamar. O chat escolhe entre encarar sozinho (5% de
     chance) ou juntar um time (mais gente = mais chance, mas ainda é um
     boss bem difícil). Uso: .boss"""
@@ -15167,7 +15172,7 @@ async def cmd_boss(ctx):
 # reinício do bot perde os ovos ainda chocando.
 # ══════════════════════════════════════════════════════════════════════
 
-_OVO_CANAL_ID = 1284257046740602901      # onde o nascimento é anunciado (canal fixo — não segue mais o _XP_CANAL_1)
+_OVO_CANAL_ID = _RPG_COMANDOS_CANAL_ID      # onde o nascimento do ovo é anunciado
 _OVO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60      # 5 minutos acumulados numa call pra chocar
 _OVO_CHECAGEM_INTERVALO_SEGUNDOS = 20    # de quanto em quanto tempo confere quem já bateu a meta
 
@@ -15317,7 +15322,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
 # @membro>` (só o Reality/CRIADOR_ID pode usar) dá o ovo pendente, a pessoa
 # precisa acumular `_OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS` numa call (o tempo
 # soma mesmo saindo e voltando) e, ao chocar, nasce um dragão aleatório
-# (prioriza um que ela ainda não tem). Tudo é anunciado no chat geral
+# (prioriza um que ela ainda não tem). Tudo é anunciado no canal do RPG
 # (`_OVO_DRAGAO_CANAL_ID`) — inclusive a entrega do ovo, com uma introdução
 # mais épica que o ovo comum.
 # ⚠️ `_ovos_dragao_pendentes` também fica só em memória — um reinício do
@@ -15329,7 +15334,7 @@ async def cmd_ovo(ctx, alvo_id: int = None):
 # automaticamente se algum dragão novo for adicionado no futuro.
 _DRAGOES_DISPONIVEIS = [c for c in _BATALHA_CRIATURAS if c["id"].startswith("dragao_")]
 
-_OVO_DRAGAO_CANAL_ID = 1284257046740602901          # canal fixo do chat geral antigo — onde tudo é anunciado (não segue mais o _XP_CANAL_1)
+_OVO_DRAGAO_CANAL_ID = _RPG_COMANDOS_CANAL_ID          # entrega e nascimento do ovo de dragão são anunciados aqui
 _OVO_DRAGAO_TEMPO_CHOCAR_SEGUNDOS = 5 * 60          # 5 minutos acumulados numa call pra chocar
 _OVO_DRAGAO_CHECAGEM_INTERVALO_SEGUNDOS = 20        # de quanto em quanto tempo confere quem já bateu a meta
 
@@ -15368,7 +15373,7 @@ def _ovo_dragao_pausar_contagem(user_id: int) -> None:
 
 async def _ovo_dragao_chocar(user_id: int) -> None:
     """Choca o ovo de dragão dessa pessoa: sorteia um 🐉 dragão (prioriza
-    um que ela ainda não tem) pra coleção dela, e anuncia no chat geral."""
+    um que ela ainda não tem) pra coleção dela, e anuncia no canal do RPG."""
     _ovos_dragao_pendentes.pop(user_id, None)
 
     dados = xp_stats[user_id]
@@ -15476,10 +15481,10 @@ async def cmd_ovodragao(ctx, alvo_id: int = None):
     if canal_geral is not None:
         await canal_geral.send(embed=embed_intro)
 
-    # Se o comando foi usado fora do chat geral (ex.: no PV, como o .ovo normal),
+    # Se o comando foi usado fora do canal do RPG (ex.: no PV, como o .ovo normal),
     # manda uma confirmação simples pro Reality também.
     if canal_geral is None or ctx.channel.id != canal_geral.id:
-        await ctx.send(f"✅ Ovo de dragão entregue pra {mencao} — anunciado no chat geral.")
+        await ctx.send(f"✅ Ovo de dragão entregue pra {mencao} — anunciado em <#{_OVO_DRAGAO_CANAL_ID}>.")
 
 
 # Comando .boss2 (só o Reality/CRIADOR_ID pode ativar) invoca o boss mais

@@ -15247,6 +15247,26 @@ def _ovo_pausar_contagem(user_id: int) -> None:
         ovo["entrou_em"] = None
 
 
+async def _achar_canal_ovo(canal_id: int, guild_hint=None):
+    """Localiza o canal por ID em QUALQUER servidor do bot (cache e, se preciso,
+    API). Antes usava bot.guilds[0].get_channel(...), que devolve None quando o
+    canal está em outro servidor — o texto do ovo simplesmente não era enviado,
+    sem nenhum aviso. Devolve (canal, erro); `erro` é None se deu certo."""
+    canal = bot.get_channel(canal_id)
+    if canal is None and guild_hint is not None:
+        canal = guild_hint.get_channel(canal_id)
+    if canal is None:
+        try:
+            canal = await bot.fetch_channel(canal_id)
+        except discord.NotFound:
+            return None, f"o canal `{canal_id}` não existe — confira o ID."
+        except discord.Forbidden:
+            return None, f"o bot não enxerga o canal `{canal_id}` (falta **Ver canal** ou ele não está nesse servidor)."
+        except discord.HTTPException as e:
+            return None, f"o Discord recusou a busca do canal `{canal_id}`: `{e}`."
+    return canal, None
+
+
 async def _ovo_chocar(user_id: int) -> None:
     """Choca o ovo dessa pessoa: sorteia e concede uma criatura nova pra
     coleção dela, e anuncia no canal _OVO_CANAL_ID."""
@@ -15265,12 +15285,11 @@ async def _ovo_chocar(user_id: int) -> None:
         dados["criaturas"].append(criatura_nascida["id"])
     asyncio.create_task(_salvar_xp_stats())
 
-    guild = bot.guilds[0] if bot.guilds else None
-    if guild is None:
-        return
-    canal = guild.get_channel(_OVO_CANAL_ID)
+    canal, erro_canal = await _achar_canal_ovo(_OVO_CANAL_ID)
     if canal is None:
+        print(f"[ovo] Não consegui anunciar o nascimento: {erro_canal}")
         return
+    guild = canal.guild
 
     membro = guild.get_member(user_id)
     mencao = membro.mention if membro else f"<@{user_id}>"
@@ -15426,12 +15445,11 @@ async def _ovo_dragao_chocar(user_id: int) -> None:
         dados["criaturas"].append(dragao_nascido["id"])
     asyncio.create_task(_salvar_xp_stats())
 
-    guild = bot.guilds[0] if bot.guilds else None
-    if guild is None:
-        return
-    canal = guild.get_channel(_OVO_DRAGAO_CANAL_ID)
+    canal, erro_canal = await _achar_canal_ovo(_OVO_DRAGAO_CANAL_ID)
     if canal is None:
+        print(f"[ovodragao] Não consegui anunciar o nascimento: {erro_canal}")
         return
+    guild = canal.guild
 
     membro = guild.get_member(user_id)
     mencao = membro.mention if membro else f"<@{user_id}>"
@@ -15515,14 +15533,26 @@ async def cmd_ovodragao(ctx, alvo_id: int = None):
     )
     embed_intro.set_footer(text="🌑 Aeon & ☀️ Celestia — Incubadora de Dragões")
 
-    canal_geral = guild.get_channel(_OVO_DRAGAO_CANAL_ID) if guild else None
+    canal_geral, erro_canal = await _achar_canal_ovo(_OVO_DRAGAO_CANAL_ID, guild)
+    enviado = False
     if canal_geral is not None:
-        await canal_geral.send(embed=embed_intro)
+        try:
+            await canal_geral.send(embed=embed_intro)
+            enviado = True
+        except discord.Forbidden:
+            erro_canal = f"o bot não tem permissão de **Enviar mensagens / Inserir links** em <#{_OVO_DRAGAO_CANAL_ID}>."
+        except discord.HTTPException as e:
+            erro_canal = f"o Discord recusou o envio em <#{_OVO_DRAGAO_CANAL_ID}>: `{e}`."
 
-    # Se o comando foi usado fora do canal do RPG (ex.: no PV, como o .ovo normal),
-    # manda uma confirmação simples pro Reality também.
-    if canal_geral is None or ctx.channel.id != canal_geral.id:
-        await ctx.send(f"✅ Ovo de dragão entregue pra {mencao} — anunciado em <#{_OVO_DRAGAO_CANAL_ID}>.")
+    # Confirmação honesta pro Reality: só diz "anunciado" se o texto realmente foi enviado.
+    if enviado:
+        if ctx.channel.id != canal_geral.id:
+            await ctx.send(f"✅ Ovo de dragão entregue pra {mencao} — anunciado em <#{_OVO_DRAGAO_CANAL_ID}>.")
+    else:
+        await ctx.send(
+            f"⚠️ Ovo de dragão entregue pra {mencao} (a contagem já está valendo), "
+            f"mas **o texto NÃO foi anunciado**: {erro_canal}"
+        )
 
 
 # Comando .boss2 (só o Reality/CRIADOR_ID pode ativar) invoca o boss mais

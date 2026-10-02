@@ -100,6 +100,56 @@ async def _apenas_criador(ctx) -> bool:
     return False
 
 
+async def _canal_rpg_ou_erro(ctx, canal_id: int):
+    """Acha o canal do RPG (baú/boss) de forma robusta e, se não achar ou não
+    puder falar lá, AVISA no chat em vez de falhar em silêncio. Tenta, em
+    ordem: o servidor do comando, o cache global do bot e a API (fetch).
+    Devolve o canal, ou None (já com o motivo explicado pra quem usou)."""
+    canal = None
+    if ctx.guild is not None:
+        canal = ctx.guild.get_channel(canal_id)
+    if canal is None:
+        canal = bot.get_channel(canal_id)
+    if canal is None:
+        try:
+            canal = await bot.fetch_channel(canal_id)
+        except discord.NotFound:
+            aviso = await ctx.send(
+                f"❌ Não existe nenhum canal com o ID `{canal_id}` — confira o número em `_RPG_COMANDOS_CANAL_ID`."
+            )
+            asyncio.create_task(_apagar_mensagem_depois(aviso, 20))
+            return None
+        except discord.Forbidden:
+            aviso = await ctx.send(
+                f"❌ O canal `{canal_id}` existe, mas eu não tenho permissão pra ver ele. "
+                "Dá **Ver canal** + **Enviar mensagens** + **Inserir links** pro meu cargo lá."
+            )
+            asyncio.create_task(_apagar_mensagem_depois(aviso, 20))
+            return None
+        except discord.HTTPException as e:
+            aviso = await ctx.send(f"❌ Erro ao buscar o canal `{canal_id}`: `{e!r}`")
+            asyncio.create_task(_apagar_mensagem_depois(aviso, 20))
+            return None
+
+    guild_canal = getattr(canal, "guild", None)
+    if guild_canal is not None and guild_canal.me is not None:
+        perms = canal.permissions_for(guild_canal.me)
+        if not (perms.view_channel and perms.send_messages and perms.embed_links):
+            faltando = [
+                nome for nome, ok in (
+                    ("Ver canal", perms.view_channel),
+                    ("Enviar mensagens", perms.send_messages),
+                    ("Inserir links", perms.embed_links),
+                ) if not ok
+            ]
+            aviso = await ctx.send(
+                f"❌ Sem permissão em <#{canal_id}>: faltou **{', '.join(faltando)}** pro meu cargo."
+            )
+            asyncio.create_task(_apagar_mensagem_depois(aviso, 20))
+            return None
+    return canal
+
+
 # ══════════════════════════════════════════════════════════════════════
 # ANTI-SPAM — Aeon & Celestia
 # Detecta quando alguém manda a mesma mensagem 5+ vezes seguidas,
@@ -14627,10 +14677,7 @@ async def cmd_bau(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BAU_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BAU_CANAL_ID)
     if canal is None:
         return
 
@@ -14653,10 +14700,7 @@ async def cmd_bausecreto(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BAU_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BAU_CANAL_ID)
     if canal is None:
         return
 
@@ -14679,10 +14723,7 @@ async def cmd_baumimic(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BAU_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BAU_CANAL_ID)
     if canal is None:
         return
 
@@ -15121,10 +15162,7 @@ async def cmd_boss(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BOSS_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BOSS_CANAL_ID)
     if canal is None:
         return
 
@@ -15905,10 +15943,7 @@ async def cmd_boss2(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BOSS2_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BOSS2_CANAL_ID)
     if canal is None:
         return
 
@@ -16364,10 +16399,7 @@ async def cmd_boss3(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BOSS3_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BOSS3_CANAL_ID)
     if canal is None:
         return
 
@@ -16888,10 +16920,7 @@ async def cmd_boss4(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BOSS4_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BOSS4_CANAL_ID)
     if canal is None:
         return
 
@@ -17466,10 +17495,7 @@ async def cmd_boss5(ctx):
     except (discord.NotFound, discord.Forbidden, discord.HTTPException):
         pass
 
-    guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
-    if guild is None:
-        return
-    canal = guild.get_channel(_BOSS5_CANAL_ID)
+    canal = await _canal_rpg_ou_erro(ctx, _BOSS5_CANAL_ID)
     if canal is None:
         return
 

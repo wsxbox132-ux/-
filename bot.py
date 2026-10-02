@@ -13738,6 +13738,923 @@ async def _executar_batalha(
     asyncio.create_task(_log_rpg(canal.guild, "⚔️ Batalha entre membros", "\n".join(partes_log)))
 
 
+# ══════════════════════════════════════════════════════════════════════
+# ⚔️👥 BATALHA EM GRUPO — "Eu te desafio @pessoa1 @pessoa2 (@pessoa3 ...)"
+#
+# Quando alguém marca DUAS OU MAIS pessoas na frase de desafio, em vez do
+# duelo 1x1 normal abre-se uma batalha 1 x N (1 x 2, 1 x 3 ... até
+# _BG_MAX_DESAFIADOS). Regras:
+#
+#   • Convite: TODOS os desafiados precisam clicar em ⚔️ Aceitar dentro de
+#     _BG_TEMPO_ACEITE segundos. Se UM só recusar (ou o tempo acabar sem
+#     todo mundo aceitar), a batalha inteira é cancelada.
+#   • Cada participante (o desafiante e cada desafiado) invoca UMA criatura,
+#     sorteada dentre as que ele já desbloqueou (respeitando favorita ativa),
+#     exatamente como no 1x1.
+#   • A criatura do desafiante (o "solo") enfrenta a de cada adversário num
+#     duelo. A chance de cada duelo usa o MESMO cálculo do 1x1
+#     (_chance_vitoria: raridade + Nível de Capacidade), com um ajuste de
+#     "cerco": o solo está em desvantagem numérica, então perde
+#     _BG_PENALIDADE_CERCO de chance por cada adversário além do primeiro.
+#   • Como compensação do risco, quando o solo VENCE um duelo o % de XP
+#     saqueado é multiplicado por _BG_BONUS_SAQUE_SOLO. E, pra o solo não
+#     ser massacrado, o total de XP que ele pode perder na batalha inteira
+#     é travado em _BG_TETO_PERDA_SOLO do XP que ele tinha no início.
+#   • Todo o resto do RPG vale: dado de roubo de XP (e 15% de não roubar),
+#     Golpe Especial, Vantagem/.vantagemfossio, vitórias/derrotas, uso e
+#     subida de Nível de Capacidade das criaturas, favorita que cansa,
+#     Booster de Elemental, desbloqueio de criatura nova / Mítico / Fóssil
+#     (call) / Besta / Elemental / Pet, level-up no ranking e log do RPG.
+# ══════════════════════════════════════════════════════════════════════
+_BG_MAX_DESAFIADOS   = 5      # máximo de pessoas desafiadas de uma vez (1 x 5)
+_BG_TEMPO_ACEITE     = 90     # segundos pra TODOS os desafiados aceitarem
+_BG_PENALIDADE_CERCO = 0.05   # -5% de chance do solo por cada adversário além do 1º
+_BG_BONUS_SAQUE_SOLO = 1.25   # x1.25 no % de XP saqueado quando o solo vence um duelo
+_BG_TETO_PERDA_SOLO  = 0.35   # o solo nunca perde mais de 35% do XP que tinha no início
+_BG_LIMITE_EMBED     = 3800   # tamanho máximo de texto por embed (o do Discord é 4096)
+
+
+def _bg_extrair_alvos(message: discord.Message) -> list:
+    """Devolve os membros REALMENTE marcados no texto da mensagem (sem
+    duplicatas, sem bots e sem o próprio autor), na ordem em que aparecem.
+    Lê as menções direto do texto (<@id>) pra ignorar o "ping" automático
+    que o Discord adiciona quando a mensagem é uma resposta a alguém."""
+    ids_no_texto = []
+    for achado in re.finditer(r"<@!?(\d+)>", message.content or ""):
+        uid = int(achado.group(1))
+        if uid not in ids_no_texto:
+            ids_no_texto.append(uid)
+
+    alvos = []
+    for uid in ids_no_texto:
+        if uid == message.author.id:
+            continue
+        membro = message.guild.get_member(uid) if message.guild else None
+        if membro is None:
+            membro = next(
+                (m for m in message.mentions if m.id == uid and isinstance(m, discord.Member)), None
+            )
+        if membro is None or membro.bot:
+            continue
+        alvos.append(membro)
+    return alvos
+
+
+def _bg_em_call(membro: discord.Member) -> bool:
+    """True se o membro está conectado em algum canal de voz agora."""
+    return membro.voice is not None and membro.voice.channel is not None
+
+
+def _bg_chance_vitoria(
+    criatura_solo: dict, nivel_solo: int, criatura_adv: dict, nivel_adv: int, qtd_adversarios: int
+) -> float:
+    """Chance do SOLO vencer UM duelo da batalha em grupo: o mesmo cálculo
+    do 1x1 (_chance_vitoria — raridade + Nível de Capacidade), menos a
+    penalidade de cerco (_BG_PENALIDADE_CERCO por adversário além do 1º),
+    mantendo as mesmas travas de mínimo/máximo (inclusive a folgada dos
+    pares especiais Lendário x Mítico / Lendário x Secreto)."""
+    chance = _chance_vitoria(criatura_solo, nivel_solo, criatura_adv, nivel_adv)
+    chance -= _BG_PENALIDADE_CERCO * max(0, qtd_adversarios - 1)
+
+    par = frozenset({criatura_solo["raridade"], criatura_adv["raridade"]})
+    if par in _CHANCE_VITORIA_PAR_ESPECIAL:
+        minimo, maximo = _CHANCE_VITORIA_MINIMA_PAR_ESPECIAL, _CHANCE_VITORIA_MAXIMA_PAR_ESPECIAL
+    else:
+        minimo, maximo = _CHANCE_VITORIA_MINIMA, _CHANCE_VITORIA_MAXIMA
+    return max(minimo, min(maximo, chance))
+
+
+def _bg_embed_status(
+    desafiante: discord.Member, desafiados: list, estado: str, aceitaram: set = None, recusou: discord.Member = None
+) -> discord.Embed:
+    """Embed do convite de batalha em grupo, num dos estados: pendente,
+    aceito (todos toparam), recusado ou expirado."""
+    aceitaram = aceitaram or set()
+    n = len(desafiados)
+    lista = ", ".join(d.mention for d in desafiados)
+
+    if estado == "pendente":
+        linhas = "\n".join(
+            f"{'✅' if d.id in aceitaram else '⏳'} {d.mention}" for d in desafiados
+        )
+        titulo = f"⚔️👥 Desafio em grupo lançado! (1 x {n})"
+        descricao = (
+            f"🌑 **Aeon:** ...{desafiante.mention} desafiou {lista} para uma batalha **1 x {n}**. "
+            f"As sombras só se agitam se **TODOS** concordarem. 🖤🌑\n"
+            f"🌟 **Celestia:** Cada desafiado precisa clicar em **Aceitar**!! 😆🌟✨ "
+            f"*aponta pros botões* Vocês têm `{_BG_TEMPO_ACEITE}s`!!\n\n"
+            f"**Quem já aceitou:**\n{linhas}"
+        )
+        cor = 0x2b2b3b
+    elif estado == "aceito":
+        titulo = f"✅ Todo mundo aceitou! (1 x {n})"
+        descricao = (
+            f"🌟 **Celestia:** TODO MUNDO TOPOU!! 😱🌟✨ *vibra* A batalha em grupo vai começar...\n"
+            f"🌑 **Aeon:** ...que as sombras testemunhem o combate. 🖤🌑"
+        )
+        cor = 0x4bbf73
+    elif estado == "recusado":
+        quem = recusou.mention if recusou is not None else "alguém"
+        titulo = "🏳️ Desafio em grupo recusado"
+        descricao = (
+            f"🌑 **Aeon:** ...{quem} recuou. Sem a concordância de todos, as sombras não se movem. 🖤🌑\n"
+            f"🌟 **Celestia:** Tudo bem, {desafiante.mention}!! Talvez na próxima!! 🌸"
+        )
+        cor = 0x888888
+    else:  # expirado
+        faltaram = ", ".join(d.mention for d in desafiados if d.id not in aceitaram) or "ninguém"
+        titulo = "⌛ Desafio em grupo expirado"
+        descricao = (
+            f"🌑 **Aeon:** ...{faltaram} não respondeu a tempo. O desafio se dissolve nas sombras. 🖤🌑\n"
+            f"🌟 **Celestia:** Que pena!! Talvez {desafiante.mention} tente de novo depois!! 🌸"
+        )
+        cor = 0x888888
+
+    embed = discord.Embed(title=titulo, description=descricao, color=cor)
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    return embed
+
+
+class DesafioGrupoView(discord.ui.View):
+    """Botões de Aceitar/Recusar do convite de batalha em grupo. Só os
+    desafiados podem usar. A batalha só começa quando TODOS aceitam; se UM
+    recusar, ou o tempo (_BG_TEMPO_ACEITE) acabar sem todo mundo aceitar,
+    ela é cancelada."""
+
+    def __init__(self, desafiante: discord.Member, desafiados: list):
+        super().__init__(timeout=_BG_TEMPO_ACEITE)
+        self.desafiante = desafiante
+        self.desafiados = list(desafiados)
+        self.aceitaram: set = set()
+        self.finalizado = False
+        self.mensagem: discord.Message = None  # setada logo após o send()
+
+    def _travar_botoes(self):
+        for item in self.children:
+            item.disabled = True
+
+    @discord.ui.button(label="⚔️ Aceitar", style=discord.ButtonStyle.success)
+    async def aceitar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in {d.id for d in self.desafiados}:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio não é seu pra aceitar!! 🌸😅", ephemeral=True
+            )
+            return
+        if self.finalizado:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio já foi resolvido!! 🌸", ephemeral=True
+            )
+            return
+        if interaction.user.id in self.aceitaram:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Você já aceitou!! 😆 Agora é esperar o resto do pessoal!! ✨", ephemeral=True
+            )
+            return
+
+        self.aceitaram.add(interaction.user.id)
+
+        if len(self.aceitaram) >= len(self.desafiados):
+            # todo mundo aceitou → a batalha começa
+            self.finalizado = True
+            self._travar_botoes()
+            await interaction.response.edit_message(
+                embed=_bg_embed_status(self.desafiante, self.desafiados, "aceito", self.aceitaram),
+                view=self,
+            )
+            self.stop()
+            asyncio.create_task(
+                _bg_iniciar_apos_aceite(interaction.channel, self.desafiante, self.desafiados)
+            )
+        else:
+            await interaction.response.edit_message(
+                embed=_bg_embed_status(self.desafiante, self.desafiados, "pendente", self.aceitaram),
+                view=self,
+            )
+
+    @discord.ui.button(label="🏳️ Recusar", style=discord.ButtonStyle.danger)
+    async def recusar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id not in {d.id for d in self.desafiados}:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio não é seu pra recusar!! 🌸😅", ephemeral=True
+            )
+            return
+        if self.finalizado:
+            await interaction.response.send_message(
+                "🌟 **Celestia:** Esse desafio já foi resolvido!! 🌸", ephemeral=True
+            )
+            return
+
+        self.finalizado = True
+        self._travar_botoes()
+        await interaction.response.edit_message(
+            embed=_bg_embed_status(
+                self.desafiante, self.desafiados, "recusado", self.aceitaram, recusou=interaction.user
+            ),
+            view=self,
+        )
+        self.stop()
+        _batalha_canal_ativo.discard(interaction.channel.id)
+
+    async def on_timeout(self):
+        if self.finalizado or self.mensagem is None:
+            return
+        self.finalizado = True
+        self._travar_botoes()
+        try:
+            await self.mensagem.edit(
+                embed=_bg_embed_status(self.desafiante, self.desafiados, "expirado", self.aceitaram),
+                view=self,
+            )
+        except discord.HTTPException:
+            pass
+        _batalha_canal_ativo.discard(self.mensagem.channel.id)
+
+
+async def _bg_iniciar_apos_aceite(
+    canal: discord.TextChannel, desafiante: discord.Member, desafiados: list
+) -> None:
+    """Chamada quando TODOS os desafiados aceitaram — roda a batalha em
+    grupo e, no final (ou em caso de erro), libera o canal pra novos desafios."""
+    try:
+        await _executar_batalha_grupo(canal, desafiante, desafiados)
+    except Exception as e:
+        print(f"[batalha-grupo] ERRO ao executar batalha em grupo de {desafiante}: {e!r}")
+    finally:
+        _batalha_canal_ativo.discard(canal.id)
+
+
+def _bg_dividir_secoes(secoes: list, limite: int = _BG_LIMITE_EMBED) -> list:
+    """Junta as seções de texto em blocos de no máximo `limite` caracteres
+    (um bloco por embed), quebrando por linha se uma seção sozinha passar
+    do limite. Garante que nenhum embed estoure o teto do Discord (4096)."""
+    blocos = []
+    atual = ""
+    for secao in secoes:
+        if not secao:
+            continue
+        pedacos = [secao]
+        if len(secao) > limite:
+            pedacos, buffer = [], ""
+            for linha in secao.split("\n"):
+                if buffer and len(buffer) + len(linha) + 1 > limite:
+                    pedacos.append(buffer)
+                    buffer = linha
+                else:
+                    buffer = f"{buffer}\n{linha}" if buffer else linha
+            if buffer:
+                pedacos.append(buffer)
+        for pedaco in pedacos:
+            if atual and len(atual) + len(pedaco) + 2 > limite:
+                blocos.append(atual)
+                atual = pedaco
+            else:
+                atual = f"{atual}\n\n{pedaco}" if atual else pedaco
+    if atual:
+        blocos.append(atual)
+    return blocos
+
+
+async def _executar_batalha_grupo(
+    canal: discord.TextChannel, solo: discord.Member, adversarios: list
+) -> None:
+    """Roda a batalha em grupo inteira (1 x N): abertura, entrada de cada
+    criatura, duelos, saque de XP e todas as recompensas do RPG."""
+    n = len(adversarios)
+    participantes = [solo] + list(adversarios)
+    guild = canal.guild
+
+    # ── Criaturas e Níveis de Capacidade (lidos ANTES de registrar o uso) ──
+    criaturas = {p.id: _sortear_uma_criatura(p.id) for p in participantes}
+    nivel_antes = {p.id: _nivel_criatura(p.id, criaturas[p.id]["id"]) for p in participantes}
+    eh_favorita = {p.id: _favorito_status(p.id)["id"] == criaturas[p.id]["id"] for p in participantes}
+    eh_elemental = {p.id: criaturas[p.id]["raridade"] == "elemental" for p in participantes}
+
+    # 🌀 Booster de xp por Elemental — igual ao 1x1: quem convoca um
+    # Elemental ganha o booster na hora, ganhando ou perdendo.
+    for p in participantes:
+        if eh_elemental[p.id]:
+            _conceder_xp_booster(p.id, _ELEMENTAL_BOOSTER_MINUTOS)
+
+    def _marc(p) -> str:
+        return (" 🌟" if eh_favorita[p.id] else "") + (" 🌀✨" if eh_elemental[p.id] else "")
+
+    # Foto do XP/nível de cada um no começo (os saques são calculados em
+    # cima disso, pra não "compor" um em cima do outro durante a batalha).
+    xp_inicio = {p.id: xp_stats[p.id]["xp"] for p in participantes}
+    nivel_xp_inicio = {p.id: xp_stats[p.id]["nivel"] for p in participantes}
+    vitorias_inicio = {p.id: xp_stats[p.id].get("vitorias", 0) for p in participantes}
+
+    solo_c = criaturas[solo.id]
+    lista_adv = ", ".join(a.mention for a in adversarios)
+
+    # ── Abertura ──────────────────────────────────────────────────────────
+    embed_abertura = discord.Embed(
+        title=f"⚔️👥 BATALHA EM GRUPO — 1 x {n}!",
+        description=(
+            f"🌑 **Aeon:** *as sombras se multiplicam de repente* ...{solo.mention} enfrenta, sozinho(a), "
+            f"{lista_adv}. Todos aceitaram. Não há mais volta. 🖤🌑\n"
+            f"🌟 **Celestia:** AAAAA É UM CONTRA {n}?! 😱🌟✨ *brilha tanto que quase cega ninguém* "
+            f"TODO MUNDO PRA ARENA, ISSO VAI SER LENDÁRIO!!"
+        ),
+        color=0x2b2b3b,
+    )
+    embed_abertura.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    msg_abertura = await canal.send(embed=embed_abertura)
+    asyncio.create_task(_apagar_mensagem_depois(msg_abertura))
+    await asyncio.sleep(2)
+
+    # ── Entrada da criatura do solo ───────────────────────────────────────
+    embed_solo = discord.Embed(
+        title="🔥 O desafiante entra em campo — sozinho!",
+        description=(
+            f"**{solo.display_name}** invoca... **{solo_c['nome']}** "
+            f"`⭐ Nível {nivel_antes[solo.id]}`{_marc(solo)}!! 💥"
+        ),
+        color=0xff4444,
+    )
+    embed_solo.set_image(url=solo_c["gif"])
+    msg_solo = await canal.send(embed=embed_solo)
+    asyncio.create_task(_apagar_mensagem_depois(msg_solo))
+    await asyncio.sleep(2.5)
+
+    # ── Entrada da criatura de cada adversário ────────────────────────────
+    cores_adv = [0x4488ff, 0x44cc88, 0xcc66ff, 0xffaa33, 0x33cccc]
+    for idx, adv in enumerate(adversarios):
+        adv_c = criaturas[adv.id]
+        embed_adv = discord.Embed(
+            title=f"💠 Adversário {idx + 1}/{n} entra na briga!",
+            description=(
+                f"**{adv.display_name}** invoca... **{adv_c['nome']}** "
+                f"`⭐ Nível {nivel_antes[adv.id]}`{_marc(adv)}!! ⚡"
+            ),
+            color=cores_adv[idx % len(cores_adv)],
+        )
+        embed_adv.set_image(url=adv_c["gif"])
+        msg_adv = await canal.send(embed=embed_adv)
+        asyncio.create_task(_apagar_mensagem_depois(msg_adv))
+        await asyncio.sleep(2.5)
+
+    # ── Suspense ──────────────────────────────────────────────────────────
+    aviso = await canal.send(f"💥⚡ *{n + 1} criaturas colidem em um choque de poder...* ⚡💥")
+    await asyncio.sleep(2.5)
+    try:
+        await aviso.delete()
+    except discord.HTTPException:
+        pass
+
+    # ══════════════════════════════════════════════════════════════════════
+    # DUELOS — o solo contra cada adversário
+    # ══════════════════════════════════════════════════════════════════════
+    # 🍀 Vantagem (.vantagem) do solo vale pra batalha toda (vence todos os
+    # duelos) e é consumida uma vez só. A de cada adversário vale só pro duelo
+    # dele. A Vantagem (call) só entra em jogo no duelo em que o solo e o
+    # adversário estão numa call de voz — fora disso, fica pendente.
+    vantagem_solo_normal = solo.id in _vantagem_ativa
+    if vantagem_solo_normal:
+        _vantagem_ativa.discard(solo.id)
+    vantagem_solo_fossio_usada = False
+
+    duelos = []
+    for adv in adversarios:
+        adv_c = criaturas[adv.id]
+        forcado = None   # None = sorteio normal | (solo_vence: bool, via_fossio: bool)
+        if vantagem_solo_normal:
+            forcado = (True, False)
+        elif adv.id in _vantagem_ativa:
+            _vantagem_ativa.discard(adv.id)
+            forcado = (False, False)
+        elif _mesma_call(solo, adv):
+            if solo.id in _vantagem_fossio_ativa:
+                vantagem_solo_fossio_usada = True
+                forcado = (True, True)
+            elif adv.id in _vantagem_fossio_ativa:
+                _vantagem_fossio_ativa.discard(adv.id)
+                forcado = (False, True)
+
+        if forcado is not None:
+            solo_venceu, via_fossio = forcado
+            arranjado = True
+        else:
+            chance_solo = _bg_chance_vitoria(
+                solo_c, nivel_antes[solo.id], adv_c, nivel_antes[adv.id], n
+            )
+            solo_venceu = random.random() < chance_solo
+            via_fossio = False
+            arranjado = False
+
+        # ⚡ Golpe Especial — sempre do lado de quem venceu o duelo; não
+        # entra quando o resultado veio de uma Vantagem.
+        golpe = None if arranjado else _sortear_golpe_especial()
+
+        duelos.append({
+            "adv": adv,
+            "solo_venceu": solo_venceu,
+            "arranjado": arranjado,
+            "via_fossio": via_fossio,
+            "golpe": golpe,
+            "vencedor": solo if solo_venceu else adv,
+            "perdedor": adv if solo_venceu else solo,
+            "xp_roubado": 0,
+            "percentual": 0.0,
+        })
+
+    if vantagem_solo_fossio_usada:
+        _vantagem_fossio_ativa.discard(solo.id)
+
+    # ── Registro de uso das criaturas (1 uso por participante na batalha) ──
+    niveis_uso = {}
+    for p in participantes:
+        niveis_uso[p.id] = _registrar_uso_criatura(p.id, criaturas[p.id]["id"])
+    cansou_favorita = {
+        p.id: _registrar_uso_favorito(p.id, criaturas[p.id]["id"]) for p in participantes
+    }
+
+    # ── Vitórias / derrotas (cada duelo conta) ────────────────────────────
+    for d in duelos:
+        dv = xp_stats[d["vencedor"].id]
+        dp = xp_stats[d["perdedor"].id]
+        dv["vitorias"] = dv.get("vitorias", 0) + 1
+        dp["derrotas"] = dp.get("derrotas", 0) + 1
+
+    # ── Saque de XP: planeja cada duelo em cima do XP do início ───────────
+    for d in duelos:
+        venc, perd = d["vencedor"], d["perdedor"]
+        xp_base = xp_inicio[perd.id]
+        pct, teto, rola_saque = 0.0, 0, False
+
+        if d["arranjado"]:
+            rola_saque = True
+            if d["via_fossio"]:
+                pct = random.uniform(_VANTAGEM_FOSSIO_ROUBO_MIN, _VANTAGEM_FOSSIO_ROUBO_MAX)
+                teto = _VANTAGEM_FOSSIO_ROUBO_TETO
+            else:
+                pct = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
+                teto = _VANTAGEM_ROUBO_TETO
+        elif d["golpe"] is not None:
+            rola_saque = True
+            pct = random.uniform(_GOLPE_ESPECIAL_ROUBO_MIN, _GOLPE_ESPECIAL_ROUBO_MAX)
+            teto = _GOLPE_ESPECIAL_ROUBO_TETO
+        elif xp_base > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
+            rola_saque = True
+            pct = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
+            teto = _BATALHA_ROUBO_TETO
+
+        # 🛡️ Bônus de coragem: o solo que vence um duelo (não arranjado)
+        # saqueia um pouco mais, pra compensar o risco de enfrentar vários.
+        if rola_saque and not d["arranjado"] and venc.id == solo.id:
+            pct *= _BG_BONUS_SAQUE_SOLO
+
+        roubado = 0
+        if rola_saque and xp_base > 0:
+            roubado = max(1, round(xp_base * pct))
+            roubado = min(roubado, xp_base, teto)
+
+        d["percentual"] = pct
+        d["xp_roubado"] = roubado
+
+    # 🛡️ Trava de perda do solo: somando todos os duelos que ele perdeu, o
+    # total nunca passa de _BG_TETO_PERDA_SOLO do XP que ele tinha no início.
+    solo_limitado = False
+    perdas_solo = [d for d in duelos if d["perdedor"].id == solo.id and d["xp_roubado"] > 0]
+    total_perda_solo = sum(d["xp_roubado"] for d in perdas_solo)
+    if xp_inicio[solo.id] > 0:
+        teto_perda_solo = max(1, int(xp_inicio[solo.id] * _BG_TETO_PERDA_SOLO))
+    else:
+        teto_perda_solo = 0
+    if total_perda_solo > teto_perda_solo:
+        fator = teto_perda_solo / total_perda_solo if total_perda_solo else 0
+        for d in perdas_solo:
+            d["xp_roubado"] = int(d["xp_roubado"] * fator)
+        solo_limitado = True
+
+    # ── Aplica os saques de verdade ───────────────────────────────────────
+    tocados = set()
+    for d in duelos:
+        roubado = d["xp_roubado"]
+        if roubado <= 0:
+            continue
+        dados_venc = xp_stats[d["vencedor"].id]
+        dados_perd = xp_stats[d["perdedor"].id]
+        roubado = min(roubado, dados_perd["xp"])   # nunca deixa o xp negativo
+        d["xp_roubado"] = roubado
+        if roubado <= 0:
+            continue
+        dados_perd["xp"] -= roubado
+        dados_venc["xp"] += roubado
+        tocados.add(d["vencedor"].id)
+        tocados.add(d["perdedor"].id)
+
+    for p in participantes:
+        if p.id in tocados:
+            xp_stats[p.id]["nivel"], _, _ = _calcular_nivel(xp_stats[p.id]["xp"])
+            if xp_stats[p.id]["nivel"] > nivel_xp_inicio[p.id] and guild:
+                asyncio.create_task(_anunciar_level_up(guild, p, xp_stats[p.id]["nivel"]))
+
+    if tocados:
+        asyncio.create_task(_atualizar_ranking_xp())
+
+    # ══════════════════════════════════════════════════════════════════════
+    # RECOMPENSAS — quem venceu pelo menos 1 duelo rola o prêmio de vitória
+    # (UMA rolagem por batalha, mesmo que tenha vencido vários duelos).
+    # ══════════════════════════════════════════════════════════════════════
+    premios = {p.id: {"nova": None, "mitica": None, "fossil": None} for p in participantes}
+    for p in participantes:
+        duelos_vencidos = [d for d in duelos if d["vencedor"].id == p.id]
+        if not duelos_vencidos:
+            continue
+        dados_p = xp_stats[p.id]
+        dados_p.setdefault("criaturas", [])
+
+        # criatura nova (Raro/Épico/Lendário etc. — as mesmas exclusões do 1x1)
+        nao_possuidas = [
+            c for c in _BATALHA_CRIATURAS
+            if c["id"] not in dados_p["criaturas"]
+            and c["raridade"] not in ("mitico", "secreto", "fosseis", "bestas", "elemental")
+        ]
+        if nao_possuidas:
+            pesos = [_RARIDADES[c["raridade"]]["peso"] for c in nao_possuidas]
+            nova = random.choices(nao_possuidas, weights=pesos, k=1)[0]
+            dados_p["criaturas"].append(nova["id"])
+            premios[p.id]["nova"] = nova
+
+        # 🐉 Mítico — rola se a pessoa CRUZOU um múltiplo de _MITICO_VITORIAS_INTERVALO
+        v_antes = vitorias_inicio[p.id]
+        v_depois = dados_p.get("vitorias", 0)
+        if (
+            v_depois // _MITICO_VITORIAS_INTERVALO > v_antes // _MITICO_VITORIAS_INTERVALO
+            and random.random() < _MITICO_CHANCE_DESBLOQUEIO
+        ):
+            miticas = [
+                c for c in _BATALHA_CRIATURAS
+                if c["raridade"] == "mitico" and c["id"] not in dados_p["criaturas"]
+            ]
+            if miticas:
+                mitica = random.choice(miticas)
+                dados_p["criaturas"].append(mitica["id"])
+                premios[p.id]["mitica"] = mitica
+
+        # 🦴 Fóssil — só se, num duelo que a pessoa venceu, os DOIS lados
+        # estavam numa call de voz. Garantido se veio de uma Vantagem (call).
+        duelos_em_call = [
+            d for d in duelos_vencidos if _bg_em_call(d["vencedor"]) and _bg_em_call(d["perdedor"])
+        ]
+        if duelos_em_call and (
+            any(d["via_fossio"] for d in duelos_em_call) or random.random() < _FOSSIL_CHANCE_DESBLOQUEIO
+        ):
+            fosseis = [
+                c for c in _BATALHA_CRIATURAS
+                if c["raridade"] == "fosseis" and c["id"] not in dados_p["criaturas"]
+            ]
+            if fosseis:
+                fossil = random.choice(fosseis)
+                dados_p["criaturas"].append(fossil["id"])
+                premios[p.id]["fossil"] = fossil
+                if guild:
+                    asyncio.create_task(_anunciar_fossil_desbloqueado(guild, p, fossil))
+
+    # 🐺 Besta / 🌀 Elemental / 🐾 Pet — valem pra TODOS (a criatura de cada
+    # um foi usada e pode ter batido um marco de Nível de Capacidade agora).
+    bestas, elementais = {}, {}
+    for p in participantes:
+        antigo, novo = niveis_uso[p.id]
+        c = criaturas[p.id]
+        besta = _checar_desbloqueio_besta(p.id, c, antigo, novo)
+        elemental = _checar_desbloqueio_elemental(p.id, c, antigo, novo)
+        pet = _checar_desbloqueio_pet(p.id, c, antigo, novo)
+        if besta is not None:
+            bestas[p.id] = besta
+            if guild:
+                asyncio.create_task(_anunciar_besta_desbloqueada(guild, p, c, besta))
+        if elemental is not None:
+            elementais[p.id] = elemental
+            if guild:
+                asyncio.create_task(_anunciar_elemental_desbloqueado(guild, p, c, elemental))
+        if pet is not None and guild:
+            asyncio.create_task(_anunciar_pet_desbloqueado(guild, p, c, pet))
+
+    # Salva sempre — o placar de vitórias/derrotas mudou
+    asyncio.create_task(_salvar_xp_stats())
+
+    # ══════════════════════════════════════════════════════════════════════
+    # APRESENTAÇÃO — revela os duelos um a um e depois o resultado final
+    # ══════════════════════════════════════════════════════════════════════
+    def _linha_duelo(i: int, d: dict) -> str:
+        adv = d["adv"]
+        adv_c = criaturas[adv.id]
+        venc_c = solo_c if d["solo_venceu"] else adv_c
+        return (
+            f"**{i}.** {solo_c['nome']} `⭐{nivel_antes[solo.id]}` ⚔️ {adv_c['nome']} "
+            f"`⭐{nivel_antes[adv.id]}` → 🏆 **{venc_c['nome']}** ({d['vencedor'].display_name})"
+        )
+
+    linhas_reveal = []
+    embed_duelos = discord.Embed(
+        title="⚔️ Os duelos começam!", description="*...as criaturas se enfrentam...*", color=0xf5c542
+    )
+    msg_duelos = await canal.send(embed=embed_duelos)
+    asyncio.create_task(_apagar_mensagem_depois(msg_duelos))
+    for i, d in enumerate(duelos, 1):
+        await asyncio.sleep(1.8)
+        linhas_reveal.append(_linha_duelo(i, d))
+        embed_duelos = discord.Embed(
+            title="⚔️ Os duelos começam!", description="\n".join(linhas_reveal), color=0xf5c542
+        )
+        try:
+            await msg_duelos.edit(embed=embed_duelos)
+        except discord.HTTPException:
+            pass
+    await asyncio.sleep(1.5)
+
+    # ── Veredito geral ────────────────────────────────────────────────────
+    vitorias_solo = sum(1 for d in duelos if d["solo_venceu"])
+    if vitorias_solo == n:
+        veredito = (
+            f"👑 **DOMINAÇÃO TOTAL!** **{solo.display_name}** derrotou os **{n}** adversários sozinho(a)!"
+        )
+    elif vitorias_solo == 0:
+        veredito = (
+            f"🛡️ **O GRUPO VENCEU!** **{solo.display_name}** caiu diante de todos os **{n}** adversários!"
+        )
+    else:
+        veredito = (
+            f"⚖️ **BATALHA DISPUTADA!** **{solo.display_name}** venceu **{vitorias_solo}** de "
+            f"**{n}** duelo(s)."
+        )
+
+    # ── Saques por duelo ──────────────────────────────────────────────────
+    linhas_saque = []
+    for d in duelos:
+        venc, perd = d["vencedor"], d["perdedor"]
+        if d["xp_roubado"] > 0:
+            linha = (
+                f"💰 **{venc.display_name}** saqueou **`{d['xp_roubado']}` XP** "
+                f"(`{d['percentual'] * 100:.1f}%`) de **{perd.display_name}**."
+            )
+        else:
+            linha = (
+                f"🍃 O dado não favoreceu **{venc.display_name}** — nenhum XP foi roubado "
+                f"de **{perd.display_name}**."
+            )
+        if d["golpe"] is not None:
+            g = d["golpe"]
+            venc_c = criaturas[venc.id]
+            linha += (
+                f"\n{g['emoji']} **GOLPE ESPECIAL!!** **{venc_c['nome']}** usou **{g['nome']}** — "
+                f"{g['frase']}! O saque veio turbinado. ⚡"
+            )
+        linhas_saque.append(linha)
+    if solo_limitado:
+        linhas_saque.append(
+            f"🛡️ O desgaste de **{solo.display_name}** foi limitado a "
+            f"`{_BG_TETO_PERDA_SOLO * 100:.0f}%` do XP que tinha no começo da batalha."
+        )
+    secao_saques = "**💰 Saques de XP**\n" + "\n".join(linhas_saque)
+
+    # ── Desbloqueios ──────────────────────────────────────────────────────
+    partes_desbloqueio = []
+    for p in participantes:
+        pr = premios[p.id]
+        if pr["nova"] is not None:
+            info = _RARIDADES[pr["nova"]["raridade"]]
+            partes_desbloqueio.append(
+                f"🆕 De recompensa, **{p.display_name}** desbloqueou {info['emoji']} "
+                f"**{pr['nova']['nome']}** (*{info['label']}*) na Enciclopédia! 📖"
+            )
+        if pr["mitica"] is not None:
+            info = _RARIDADES[pr["mitica"]["raridade"]]
+            partes_desbloqueio.append(
+                f"🐉✨ **SORTE RARÍSSIMA!!** **{p.display_name}** desbloqueou {info['emoji']} "
+                f"**{pr['mitica']['nome']}** (*{info['label']}*)!! 🐉✨"
+            )
+        if pr["fossil"] is not None:
+            info = _RARIDADES[pr["fossil"]["raridade"]]
+            partes_desbloqueio.append(
+                f"🦴✨ **ACHADO RARÍSSIMO!!** Os dois lados estavam numa call e **{p.display_name}** "
+                f"desenterrou {info['emoji']} **{pr['fossil']['nome']}** (*{info['label']}*)!! 🦴✨"
+            )
+        if p.id in bestas:
+            info = _RARIDADES["bestas"]
+            partes_desbloqueio.append(
+                f"🐺⚡ **CONQUISTA!** A **{criaturas[p.id]['nome']}** de {p.display_name} chegou ao "
+                f"**Nível de Capacidade máximo** e {p.display_name} desbloqueou {info['emoji']} "
+                f"**{bestas[p.id]['nome']}** (*{info['label']}*)!! 🐺⚡"
+            )
+        if p.id in elementais:
+            info = _RARIDADES["elemental"]
+            partes_desbloqueio.append(
+                f"🌀⚡ **CONQUISTA!** A **{criaturas[p.id]['nome']}** de {p.display_name} chegou ao "
+                f"**Nível de Capacidade `{_ELEMENTAL_NIVEL_DESBLOQUEIO}`** e {p.display_name} desbloqueou "
+                f"{info['emoji']} **{elementais[p.id]['nome']}** (*{info['label']}*)!! 🌀⚡"
+            )
+    secao_desbloqueio = "\n".join(partes_desbloqueio)
+
+    # ── Subida de Nível de Capacidade ─────────────────────────────────────
+    partes_nivel = []
+    for p in participantes:
+        antigo, novo = niveis_uso[p.id]
+        if novo > antigo:
+            partes_nivel.append(
+                f"📈 **{criaturas[p.id]['nome']}** de {p.display_name} ficou mais experiente "
+                f"e subiu pro **⭐ Nível {novo}**!"
+            )
+    secao_nivel = "\n".join(partes_nivel)
+
+    # ── Favorita cansada ──────────────────────────────────────────────────
+    partes_cansada = []
+    for p in participantes:
+        if cansou_favorita[p.id]:
+            partes_cansada.append(
+                f"😮💨 A favorita de **{p.display_name}**, **{criaturas[p.id]['nome']}**, cansou depois de "
+                f"`{_FAVORITO_USOS_ATE_CANSAR}` usos seguidos! Vai descansar por "
+                f"`{_FAVORITO_COOLDOWN_SEGUNDOS // 60} min` — as próximas batalhas voltam a sortear aleatoriamente."
+            )
+    secao_cansada = "\n".join(partes_cansada)
+
+    # ── Booster de Elemental ──────────────────────────────────────────────
+    partes_boost = []
+    for p in participantes:
+        if eh_elemental[p.id]:
+            partes_boost.append(
+                f"🌀✨ **{p.display_name}** convocou um Elemental e ativou um Booster de xp "
+                f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`, call e mensagem) por `{_ELEMENTAL_BOOSTER_MINUTOS} min`!"
+            )
+    secao_boost = "\n".join(partes_boost)
+
+    # ── Retrospecto ───────────────────────────────────────────────────────
+    linhas_placar = [
+        f"{p.mention} `🏆 {xp_stats[p.id].get('vitorias', 0)} vitórias / "
+        f"{xp_stats[p.id].get('derrotas', 0)} derrotas`"
+        for p in participantes
+    ]
+    secao_placar = "📊 **Retrospecto:**\n" + "\n".join(linhas_placar)
+
+    secao_final = (
+        "🌑 **Aeon:** *inclina a cabeça* ...as sombras reconhecem quem sobreviveu. 🖤🌑\n"
+        "🌟 **Celestia:** GG PRA GALERA!! 😭🌟🤍✨ *aplaude soltando faíscas douradas* FOI ÉPICO DEMAIS!!"
+    )
+
+    blocos = _bg_dividir_secoes([
+        veredito, secao_saques, secao_desbloqueio, secao_nivel,
+        secao_cansada, secao_boost, secao_placar, secao_final,
+    ])
+    for idx, bloco in enumerate(blocos):
+        embed_resultado = discord.Embed(
+            title=f"🏆 FIM DA BATALHA EM GRUPO! (1 x {n})" if idx == 0 else "📜 Resultado (continuação)",
+            description=bloco,
+            color=0xf5c542,
+        )
+        if idx == 0:
+            embed_resultado.set_thumbnail(url=solo.display_avatar.url)
+        if idx == len(blocos) - 1:
+            embed_resultado.timestamp = discord.utils.utcnow()
+            embed_resultado.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+        msg_resultado = await canal.send(embed=embed_resultado)
+        asyncio.create_task(_apagar_mensagem_depois(msg_resultado))
+
+    # 📜 Log do RPG — só os ganhos orgânicos dessa batalha
+    partes_log = [
+        f"⚔️👥 **{solo.display_name}** enfrentou **{n}** adversário(s) numa batalha em grupo "
+        f"(1 x {n}) e venceu **{vitorias_solo}** de {n} duelo(s)."
+    ]
+    for d in duelos:
+        venc, perd = d["vencedor"], d["perdedor"]
+        linha = (
+            f"• **{venc.display_name}** (**{criaturas[venc.id]['nome']}**) venceu "
+            f"**{perd.display_name}** (**{criaturas[perd.id]['nome']}**)"
+        )
+        if d["xp_roubado"] > 0:
+            linha += f" — saqueou `{d['xp_roubado']}` XP (`{d['percentual'] * 100:.1f}%`)"
+        if d["golpe"] is not None:
+            linha += f" — {d['golpe']['emoji']} {d['golpe']['nome']}"
+        partes_log.append(linha + ".")
+    for p in participantes:
+        pr = premios[p.id]
+        if pr["nova"] is not None:
+            info = _RARIDADES[pr["nova"]["raridade"]]
+            partes_log.append(
+                f"🆕 **{p.display_name}** desbloqueou {info['emoji']} **{pr['nova']['nome']}** (*{info['label']}*)."
+            )
+        if pr["mitica"] is not None:
+            partes_log.append(f"🐉 **{p.display_name}** desbloqueou o Mítico **{pr['mitica']['nome']}**!")
+        if pr["fossil"] is not None:
+            partes_log.append(
+                f"🦴 **{p.display_name}** desenterrou o Fóssil **{pr['fossil']['nome']}** (call)!"
+            )
+        if p.id in bestas:
+            partes_log.append(
+                f"🐺 **{p.display_name}** desbloqueou a Besta **{bestas[p.id]['nome']}** (Nível de Capacidade máximo)."
+            )
+        if p.id in elementais:
+            partes_log.append(
+                f"🌀 **{p.display_name}** desbloqueou o Elemental **{elementais[p.id]['nome']}** "
+                f"(Nível de Capacidade {_ELEMENTAL_NIVEL_DESBLOQUEIO})."
+            )
+        if eh_elemental[p.id]:
+            partes_log.append(
+                f"🌀✨ **{p.display_name}** usou um Elemental e ganhou Booster de xp "
+                f"(`x{_BAU_BOOSTER_MULTIPLICADOR}`) por {_ELEMENTAL_BOOSTER_MINUTOS} min."
+            )
+    texto_log = "\n".join(partes_log)
+    if len(texto_log) > 4000:
+        texto_log = texto_log[:3990] + "\n…"
+    asyncio.create_task(_log_rpg(guild, "⚔️👥 Batalha em grupo entre membros", texto_log))
+
+
+async def _processar_desafio_grupo(message: discord.Message, alvos: list) -> None:
+    """Chamada por _processar_desafio quando a frase de desafio marca 2 ou
+    mais pessoas. Faz as mesmas validações do 1x1 e manda o convite com os
+    botões — a batalha só começa quando TODOS os desafiados aceitarem."""
+    canal = message.channel
+    desafiante = message.author
+
+    if len(alvos) > _BG_MAX_DESAFIADOS:
+        await canal.send(
+            f"🌟 **Celestia:** Eita, calma!! 😅🌸 Dá pra desafiar no máximo **{_BG_MAX_DESAFIADOS}** "
+            f"pessoas de uma vez (1 x {_BG_MAX_DESAFIADOS})!!"
+        )
+        return
+
+    if canal.id in _batalha_canal_ativo:
+        await canal.send(
+            "🌟 **Celestia:** Calma, calma!! 😅🌸 Já tem uma batalha rolando por aqui, espera terminar!!"
+        )
+        return
+
+    agora = time.time()
+    ultimo = _batalha_ultimo_desafio.get(desafiante.id, 0)
+    if agora - ultimo < _BATALHA_COOLDOWN_SEGUNDOS:
+        restante = int(_BATALHA_COOLDOWN_SEGUNDOS - (agora - ultimo))
+        await canal.send(
+            f"🌑 **Aeon:** ...as sombras ainda descansam do último combate. "
+            f"Espere mais `{restante}s` antes de desafiar de novo. 🖤🌑"
+        )
+        return
+
+    participantes = [desafiante] + list(alvos)
+    fora_do_ranking = [p for p in participantes if not xp_stats.get(p.id, {}).get("elegivel")]
+    if fora_do_ranking:
+        nomes = ", ".join(f"**{p.display_name}**" for p in fora_do_ranking)
+        await canal.send(
+            "🌟 **Celestia:** Pra batalhar valendo pontos, todo mundo precisa estar "
+            "participando do ranking de nível!! 🌸✨\n"
+            f"› Ainda fora do ranking: {nomes} — mande uma mensagem em "
+            f"<#{_XP_CANAL_1}>, <#{_XP_CANAL_BONUS}> ou <#{_XP_CANAL_3}> pra entrar!"
+        )
+        return
+
+    if all(xp_stats[p.id]["xp"] <= 0 for p in participantes):
+        await canal.send(
+            "🌑 **Aeon:** ...ninguém aqui tem XP suficiente pra valer a pena essa batalha ainda. 🖤🌑"
+        )
+        return
+
+    _batalha_ultimo_desafio[desafiante.id] = agora
+    _batalha_canal_ativo.add(canal.id)
+
+    view = DesafioGrupoView(desafiante, alvos)
+    convite = await canal.send(
+        embed=_bg_embed_status(desafiante, alvos, "pendente", set()), view=view
+    )
+    view.mensagem = convite
+    asyncio.create_task(_apagar_mensagem_depois(convite, _BG_TEMPO_ACEITE))
+
+
+@bot.command(name="batalhagrupo", aliases=["grupobatalha"])
+async def cmd_batalhagrupo(ctx):
+    """Explica como funciona a Batalha em Grupo (1 x N). Uso: .batalhagrupo"""
+    embed = discord.Embed(
+        title="⚔️👥 Batalha em Grupo — 1 x N",
+        description=(
+            "🌟 **Celestia:** Dá pra desafiar VÁRIAS pessoas de uma vez!! 😆⚔️✨\n"
+            "🌑 **Aeon:** ...as sombras aceitam quantos corajosos ousarem. 🖤🌑\n\n"
+            "**1️⃣ Como começar**\n"
+            "Escreva `Eu te desafio @pessoa1 @pessoa2` (marque 2 ou mais — até "
+            f"`{_BG_MAX_DESAFIADOS}`). Vira uma batalha **1 x 2**, **1 x 3**, e assim por diante.\n\n"
+            "**2️⃣ Todo mundo precisa aceitar**\n"
+            f"Cada desafiado clica em **Aceitar** em até `{_BG_TEMPO_ACEITE}s`. Se **um só** recusar "
+            "ou alguém não responder a tempo, a batalha é cancelada.\n\n"
+            "**3️⃣ Os duelos**\n"
+            "Cada um invoca uma criatura (do jeito de sempre: dentre as que já desbloqueou, "
+            "respeitando a favorita). A criatura de quem desafiou enfrenta a de cada adversário, "
+            "usando a mesma conta do 1x1: **raridade + Nível de Capacidade**. Como são vários contra "
+            f"um, quem desafiou perde `{_BG_PENALIDADE_CERCO * 100:.0f}%` de chance por adversário "
+            "além do primeiro.\n\n"
+            "**4️⃣ XP e recompensas**\n"
+            "Cada duelo tem seu próprio dado de saque de XP (com Golpe Especial e tudo). Quem desafia "
+            f"e vence saqueia `x{_BG_BONUS_SAQUE_SOLO}` mais, mas nunca perde mais de "
+            f"`{_BG_TETO_PERDA_SOLO * 100:.0f}%` do XP que tinha no começo. Quem vence pelo menos um duelo "
+            "rola o prêmio de vitória (criatura nova, Mítico, Fóssil em call...), e todo mundo sobe de "
+            "Nível de Capacidade, desbloqueia Besta/Elemental/Pet e conta vitória/derrota normalmente.\n\n"
+            "**5️⃣ Regras**\n"
+            "Todos precisam estar no ranking de nível, e o cooldown de desafio "
+            f"(`{_BATALHA_COOLDOWN_SEGUNDOS // 60} min`) é o mesmo da batalha normal."
+        ),
+        color=0xe8d5f5,
+    )
+    embed.set_footer(text="🌑 Aeon & ☀️ Celestia — Arena de Batalhas")
+    await ctx.send(embed=embed)
+
+
 async def _processar_desafio(message: discord.Message) -> None:
     """Detecta 'eu te desafio @alguém' no chat e, se tudo certo, inicia a batalha."""
     if message.guild is None or message.author.bot:
@@ -13745,6 +14662,12 @@ async def _processar_desafio(message: discord.Message) -> None:
     if not message.mentions:
         return
     if not _BATALHA_REGEX.search(message.content or ""):
+        return
+
+    # 👥 Marcou 2 ou mais pessoas? Vira batalha em grupo (1 x N).
+    alvos_grupo = _bg_extrair_alvos(message)
+    if len(alvos_grupo) >= 2:
+        await _processar_desafio_grupo(message, alvos_grupo)
         return
 
     desafiante = message.author

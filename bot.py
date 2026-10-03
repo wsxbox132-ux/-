@@ -13739,27 +13739,27 @@ async def _executar_batalha(
 
 
 # ══════════════════════════════════════════════════════════════════════
-# ⚔️👥 BATALHA EM GRUPO — "Eu te desafio @pessoa1 @pessoa2 (@pessoa3 ...)"
+# ⚔️🤝 BATALHA EM GRUPO — "Eu te desafio @pessoa1 @pessoa2 (@pessoa3 ...)"
 #
 # Quando alguém marca DUAS OU MAIS pessoas na frase de desafio, em vez do
 # duelo 1x1 normal abre-se uma batalha 1 x N (1 x 2, 1 x 3 ... até
-# _BG_MAX_DESAFIADOS). Regras:
+# _BG_MAX_DESAFIADOS) em que os desafiados SE UNEM CONTRA QUEM DESAFIOU:
 #
 #   • Convite: TODOS os desafiados precisam clicar em ⚔️ Aceitar dentro de
 #     _BG_TEMPO_ACEITE segundos. Se UM só recusar (ou o tempo acabar sem
 #     todo mundo aceitar), a batalha inteira é cancelada.
 #   • Cada participante (o desafiante e cada desafiado) invoca UMA criatura,
-#     sorteada dentre as que ele já desbloqueou (respeitando favorita ativa),
-#     exatamente como no 1x1.
-#   • A criatura do desafiante (o "solo") enfrenta a de cada adversário num
-#     duelo. A chance de cada duelo usa o MESMO cálculo do 1x1
-#     (_chance_vitoria: raridade + Nível de Capacidade), com um ajuste de
-#     "cerco": o solo está em desvantagem numérica, então perde
-#     _BG_PENALIDADE_CERCO de chance por cada adversário além do primeiro.
-#   • Como compensação do risco, quando o solo VENCE um duelo o % de XP
-#     saqueado é multiplicado por _BG_BONUS_SAQUE_SOLO. E, pra o solo não
-#     ser massacrado, o total de XP que ele pode perder na batalha inteira
-#     é travado em _BG_TETO_PERDA_SOLO do XP que ele tinha no início.
+#     sorteada dentre as que ele já desbloqueou (respeitando favorita ativa).
+#   • É UM combate só: a EQUIPE (todos os desafiados juntos) contra o solo
+#     (o desafiante). A chance do solo é a média dos confrontos dele contra
+#     cada criatura da equipe (mesmo cálculo do 1x1: raridade + Nível de
+#     Capacidade), menos _BG_PENALIDADE_CERCO por adversário além do 1º.
+#   • Se a EQUIPE vence: todos os desafiados ganham vitória, o solo leva uma
+#     derrota, e o XP saqueado do solo é DIVIDIDO entre a equipe (o solo nunca
+#     perde mais de _BG_TETO_PERDA_SOLO do XP que tinha). Todos os da equipe
+#     rolam o prêmio de vitória.
+#   • Se o SOLO vence: ele derrota a equipe inteira, saqueia XP de CADA
+#     adversário (com bônus _BG_BONUS_SAQUE_SOLO) e rola o prêmio de vitória.
 #   • Todo o resto do RPG vale: dado de roubo de XP (e 15% de não roubar),
 #     Golpe Especial, Vantagem/.vantagemfossio, vitórias/derrotas, uso e
 #     subida de Nível de Capacidade das criaturas, favorita que cansa,
@@ -13839,7 +13839,7 @@ def _bg_embed_status(
         )
         titulo = f"⚔️👥 Desafio em grupo lançado! (1 x {n})"
         descricao = (
-            f"🌑 **Aeon:** ...{desafiante.mention} desafiou {lista} para uma batalha **1 x {n}**. "
+            f"🌑 **Aeon:** ...{desafiante.mention} desafiou {lista} para uma batalha **1 x {n}** — os desafiados vão se **unir** contra ele(a). "
             f"As sombras só se agitam se **TODOS** concordarem. 🖤🌑\n"
             f"🌟 **Celestia:** Cada desafiado precisa clicar em **Aceitar**!! 😆🌟✨ "
             f"*aponta pros botões* Vocês têm `{_BG_TEMPO_ACEITE}s`!!\n\n"
@@ -14051,9 +14051,9 @@ async def _executar_batalha_grupo(
     embed_abertura = discord.Embed(
         title=f"⚔️👥 BATALHA EM GRUPO — 1 x {n}!",
         description=(
-            f"🌑 **Aeon:** *as sombras se multiplicam de repente* ...{solo.mention} enfrenta, sozinho(a), "
-            f"{lista_adv}. Todos aceitaram. Não há mais volta. 🖤🌑\n"
-            f"🌟 **Celestia:** AAAAA É UM CONTRA {n}?! 😱🌟✨ *brilha tanto que quase cega ninguém* "
+            f"🌑 **Aeon:** *as sombras se multiplicam de repente* ...{lista_adv} se uniram contra "
+            f"{solo.mention}. Todos aceitaram. Não há mais volta. 🖤🌑\n"
+            f"🌟 **Celestia:** AAAAA {n} CONTRA UM?! 😱🌟✨ *brilha tanto que quase cega ninguém* "
             f"TODO MUNDO PRA ARENA, ISSO VAI SER LENDÁRIO!!"
         ),
         color=0x2b2b3b,
@@ -14065,7 +14065,7 @@ async def _executar_batalha_grupo(
 
     # ── Entrada da criatura do solo ───────────────────────────────────────
     embed_solo = discord.Embed(
-        title="🔥 O desafiante entra em campo — sozinho!",
+        title="🔥 O desafiante enfrenta todos — sozinho!",
         description=(
             f"**{solo.display_name}** invoca... **{solo_c['nome']}** "
             f"`⭐ Nível {nivel_antes[solo.id]}`{_marc(solo)}!! 💥"
@@ -14082,7 +14082,7 @@ async def _executar_batalha_grupo(
     for idx, adv in enumerate(adversarios):
         adv_c = criaturas[adv.id]
         embed_adv = discord.Embed(
-            title=f"💠 Adversário {idx + 1}/{n} entra na briga!",
+            title=f"🤝 Aliado {idx + 1}/{n} se junta à equipe!",
             description=(
                 f"**{adv.display_name}** invoca... **{adv_c['nome']}** "
                 f"`⭐ Nível {nivel_antes[adv.id]}`{_marc(adv)}!! ⚡"
@@ -14114,46 +14114,59 @@ async def _executar_batalha_grupo(
         _vantagem_ativa.discard(solo.id)
     vantagem_solo_fossio_usada = False
 
-    duelos = []
-    for adv in adversarios:
-        adv_c = criaturas[adv.id]
-        forcado = None   # None = sorteio normal | (solo_vence: bool, via_fossio: bool)
-        if vantagem_solo_normal:
-            forcado = (True, False)
-        elif adv.id in _vantagem_ativa:
-            _vantagem_ativa.discard(adv.id)
-            forcado = (False, False)
-        elif _mesma_call(solo, adv):
-            if solo.id in _vantagem_fossio_ativa:
-                vantagem_solo_fossio_usada = True
-                forcado = (True, True)
-            elif adv.id in _vantagem_fossio_ativa:
-                _vantagem_fossio_ativa.discard(adv.id)
+    # 🤝 Os desafiados SE UNEM contra o desafiante: é UM combate só, a equipe
+    # contra o solo. A chance do solo é a média dos confrontos dele contra a
+    # criatura de cada aliado (com a penalidade de cerco já embutida).
+    # 🍀 Vantagem (.vantagem) do solo = ele vence a equipe toda (consumida uma
+    # vez). A de qualquer membro da equipe = a equipe vence (consumida). A
+    # Vantagem (call) só vale se o solo e o dono dela estão numa call de voz.
+    nomes_equipe = ", ".join(a.display_name for a in adversarios)
+    forcado = None   # None = sorteio normal | (solo_vence: bool, via_fossio: bool)
+    adv_com_vantagem = [a for a in adversarios if a.id in _vantagem_ativa]
+    if vantagem_solo_normal:
+        forcado = (True, False)
+    elif adv_com_vantagem:
+        for a in adv_com_vantagem:
+            _vantagem_ativa.discard(a.id)
+        forcado = (False, False)
+    else:
+        adv_em_call = [a for a in adversarios if _mesma_call(solo, a)]
+        if adv_em_call and solo.id in _vantagem_fossio_ativa:
+            vantagem_solo_fossio_usada = True
+            forcado = (True, True)
+        else:
+            adv_fossio = [a for a in adv_em_call if a.id in _vantagem_fossio_ativa]
+            if adv_fossio:
+                for a in adv_fossio:
+                    _vantagem_fossio_ativa.discard(a.id)
                 forcado = (False, True)
 
-        if forcado is not None:
-            solo_venceu, via_fossio = forcado
-            arranjado = True
-        else:
-            chance_solo = _bg_chance_vitoria(
-                solo_c, nivel_antes[solo.id], adv_c, nivel_antes[adv.id], n
-            )
-            solo_venceu = random.random() < chance_solo
-            via_fossio = False
-            arranjado = False
+    if forcado is not None:
+        solo_venceu_geral, via_fossio_geral = forcado
+        arranjado_geral = True
+        golpe_geral = None   # Golpe Especial não entra quando veio de Vantagem
+    else:
+        chances = [
+            _bg_chance_vitoria(solo_c, nivel_antes[solo.id], criaturas[a.id], nivel_antes[a.id], n)
+            for a in adversarios
+        ]
+        chance_solo = sum(chances) / len(chances)
+        solo_venceu_geral = random.random() < chance_solo
+        via_fossio_geral = False
+        arranjado_geral = False
+        golpe_geral = _sortear_golpe_especial()   # sempre do lado de quem venceu
 
-        # ⚡ Golpe Especial — sempre do lado de quem venceu o duelo; não
-        # entra quando o resultado veio de uma Vantagem.
-        golpe = None if arranjado else _sortear_golpe_especial()
-
+    # um registro por adversário (par solo x aliado), todos com o MESMO resultado
+    duelos = []
+    for adv in adversarios:
         duelos.append({
             "adv": adv,
-            "solo_venceu": solo_venceu,
-            "arranjado": arranjado,
-            "via_fossio": via_fossio,
-            "golpe": golpe,
-            "vencedor": solo if solo_venceu else adv,
-            "perdedor": adv if solo_venceu else solo,
+            "solo_venceu": solo_venceu_geral,
+            "arranjado": arranjado_geral,
+            "via_fossio": via_fossio_geral,
+            "golpe": golpe_geral,
+            "vencedor": solo if solo_venceu_geral else adv,
+            "perdedor": adv if solo_venceu_geral else solo,
             "xp_roubado": 0,
             "percentual": 0.0,
         })
@@ -14169,63 +14182,65 @@ async def _executar_batalha_grupo(
         p.id: _registrar_uso_favorito(p.id, criaturas[p.id]["id"]) for p in participantes
     }
 
-    # ── Vitórias / derrotas (cada duelo conta) ────────────────────────────
-    for d in duelos:
-        dv = xp_stats[d["vencedor"].id]
-        dp = xp_stats[d["perdedor"].id]
-        dv["vitorias"] = dv.get("vitorias", 0) + 1
-        dp["derrotas"] = dp.get("derrotas", 0) + 1
-
-    # ── Saque de XP: planeja cada duelo em cima do XP do início ───────────
-    for d in duelos:
-        venc, perd = d["vencedor"], d["perdedor"]
-        xp_base = xp_inicio[perd.id]
-        pct, teto, rola_saque = 0.0, 0, False
-
-        if d["arranjado"]:
-            rola_saque = True
-            if d["via_fossio"]:
-                pct = random.uniform(_VANTAGEM_FOSSIO_ROUBO_MIN, _VANTAGEM_FOSSIO_ROUBO_MAX)
-                teto = _VANTAGEM_FOSSIO_ROUBO_TETO
-            else:
-                pct = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
-                teto = _VANTAGEM_ROUBO_TETO
-        elif d["golpe"] is not None:
-            rola_saque = True
-            pct = random.uniform(_GOLPE_ESPECIAL_ROUBO_MIN, _GOLPE_ESPECIAL_ROUBO_MAX)
-            teto = _GOLPE_ESPECIAL_ROUBO_TETO
-        elif xp_base > 0 and random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
-            rola_saque = True
-            pct = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
-            teto = _BATALHA_ROUBO_TETO
-
-        # 🛡️ Bônus de coragem: o solo que vence um duelo (não arranjado)
-        # saqueia um pouco mais, pra compensar o risco de enfrentar vários.
-        if rola_saque and not d["arranjado"] and venc.id == solo.id:
-            pct *= _BG_BONUS_SAQUE_SOLO
-
-        roubado = 0
-        if rola_saque and xp_base > 0:
-            roubado = max(1, round(xp_base * pct))
-            roubado = min(roubado, xp_base, teto)
-
-        d["percentual"] = pct
-        d["xp_roubado"] = roubado
-
-    # 🛡️ Trava de perda do solo: somando todos os duelos que ele perdeu, o
-    # total nunca passa de _BG_TETO_PERDA_SOLO do XP que ele tinha no início.
-    solo_limitado = False
-    perdas_solo = [d for d in duelos if d["perdedor"].id == solo.id and d["xp_roubado"] > 0]
-    total_perda_solo = sum(d["xp_roubado"] for d in perdas_solo)
-    if xp_inicio[solo.id] > 0:
-        teto_perda_solo = max(1, int(xp_inicio[solo.id] * _BG_TETO_PERDA_SOLO))
+    # ── Vitórias / derrotas (UM combate: cada lado conta uma vez) ─────────
+    if solo_venceu_geral:
+        xp_stats[solo.id]["vitorias"] = xp_stats[solo.id].get("vitorias", 0) + 1
+        for adv in adversarios:
+            xp_stats[adv.id]["derrotas"] = xp_stats[adv.id].get("derrotas", 0) + 1
     else:
-        teto_perda_solo = 0
-    if total_perda_solo > teto_perda_solo:
-        fator = teto_perda_solo / total_perda_solo if total_perda_solo else 0
-        for d in perdas_solo:
-            d["xp_roubado"] = int(d["xp_roubado"] * fator)
-        solo_limitado = True
+        for adv in adversarios:
+            xp_stats[adv.id]["vitorias"] = xp_stats[adv.id].get("vitorias", 0) + 1
+        xp_stats[solo.id]["derrotas"] = xp_stats[solo.id].get("derrotas", 0) + 1
+
+    # ── Saque de XP: UMA rolagem pro combate inteiro ──────────────────────
+    pct, teto, rola_saque = 0.0, 0, False
+    if arranjado_geral:
+        rola_saque = True
+        if via_fossio_geral:
+            pct = random.uniform(_VANTAGEM_FOSSIO_ROUBO_MIN, _VANTAGEM_FOSSIO_ROUBO_MAX)
+            teto = _VANTAGEM_FOSSIO_ROUBO_TETO
+        else:
+            pct = random.uniform(_VANTAGEM_ROUBO_MIN, _VANTAGEM_ROUBO_MAX)
+            teto = _VANTAGEM_ROUBO_TETO
+    elif golpe_geral is not None:
+        rola_saque = True
+        pct = random.uniform(_GOLPE_ESPECIAL_ROUBO_MIN, _GOLPE_ESPECIAL_ROUBO_MAX)
+        teto = _GOLPE_ESPECIAL_ROUBO_TETO
+    elif random.random() >= _BATALHA_CHANCE_SEM_ROUBO:
+        rola_saque = True
+        pct = random.uniform(_BATALHA_ROUBO_MIN, _BATALHA_ROUBO_MAX)
+        teto = _BATALHA_ROUBO_TETO
+
+    solo_limitado = False
+    if solo_venceu_geral:
+        # 🛡️ Bônus de coragem: o solo que vence a equipe saqueia mais, de
+        # CADA adversário (em cima do XP que cada um tinha no início).
+        if rola_saque and not arranjado_geral:
+            pct *= _BG_BONUS_SAQUE_SOLO
+        for d in duelos:
+            xp_base = xp_inicio[d["adv"].id]
+            roubado = 0
+            if rola_saque and xp_base > 0:
+                roubado = max(1, round(xp_base * pct))
+                roubado = min(roubado, xp_base, teto)
+            d["percentual"] = pct
+            d["xp_roubado"] = roubado
+    else:
+        # A equipe vence: UM saque em cima do XP do solo, dividido entre todos
+        # os membros. 🛡️ Trava: nunca passa de _BG_TETO_PERDA_SOLO do XP dele.
+        xp_base = xp_inicio[solo.id]
+        total = 0
+        if rola_saque and xp_base > 0:
+            total = max(1, round(xp_base * pct))
+            total = min(total, xp_base, teto)
+            teto_perda_solo = max(1, int(xp_base * _BG_TETO_PERDA_SOLO))
+            if total > teto_perda_solo:
+                total = teto_perda_solo
+                solo_limitado = True
+        parte, resto = divmod(total, n)
+        for i, d in enumerate(duelos):
+            d["percentual"] = pct
+            d["xp_roubado"] = parte + (1 if i < resto else 0)
 
     # ── Aplica os saques de verdade ───────────────────────────────────────
     tocados = set()
@@ -14338,71 +14353,80 @@ async def _executar_batalha_grupo(
     # ══════════════════════════════════════════════════════════════════════
     # APRESENTAÇÃO — revela os duelos um a um e depois o resultado final
     # ══════════════════════════════════════════════════════════════════════
-    def _linha_duelo(i: int, d: dict) -> str:
-        adv = d["adv"]
-        adv_c = criaturas[adv.id]
-        venc_c = solo_c if d["solo_venceu"] else adv_c
-        return (
-            f"**{i}.** {solo_c['nome']} `⭐{nivel_antes[solo.id]}` ⚔️ {adv_c['nome']} "
-            f"`⭐{nivel_antes[adv.id]}` → 🏆 **{venc_c['nome']}** ({d['vencedor'].display_name})"
-        )
-
-    linhas_reveal = []
+    nomes_criaturas_equipe = " & ".join(criaturas[a.id]["nome"] for a in adversarios)
+    linhas_equipe = "\n".join(
+        f"🤝 **{a.display_name}** — {criaturas[a.id]['nome']} `⭐{nivel_antes[a.id]}`"
+        for a in adversarios
+    )
+    texto_choque = (
+        f"{linhas_equipe}\n\n⚔️ *...juntos contra...*\n\n"
+        f"🔥 **{solo.display_name}** — {solo_c['nome']} `⭐{nivel_antes[solo.id]}`"
+    )
     embed_duelos = discord.Embed(
-        title="⚔️ Os duelos começam!", description="*...as criaturas se enfrentam...*", color=0xf5c542
+        title="🤝 A equipe se une contra o desafiante!", description=texto_choque, color=0xf5c542
     )
     msg_duelos = await canal.send(embed=embed_duelos)
     asyncio.create_task(_apagar_mensagem_depois(msg_duelos))
-    for i, d in enumerate(duelos, 1):
-        await asyncio.sleep(1.8)
-        linhas_reveal.append(_linha_duelo(i, d))
-        embed_duelos = discord.Embed(
-            title="⚔️ Os duelos começam!", description="\n".join(linhas_reveal), color=0xf5c542
-        )
-        try:
-            await msg_duelos.edit(embed=embed_duelos)
-        except discord.HTTPException:
-            pass
+    await asyncio.sleep(3)
+    if solo_venceu_geral:
+        texto_vencedor = f"🏆 **{solo_c['nome']}** ({solo.display_name}) derrubou a equipe inteira!"
+    else:
+        texto_vencedor = f"🏆 **A equipe venceu!** {nomes_criaturas_equipe} derrubaram **{solo_c['nome']}**!"
+    embed_duelos = discord.Embed(
+        title="⚔️ O choque termina!", description=f"{texto_choque}\n\n{texto_vencedor}", color=0xf5c542
+    )
+    try:
+        await msg_duelos.edit(embed=embed_duelos)
+    except discord.HTTPException:
+        pass
     await asyncio.sleep(1.5)
 
     # ── Veredito geral ────────────────────────────────────────────────────
-    vitorias_solo = sum(1 for d in duelos if d["solo_venceu"])
-    if vitorias_solo == n:
+    if solo_venceu_geral:
         veredito = (
-            f"👑 **DOMINAÇÃO TOTAL!** **{solo.display_name}** derrotou os **{n}** adversários sozinho(a)!"
-        )
-    elif vitorias_solo == 0:
-        veredito = (
-            f"🛡️ **O GRUPO VENCEU!** **{solo.display_name}** caiu diante de todos os **{n}** adversários!"
+            f"👑 **DOMINAÇÃO TOTAL!** **{solo.display_name}** derrotou sozinho(a) a equipe de "
+            f"**{n}** adversários!"
         )
     else:
         veredito = (
-            f"⚖️ **BATALHA DISPUTADA!** **{solo.display_name}** venceu **{vitorias_solo}** de "
-            f"**{n}** duelo(s)."
+            f"🤝 **A EQUIPE VENCEU!** Unidos, **{nomes_equipe}** derrubaram **{solo.display_name}**!"
         )
 
-    # ── Saques por duelo ──────────────────────────────────────────────────
+    # ── Saques ────────────────────────────────────────────────────────────
     linhas_saque = []
-    for d in duelos:
-        venc, perd = d["vencedor"], d["perdedor"]
-        if d["xp_roubado"] > 0:
-            linha = (
-                f"💰 **{venc.display_name}** saqueou **`{d['xp_roubado']}` XP** "
-                f"(`{d['percentual'] * 100:.1f}%`) de **{perd.display_name}**."
+    if solo_venceu_geral:
+        for d in duelos:
+            perd = d["perdedor"]
+            if d["xp_roubado"] > 0:
+                linhas_saque.append(
+                    f"💰 **{solo.display_name}** saqueou **`{d['xp_roubado']}` XP** "
+                    f"(`{d['percentual'] * 100:.1f}%`) de **{perd.display_name}**."
+                )
+            else:
+                linhas_saque.append(
+                    f"🍃 O dado não favoreceu **{solo.display_name}** — nenhum XP foi roubado "
+                    f"de **{perd.display_name}**."
+                )
+        nome_golpista = solo_c["nome"]
+    else:
+        total_saque = sum(d["xp_roubado"] for d in duelos)
+        if total_saque > 0:
+            divisao = ", ".join(f"{d['adv'].display_name} `+{d['xp_roubado']}`" for d in duelos)
+            linhas_saque.append(
+                f"💰 A equipe saqueou **`{total_saque}` XP** (`{duelos[0]['percentual'] * 100:.1f}%`) de "
+                f"**{solo.display_name}**, dividido entre todos: {divisao}."
             )
         else:
-            linha = (
-                f"🍃 O dado não favoreceu **{venc.display_name}** — nenhum XP foi roubado "
-                f"de **{perd.display_name}**."
+            linhas_saque.append(
+                f"🍃 O dado não favoreceu a equipe — nenhum XP foi roubado de **{solo.display_name}**."
             )
-        if d["golpe"] is not None:
-            g = d["golpe"]
-            venc_c = criaturas[venc.id]
-            linha += (
-                f"\n{g['emoji']} **GOLPE ESPECIAL!!** **{venc_c['nome']}** usou **{g['nome']}** — "
-                f"{g['frase']}! O saque veio turbinado. ⚡"
-            )
-        linhas_saque.append(linha)
+        nome_golpista = nomes_criaturas_equipe
+    if golpe_geral is not None:
+        g = golpe_geral
+        linhas_saque.append(
+            f"{g['emoji']} **GOLPE ESPECIAL!!** **{nome_golpista}** usou **{g['nome']}** — "
+            f"{g['frase']}! O saque veio turbinado. ⚡"
+        )
     if solo_limitado:
         linhas_saque.append(
             f"🛡️ O desgaste de **{solo.display_name}** foi limitado a "
@@ -14513,20 +14537,26 @@ async def _executar_batalha_grupo(
 
     # 📜 Log do RPG — só os ganhos orgânicos dessa batalha
     partes_log = [
-        f"⚔️👥 **{solo.display_name}** enfrentou **{n}** adversário(s) numa batalha em grupo "
-        f"(1 x {n}) e venceu **{vitorias_solo}** de {n} duelo(s)."
+        f"⚔️🤝 **{nomes_equipe}** se uniram contra **{solo.display_name}** numa batalha em grupo "
+        f"(1 x {n}) e {'o desafiante venceu a equipe' if solo_venceu_geral else 'a equipe venceu o desafiante'}."
     ]
-    for d in duelos:
-        venc, perd = d["vencedor"], d["perdedor"]
-        linha = (
-            f"• **{venc.display_name}** (**{criaturas[venc.id]['nome']}**) venceu "
-            f"**{perd.display_name}** (**{criaturas[perd.id]['nome']}**)"
-        )
-        if d["xp_roubado"] > 0:
-            linha += f" — saqueou `{d['xp_roubado']}` XP (`{d['percentual'] * 100:.1f}%`)"
-        if d["golpe"] is not None:
-            linha += f" — {d['golpe']['emoji']} {d['golpe']['nome']}"
+    if solo_venceu_geral:
+        for d in duelos:
+            linha = (
+                f"• **{solo.display_name}** (**{solo_c['nome']}**) venceu "
+                f"**{d['adv'].display_name}** (**{criaturas[d['adv'].id]['nome']}**)"
+            )
+            if d["xp_roubado"] > 0:
+                linha += f" — saqueou `{d['xp_roubado']}` XP (`{d['percentual'] * 100:.1f}%`)"
+            partes_log.append(linha + ".")
+    else:
+        total_log = sum(d["xp_roubado"] for d in duelos)
+        linha = f"• A equipe (**{nomes_equipe}**) venceu **{solo.display_name}** (**{solo_c['nome']}**)"
+        if total_log > 0:
+            linha += f" — saqueou `{total_log}` XP no total (`{duelos[0]['percentual'] * 100:.1f}%`)"
         partes_log.append(linha + ".")
+    if golpe_geral is not None:
+        partes_log.append(f"• {golpe_geral['emoji']} Golpe Especial: {golpe_geral['nome']}.")
     for p in participantes:
         pr = premios[p.id]
         if pr["nova"] is not None:
@@ -14633,17 +14663,17 @@ async def cmd_batalhagrupo(ctx):
             "**2️⃣ Todo mundo precisa aceitar**\n"
             f"Cada desafiado clica em **Aceitar** em até `{_BG_TEMPO_ACEITE}s`. Se **um só** recusar "
             "ou alguém não responder a tempo, a batalha é cancelada.\n\n"
-            "**3️⃣ Os duelos**\n"
+            "**3️⃣ Os adversários se UNEM**\n"
             "Cada um invoca uma criatura (do jeito de sempre: dentre as que já desbloqueou, "
-            "respeitando a favorita). A criatura de quem desafiou enfrenta a de cada adversário, "
-            "usando a mesma conta do 1x1: **raridade + Nível de Capacidade**. Como são vários contra "
-            f"um, quem desafiou perde `{_BG_PENALIDADE_CERCO * 100:.0f}%` de chance por adversário "
-            "além do primeiro.\n\n"
+            "respeitando a favorita). Os desafiados **se juntam contra quem desafiou** num combate só: "
+            "equipe x desafiante, com a mesma conta do 1x1 (**raridade + Nível de Capacidade**) "
+            f"média entre os adversários. Como são vários contra um, quem desafiou perde "
+            f"`{_BG_PENALIDADE_CERCO * 100:.0f}%` de chance por adversário além do primeiro.\n\n"
             "**4️⃣ XP e recompensas**\n"
-            "Cada duelo tem seu próprio dado de saque de XP (com Golpe Especial e tudo). Quem desafia "
-            f"e vence saqueia `x{_BG_BONUS_SAQUE_SOLO}` mais, mas nunca perde mais de "
-            f"`{_BG_TETO_PERDA_SOLO * 100:.0f}%` do XP que tinha no começo. Quem vence pelo menos um duelo "
-            "rola o prêmio de vitória (criatura nova, Mítico, Fóssil em call...), e todo mundo sobe de "
+            "Se a **equipe vence**, o XP saqueado de quem desafiou é **dividido** entre todos "
+            f"(ele nunca perde mais de `{_BG_TETO_PERDA_SOLO * 100:.0f}%` do que tinha). Se **quem desafiou "
+            f"vence**, saqueia de CADA adversário com bônus de `x{_BG_BONUS_SAQUE_SOLO}`. Quem vence rola o "
+            "prêmio de vitória (criatura nova, Mítico, Fóssil em call...), e todo mundo sobe de "
             "Nível de Capacidade, desbloqueia Besta/Elemental/Pet e conta vitória/derrota normalmente.\n\n"
             "**5️⃣ Regras**\n"
             "Todos precisam estar no ranking de nível, e o cooldown de desafio "
@@ -14664,7 +14694,7 @@ async def _processar_desafio(message: discord.Message) -> None:
     if not _BATALHA_REGEX.search(message.content or ""):
         return
 
-    # 👥 Marcou 2 ou mais pessoas? Vira batalha em grupo (1 x N).
+    # 👥 Marcou 2 ou mais pessoas? Eles se unem contra o desafiante (1 x N).
     alvos_grupo = _bg_extrair_alvos(message)
     if len(alvos_grupo) >= 2:
         await _processar_desafio_grupo(message, alvos_grupo)

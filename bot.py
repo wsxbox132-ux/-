@@ -4,6 +4,7 @@ import random
 import os
 import re
 import json
+import io
 import aiohttp
 import time
 import asyncio
@@ -7949,7 +7950,7 @@ async def cmd_membro(ctx):
 
 CANAL_TICKET_ANJO_ID      = 1558129320122384506  # canal do painel de abertura (antigo: 1514427068589543565)
 CANAL_REIVINDICAR_ANJO_ID = 1547604279919906937  # canal onde os anjos veem e reivindicam (antigo: 1493410007113400321)
-CANAL_LOGS_ANJO_ID        = 1290058994794106881  # canal de logs dos tickets de anjo
+CANAL_LOGS_ANJO_ID        = 1547789898919182426  # canal de logs dos tickets de anjo (antigo: 1290058994794106881)
 CATEGORIA_TICKET_ID       = 1499002724442837052  # categoria onde os tickets são criados (antiga: 1284276079401500763)
 CARGO_ANJO_ID             = 1499002607534870592  # cargo dos anjos (antigo: 1493402287622848522)
 
@@ -8067,90 +8068,108 @@ class BotaoFecharTicketAnjo(discord.ui.View):
         asyncio.create_task(_atualizar_ranking_anjo())
         # ─────────────────────────────────────────────────────────────────────
 
-        # ── Gerar log no canal de logs antes de apagar o canal ───────────────
+        # ── Log de ticket fechado: transcript (.txt) + relatório ─────────────
         canal_logs = guild.get_channel(CANAL_LOGS_ANJO_ID)
         if canal_logs:
-            # Conta mensagens por membro com cargo Anjo (ignora bots)
+            BR        = timezone(timedelta(hours=-3))
+            agora_utc = discord.utils.utcnow()
+
+            # Percorre o histórico uma única vez: monta o transcript,
+            # conta mensagens, lista participantes e conta msgs dos Anjos.
+            linhas_transcript: list[str] = []
+            participantes: dict[int, str] = {}
             contagem_anjos: dict[int, int] = {}
+            total_msgs = 0
             try:
                 async for msg in canal.history(limit=None, oldest_first=True):
-                    if msg.author.bot:
-                        continue
-                    membro_msg = guild.get_member(msg.author.id)
-                    if membro_msg and cargo_anjo and cargo_anjo in membro_msg.roles:
-                        contagem_anjos[membro_msg.id] = contagem_anjos.get(membro_msg.id, 0) + 1
+                    total_msgs += 1
+                    hora = msg.created_at.astimezone(BR).strftime("%d/%m/%Y %H:%M:%S")
+                    texto_msg = msg.content or ""
+                    for anexo in msg.attachments:
+                        texto_msg += f" [Anexo: {anexo.url}]"
+                    for emb in msg.embeds:
+                        partes_emb = [x for x in (emb.title, emb.description) if x]
+                        if partes_emb:
+                            texto_msg += " [Embed: " + " — ".join(partes_emb) + "]"
+                    linhas_transcript.append(
+                        f"[{hora}] {msg.author} ({msg.author.id}): {texto_msg}"
+                    )
+
+                    if not msg.author.bot:
+                        participantes.setdefault(msg.author.id, str(msg.author))
+                        membro_msg = guild.get_member(msg.author.id)
+                        if membro_msg and cargo_anjo and cargo_anjo in membro_msg.roles:
+                            contagem_anjos[membro_msg.id] = contagem_anjos.get(membro_msg.id, 0) + 1
             except (discord.Forbidden, discord.HTTPException):
                 pass
 
-            # Obtém o dono do ticket
+            # Dono do ticket
             dono_member  = guild.get_member(dono_id) if dono_id else None
             dono_mention = dono_member.mention if dono_member else (f"<@{dono_id}>" if dono_id else "Desconhecido")
-            dono_nome    = dono_member.display_name if dono_member else str(dono_id or "Desconhecido")
 
-            # Formata datas (UTC-3 Brasil)
-            from datetime import timezone, timedelta
-            BR = timezone(timedelta(hours=-3))
-            data_abertura   = canal.created_at.astimezone(BR).strftime("%d/%m/%Y %H:%M")
-            data_fechamento = discord.utils.utcnow().astimezone(BR).strftime("%d/%m/%Y %H:%M")
+            # Duração (ex.: 45h 46m 13s)
+            total_seg = int((agora_utc - canal.created_at).total_seconds())
+            horas, resto = divmod(max(total_seg, 0), 3600)
+            minutos, segundos = divmod(resto, 60)
+            duracao = f"{horas}h {minutos}m {segundos}s"
 
-            # Monta texto de contagem de mensagens dos Anjos
-            if contagem_anjos:
-                linhas = []
-                for uid, count in sorted(contagem_anjos.items(), key=lambda x: x[1], reverse=True):
-                    m = guild.get_member(uid)
-                    linhas.append(f"[ {count:>3} ] — {m.mention if m else f'<@{uid}>'}")
-                contagem_texto = "\n".join(linhas)
+            # Participantes (limite de 1024 caracteres por campo do embed)
+            if participantes:
+                linhas_part = [f"• {nome} ( `{uid}` )" for uid, nome in participantes.items()]
+                participantes_texto = "\n".join(linhas_part)
+                if len(participantes_texto) > 1000:
+                    participantes_texto = participantes_texto[:1000].rsplit("\n", 1)[0] + "\n…"
             else:
-                contagem_texto = "*Nenhuma mensagem de Anjo registrada.*"
+                participantes_texto = "*Nenhum participante registrado.*"
 
             embed_log = discord.Embed(
-                title="🕊️ Ticket de Anjo Fechado",
-                color=0xe8d5f5
+                title="🎫 Relatório de Ticket Fechado",
+                color=0xe8d5f5,
+                timestamp=agora_utc
             )
+            embed_log.add_field(name="Tipo", value="Anjo", inline=True)
+            embed_log.add_field(name="Canal", value=f"`#{canal.name}`", inline=True)
+            embed_log.add_field(name="ID do canal", value=f"`{canal.id}`", inline=True)
+            embed_log.add_field(name="Aberto por", value=dono_mention, inline=True)
+            embed_log.add_field(name="Fechado por", value=member.mention, inline=True)
             embed_log.add_field(
-                name="Nome do Ticket",
-                value=f"`{canal.name}`",
+                name="Aberto em",
+                value=f"<t:{int(canal.created_at.timestamp())}:F>",
                 inline=True
             )
             embed_log.add_field(
-                name="Criado por",
-                value=f"{dono_mention}\n*({dono_nome})*",
+                name="Fechado em",
+                value=f"<t:{int(agora_utc.timestamp())}:F>",
                 inline=True
             )
-            embed_log.add_field(
-                name="Fechado por",
-                value=member.mention,
-                inline=True
-            )
-            embed_log.add_field(
-                name="Data de Abertura",
-                value=data_abertura,
-                inline=True
-            )
-            embed_log.add_field(
-                name="Data de Encerramento",
-                value=data_fechamento,
-                inline=True
-            )
-            embed_log.add_field(
-                name="\u200b",
-                value="\u200b",
-                inline=True
-            )
-            embed_log.add_field(
-                name="Motivo para fechar o Ticket",
-                value="Sem motivo fornecido",
-                inline=False
-            )
-            embed_log.add_field(
-                name="Contagem de Mensagens Anjo",
-                value=contagem_texto,
-                inline=False
-            )
+            embed_log.add_field(name="Duração", value=duracao, inline=True)
+            embed_log.add_field(name="Total de mensagens", value=str(total_msgs), inline=True)
+            embed_log.add_field(name="Participantes", value=participantes_texto, inline=False)
+
+            # Mantém a contagem de mensagens dos Anjos (usada no acompanhamento)
+            if contagem_anjos:
+                linhas_anjos = []
+                for uid, count in sorted(contagem_anjos.items(), key=lambda x: x[1], reverse=True):
+                    m = guild.get_member(uid)
+                    linhas_anjos.append(f"[ {count:>3} ] — {m.mention if m else f'<@{uid}>'}")
+                embed_log.add_field(
+                    name="Contagem de Mensagens Anjo",
+                    value="\n".join(linhas_anjos)[:1024],
+                    inline=False
+                )
+
             embed_log.set_footer(
                 text="🕊️ Sistema de Tickets — Anjos  |  🌑 Aeon & ☀️ Celestia"
             )
-            await canal_logs.send(embed=embed_log)
+
+            arquivo_transcript = discord.File(
+                io.BytesIO("\n".join(linhas_transcript).encode("utf-8")),
+                filename=f"transcript-{canal.name}.txt"
+            )
+            try:
+                await canal_logs.send(embed=embed_log, file=arquivo_transcript)
+            except (discord.Forbidden, discord.HTTPException) as e:
+                print(f"[ticket-anjo] ERRO ao enviar log de fechamento: {e!r}")
         # ─────────────────────────────────────────────────────────────────────
 
         await asyncio.sleep(5)

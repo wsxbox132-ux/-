@@ -7948,7 +7948,7 @@ async def cmd_membro(ctx):
 # ══════════════════════════════════════════════
 
 CANAL_TICKET_ANJO_ID      = 1558129320122384506  # canal do painel de abertura (antigo: 1514427068589543565)
-CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
+CANAL_REIVINDICAR_ANJO_ID = 1547604279919906937  # canal onde os anjos veem e reivindicam (antigo: 1493410007113400321)
 CANAL_LOGS_ANJO_ID        = 1290058994794106881  # canal de logs dos tickets de anjo
 CATEGORIA_TICKET_ID       = 1499002724442837052  # categoria onde os tickets são criados (antiga: 1284276079401500763)
 CARGO_ANJO_ID             = 1499002607534870592  # cargo dos anjos (antigo: 1493402287622848522)

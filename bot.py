@@ -2681,7 +2681,7 @@ async def on_ready():
     # Recupera (melhor esforço) quem já estava em call com cargo Anjo antes
     # do bot reiniciar, para não perder o tempo daquela sessão em andamento
     for guild in bot.guilds:
-        cargo_anjo = _cargo_anjo_da_guild(guild)
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID)
         if not cargo_anjo:
             continue
         for canal_voz in guild.voice_channels:
@@ -2868,6 +2868,10 @@ async def on_command_error(ctx, error):
     await _avisar_criador_comando(ctx, status="erro")
 
 
+CANAL_AVISO_TICKET_ID = 1547787977562783845  # chat onde o bot marca quem entrou (mensagem some em 1 minuto)
+CANAL_TICKET_ABRIR_ID = 1499002823202050120  # canal onde a pessoa deve abrir o ticket
+
+
 @bot.event
 async def on_member_join(member: discord.Member):
     """Ao entrar no servidor, explica pra pessoa como abrir um ticket
@@ -2883,19 +2887,20 @@ async def on_member_join(member: discord.Member):
         print(f"[convites] ERRO ao registrar entrada de {member} ({member.id}): {e!r}")
 
     # ── Aviso no chat: marca a pessoa e pede pra abrir o ticket ─────────
-    # Só acontece no servidor que tem esse canal (get_channel devolve None nos outros).
+    # A mensagem fica só 1 minuto (delete_after=60) e depois some sozinha.
     try:
-        canal_aviso_ticket = member.guild.get_channel(CANAL_TICKET_AVISO_2_ID)
+        canal_aviso_ticket = member.guild.get_channel(CANAL_AVISO_TICKET_ID)
         if canal_aviso_ticket is not None:
             await canal_aviso_ticket.send(
                 f"🌟 **Celestia:** Oiii {member.mention}!! Seja muito bem-vindo(a)!! 😭🤍✨ "
                 f"Pra gente te liberar direitinho, é só **abrir um ticket** em "
-                f"<#{CANAL_TICKET_AVISO_2_ID}>, tá bom?? ☀️🌸\n"
-                f"🌑 **Aeon:** *emerge das sombras com calma* ...a staff te atende assim que puder. 🖤🌑"
+                f"<#{CANAL_TICKET_ABRIR_ID}>, tá bom?? ☀️🌸\n"
+                f"🌑 **Aeon:** *emerge das sombras com calma* ...a staff te atende assim que puder. 🖤🌑",
+                delete_after=60,
             )
-            print(f"[boas-vindas] Aviso de ticket enviado para {member} ({member.id}) no canal {CANAL_TICKET_AVISO_2_ID}")
+            print(f"[boas-vindas] Aviso de ticket enviado para {member} ({member.id}) — some em 60s")
     except (discord.Forbidden, discord.HTTPException) as e:
-        print(f"[boas-vindas] ERRO ao avisar {member} ({member.id}) no canal de ticket: {e!r}")
+        print(f"[boas-vindas] ERRO ao avisar {member} ({member.id}) no canal {CANAL_AVISO_TICKET_ID}: {e!r}")
 
     embed = discord.Embed(
         title="🌑☀️ Ei, seja muito bem-vindo(a)!",
@@ -3001,7 +3006,7 @@ async def on_voice_state_update(
             return
 
         guild = member.guild
-        cargo_anjo = _cargo_anjo_da_guild(guild)
+        cargo_anjo = guild.get_role(CARGO_ANJO_ID) if guild else None
         if not cargo_anjo or cargo_anjo not in member.roles:
             return
 
@@ -3348,7 +3353,7 @@ async def on_message(message: discord.Message):
     # ── Ranking de Anjos: conta mensagens de quem tem o cargo Anjo ─────────────
     try:
         if message.guild is not None:
-            cargo_anjo_rank = _cargo_anjo_da_guild(message.guild)
+            cargo_anjo_rank = message.guild.get_role(CARGO_ANJO_ID)
             if cargo_anjo_rank and cargo_anjo_rank in message.author.roles:
                 anjo_stats_semanal[message.author.id]["mensagens"] += 1
                 anjo_stats_mensal[message.author.id]["mensagens"] += 1
@@ -7946,7 +7951,7 @@ CANAL_TICKET_ANJO_ID      = 1514427068589543565  # canal do painel de abertura
 CANAL_REIVINDICAR_ANJO_ID = 1493410007113400321  # canal onde os anjos veem e reivindicam
 CANAL_LOGS_ANJO_ID        = 1290058994794106881  # canal de logs dos tickets de anjo
 CATEGORIA_TICKET_ID       = 1284276079401500763  # categoria onde os tickets são criados
-CARGO_ANJO_ID             = 1493402287622848522  # cargo dos anjos
+CARGO_ANJO_ID             = 1499002607534870592  # cargo dos anjos (antigo: 1493402287622848522)
 
 # ── Sistema de XP / Ranking de Nível (estilo Lorrita) ───────────────────────
 CANAL_XP_ID = 1554529512643887217  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
@@ -8455,27 +8460,7 @@ class BotaoSurpresa(discord.ui.View):
 # ══════════════════════════════════════════════════════════════════════
 
 CANAL_RANKING_ANJO_ID = 1525593159525204079  # canal "logs anjo" — onde o ranking é postado
-
-# ── Segundo servidor ───────────────────────────────────────────────────────
-CANAL_TICKET_AVISO_2_ID = 1499002823202050120  # chat onde o bot marca quem acabou de entrar e pede pra abrir o ticket
-CARGO_ANJO_2_ID         = 1499002607534870592  # cargo Anjo do segundo servidor
-CANAL_RANKING_ANJO_2_ID = 1558125367087337563  # canal onde os 2 rankings (semanal e mensal) do segundo servidor ficam
-
-# Todos os cargos que contam como "Anjo" para o ranking (mensagens, call, tickets)
-CARGOS_ANJO_IDS = (CARGO_ANJO_ID, CARGO_ANJO_2_ID)
-
-
-def _cargo_anjo_da_guild(guild):
-    """Devolve o cargo Anjo que existe NESSE servidor (cada servidor tem o seu),
-    ou None se o servidor não tiver nenhum dos cargos configurados."""
-    if guild is None:
-        return None
-    for cargo_id in CARGOS_ANJO_IDS:
-        cargo = guild.get_role(cargo_id)
-        if cargo is not None:
-            return cargo
-    return None
-
+CANAL_RANKING_ANJO_2_ID = 1558125367087337563  # segundo canal — os mesmos 2 rankings (semanal e mensal) também ficam aqui
 
 # Se existir um Volume anexado no Railway, a variável RAILWAY_VOLUME_MOUNT_PATH
 # aponta pra pasta persistente (não é apagada em novos deploys). Sem Volume
@@ -8501,7 +8486,7 @@ anjo_stats_mensal: dict  = defaultdict(lambda: {"mensagens": 0, "tempo_call": 0.
 
 _anjo_ranking_message_id_semanal = None  # ID da mensagem de ranking semanal já postada (editada, não duplicada)
 _anjo_ranking_message_id_mensal  = None  # ID da mensagem de ranking mensal já postada (editada, não duplicada)
-# Mesma coisa, mas para o canal do segundo servidor (CANAL_RANKING_ANJO_2_ID)
+# Mesma coisa, mas para o segundo canal (CANAL_RANKING_ANJO_2_ID)
 _anjo_ranking_msg_ids_2: dict = {"semanal": None, "mensal": None}
 
 # Referência de "entrou na call" separada por período, pra permitir resetar
@@ -8609,11 +8594,10 @@ def _formatar_tempo_call(segundos: float) -> str:
     return f"{minutos}m"
 
 
-def _montar_embed_ranking(guild: discord.Guild, periodo: str, cargo_id: int = None) -> discord.Embed:
-    """Monta o embed de um dos dois rankings. periodo: 'semanal' ou 'mensal'.
-    cargo_id: cargo Anjo do servidor (se omitido, usa o que existir no servidor)."""
+def _montar_embed_ranking(guild: discord.Guild, periodo: str) -> discord.Embed:
+    """Monta o embed de um dos dois rankings. periodo: 'semanal' ou 'mensal'."""
     stats_dict = anjo_stats_semanal if periodo == "semanal" else anjo_stats_mensal
-    cargo_anjo = guild.get_role(cargo_id) if cargo_id else _cargo_anjo_da_guild(guild)
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID)
     membros_anjo = cargo_anjo.members if cargo_anjo else []
 
     linhas = []
@@ -8686,18 +8670,21 @@ async def _limpar_duplicadas_e_achar_ranking(canal: discord.TextChannel, titulo:
     return mais_recente
 
 
-async def _atualizar_ranking_anjo_em(periodo: str, canal_id: int, cargo_id: int, principal: bool) -> None:
+async def _atualizar_ranking_anjo_em(periodo: str, canal_id: int, principal: bool) -> None:
     """Atualiza (ou cria) a mensagem de UM ranking (semanal ou mensal) num canal
-    específico, usando o cargo Anjo daquele servidor. principal=True usa as
-    variáveis de ID já existentes; False usa as do segundo servidor."""
+    específico, sempre editando a mesma mensagem. principal=True usa os IDs de
+    mensagem já existentes; False usa os do segundo canal."""
     global _anjo_ranking_message_id_semanal, _anjo_ranking_message_id_mensal
 
-    canal = bot.get_channel(canal_id)
+    guild = bot.guilds[0] if bot.guilds else None
+    if guild is None:
+        return
+
+    canal = guild.get_channel(canal_id)
     if canal is None:
         return
-    guild = canal.guild
 
-    embed = _montar_embed_ranking(guild, periodo, cargo_id)
+    embed = _montar_embed_ranking(guild, periodo)
     titulo = _TITULO_RANKING[periodo]
     if principal:
         msg_id_salvo = _anjo_ranking_message_id_semanal if periodo == "semanal" else _anjo_ranking_message_id_mensal
@@ -8738,17 +8725,13 @@ async def _atualizar_ranking_anjo_em(periodo: str, canal_id: int, cargo_id: int,
 
 
 async def _atualizar_ranking_anjo_periodo(periodo: str) -> None:
-    """Atualiza um dos rankings (semanal ou mensal) em TODOS os servidores
-    configurados: o canal "logs anjo" do servidor principal e o canal do
-    segundo servidor."""
-    try:
-        await _atualizar_ranking_anjo_em(periodo, CANAL_RANKING_ANJO_ID, CARGO_ANJO_ID, principal=True)
-    except Exception as e:
-        print(f"[ranking-anjo] ERRO ao atualizar ranking {periodo} (servidor 1): {e!r}")
-    try:
-        await _atualizar_ranking_anjo_em(periodo, CANAL_RANKING_ANJO_2_ID, CARGO_ANJO_2_ID, principal=False)
-    except Exception as e:
-        print(f"[ranking-anjo] ERRO ao atualizar ranking {periodo} (servidor 2): {e!r}")
+    """Atualiza um dos rankings (semanal ou mensal) nos DOIS canais:
+    o "logs anjo" de sempre e o novo (CANAL_RANKING_ANJO_2_ID)."""
+    for canal_id, principal in ((CANAL_RANKING_ANJO_ID, True), (CANAL_RANKING_ANJO_2_ID, False)):
+        try:
+            await _atualizar_ranking_anjo_em(periodo, canal_id, principal)
+        except Exception as e:
+            print(f"[ranking-anjo] ERRO ao atualizar ranking {periodo} no canal {canal_id}: {e!r}")
 
 
 async def _atualizar_ranking_anjo() -> None:
@@ -8792,13 +8775,14 @@ async def cmd_ranking_debug(ctx):
         await ctx.send("⚠️ Bot não está em nenhum servidor.")
         return
 
-    cargo_anjo = _cargo_anjo_da_guild(guild)
-    canal_ranking = guild.get_channel(CANAL_RANKING_ANJO_ID) or guild.get_channel(CANAL_RANKING_ANJO_2_ID)
+    cargo_anjo = guild.get_role(CARGO_ANJO_ID)
+    canal_ranking = guild.get_channel(CANAL_RANKING_ANJO_ID)
 
     linhas = [
         f"**Cargo Anjo encontrado:** {'✅ sim' if cargo_anjo else '❌ NÃO — verifique o ID do cargo'}",
         f"**Membros com o cargo:** {len(cargo_anjo.members) if cargo_anjo else 0}",
         f"**Canal de ranking encontrado:** {'✅ sim' if canal_ranking else '❌ NÃO — verifique o ID do canal'}",
+        f"**Canal de ranking 2 encontrado:** {'✅ sim' if guild.get_channel(CANAL_RANKING_ANJO_2_ID) else '❌ NÃO — verifique o ID do canal'}",
         f"**ID da mensagem — semanal:** `{_anjo_ranking_message_id_semanal}`",
         f"**ID da mensagem — mensal:** `{_anjo_ranking_message_id_mensal}`",
         f"**Entradas em anjo_stats_semanal (memória):** {len(anjo_stats_semanal)}",

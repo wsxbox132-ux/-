@@ -7956,7 +7956,7 @@ CARGO_ANJO_ID             = 1499002607534870592  # cargo dos anjos (antigo: 1493
 # ── Sistema de XP / Ranking de Nível (estilo Lorrita) ───────────────────────
 CANAL_XP_ID = 1554529512643887217  # canal onde o ranking fica fixo (topo) e os level-ups são anunciados (embaixo)
 CARGO_XP_ID = 1290029716241256600  # cargo dos membros que participam do ranking de XP
-IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1558133089048338472/image.png?ex=6aca5405&is=6ac90285&hm=8a6267e385d09dc92d0160a2d88909dfa8e8f7ef58de1d611de164c2b907643f"
+IMAGE_TICKET_ANJO         = "https://cdn.discordapp.com/attachments/926913851172204577/1558134494525923359/Gatinhos_Goticos_Sob_a_Lua_Verde_1.png?ex=6aca5554&is=6ac903d4&hm=c3c6ee52f896c9d13ba39d612147b5d678e33adddede71ed1405b6c1457f8d35"
 
 
 async def _enviar_painel_anjos(guild: discord.Guild):

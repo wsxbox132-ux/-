@@ -10943,9 +10943,8 @@ async def cmd_verxp(ctx):
     quais boosters estão ativos (com o tempo que falta pra cada um) e há
     quanto tempo você tá nessa call sem sair/mutar/trocar de canal. Usa a
     mesma conta de verdade de _processar_xp_call. A resposta some sozinha
-    em alguns segundos. Uso: .verxp — só o criador pode usar."""
-    if not await _apenas_criador(ctx):
-        return
+    em alguns segundos. Uso: .verxp — qualquer pessoa pode usar (mostra só
+    o seu próprio xp)."""
     autor = ctx.author
 
     guild = ctx.guild or (bot.guilds[0] if bot.guilds else None)
